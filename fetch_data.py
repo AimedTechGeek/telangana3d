@@ -4,6 +4,7 @@ Sources (all public, no auth):
 - Copernicus GLO-90 DEM, 1x1 degree COG tiles on AWS
 - geoBoundaries gbOpen India ADM1 (states) and ADM2 (districts)
 - Natural Earth 10m rivers, populated places
+- OpenStreetMap place=city/town nodes in Telangana (Overpass API)
 """
 from __future__ import annotations
 
@@ -26,14 +27,23 @@ NATURAL_EARTH = {
     "rivers.zip": "https://naciscdn.org/naturalearth/10m/physical/ne_10m_rivers_lake_centerlines.zip",
     "places.zip": "https://naciscdn.org/naturalearth/10m/cultural/ne_10m_populated_places.zip",
 }
+OVERPASS_URL = "https://overpass-api.de/api/interpreter"
+OVERPASS_QUERY = (
+    '[out:json][timeout:90];'
+    'area["name"="Telangana"]["admin_level"="4"]->.a;'
+    '(node["place"~"^(city|town)$"](area.a););'
+    'out body;'
+)
+# Overpass rejects requests without a descriptive User-Agent.
+OVERPASS_HEADERS = {"User-Agent": "telangana3d/1.0 (terrain map)", "Accept": "application/json"}
 TIMEOUT_S = 120
 
 
-def download(url: str, target: Path) -> None:
+def download(url: str, target: Path, params: dict | None = None, headers: dict | None = None) -> None:
     if target.exists():
         print(f"cached  {target.name}")
         return
-    response = requests.get(url, timeout=TIMEOUT_S)
+    response = requests.get(url, params=params, headers=headers, timeout=TIMEOUT_S)
     response.raise_for_status()
     target.write_bytes(response.content)
     print(f"fetched {target.name} ({len(response.content) / 1e6:.1f} MB)")
@@ -58,8 +68,13 @@ def fetch_natural_earth() -> None:
         download(url, RAW / name)
 
 
+def fetch_osm_places() -> None:
+    download(OVERPASS_URL, RAW / "osm_places.json", params={"data": OVERPASS_QUERY}, headers=OVERPASS_HEADERS)
+
+
 if __name__ == "__main__":
     RAW.mkdir(parents=True, exist_ok=True)
     fetch_dem_tiles()
     fetch_boundaries()
     fetch_natural_earth()
+    fetch_osm_places()
