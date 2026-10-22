@@ -20,7 +20,8 @@ uv run python serve.py      # http://127.0.0.1:8765/ opens in your browser
   comparison; click one to fly to it
 - Vertical exaggeration slider, 100 m contours, district lines, labels, orbit,
   light/dark theme (follows the OS setting; the toggle overrides it)
-- Mouse: drag to pan, scroll to zoom, right-drag or Ctrl-drag to tilt and rotate
+- Mouse: left-drag pans (switch "Left-drag" to *Rotates* for a full 360° orbit
+  with tilt), right-drag or Ctrl-drag always rotates and tilts, scroll zooms
 
 Everything is served from `web/` (no API keys, no internet needed after the
 build apart from the MapLibre and font CDNs).

@@ -273,7 +273,33 @@ for (const chip of document.querySelectorAll('.chip[data-toggle]')) {
     toggles[chip.dataset.toggle](on);
   });
 }
-map.on('dragstart', () => { if (orbiting) document.querySelector('[data-toggle="orbit"]').click(); });
+function stopOrbit() { if (orbiting) document.querySelector('[data-toggle="orbit"]').click(); }
+map.on('dragstart', stopOrbit);
+
+// Left-drag mode: MapLibre only rotates with the right button or Ctrl, so a
+// "rotates" mode turns left-drag into a full 360° orbit with tilt.
+const ROTATE_DEG_PER_PX = 0.35;
+let rotateDrag = null;
+function setDragMode(mode) {
+  for (const button of document.querySelectorAll('[data-drag]')) button.setAttribute('aria-pressed', String(button.dataset.drag === mode));
+  if (mode === 'rotate') map.dragPan.disable(); else map.dragPan.enable();
+  $('map').classList.toggle('rotate-mode', mode === 'rotate');
+}
+for (const button of document.querySelectorAll('[data-drag]')) button.addEventListener('click', () => setDragMode(button.dataset.drag));
+map.getCanvasContainer().addEventListener('mousedown', (event) => {
+  if (!$('map').classList.contains('rotate-mode') || event.button !== 0 || event.ctrlKey) return;
+  stopOrbit();
+  rotateDrag = { x: event.clientX, y: event.clientY, bearing: map.getBearing(), pitch: map.getPitch() };
+  $('map').classList.add('rotating');
+  event.preventDefault();
+});
+window.addEventListener('mousemove', (event) => {
+  if (!rotateDrag) return;
+  const pitch = rotateDrag.pitch - (event.clientY - rotateDrag.y) * ROTATE_DEG_PER_PX;
+  map.jumpTo({ bearing: rotateDrag.bearing + (event.clientX - rotateDrag.x) * ROTATE_DEG_PER_PX,
+               pitch: Math.min(Math.max(pitch, 0), map.getMaxPitch()) });
+});
+window.addEventListener('mouseup', () => { rotateDrag = null; $('map').classList.remove('rotating'); });
 $('reset').addEventListener('click', () => map.flyTo({ ...HOME, duration: 1800, essential: true }));
 $('theme').addEventListener('click', () => setTheme(currentTheme() === 'dark' ? 'light' : 'dark'));
 $('collapse').addEventListener('click', () => { $('panel').classList.add('hidden'); $('expand').hidden = false; });
