@@ -335,7 +335,7 @@ function animateFlow(now) {
 
 // ---------- bubbles: particles riding the bigger rivers ----------
 // [min m³/s, spacing km, radius px, speed px/s]: more water = denser, bigger, faster.
-const BUBBLE_CLASSES = [[2000, 1.5, 4.8, 60], [1000, 2.2, 3.9, 48], [300, 3.2, 3.1, 38], [100, 5.0, 2.4, 30]];
+const BUBBLE_CLASSES = [[2000, 1.5, 3.2, 60], [1000, 2.2, 2.7, 48], [300, 3.2, 2.2, 38], [100, 5.0, 1.7, 30]];
 const BUBBLE_FADE_M = 1000;                          // fade in/out over the ends of each reach
 const EARTH_M_PER_DEG = 111320;
 const bubbleCanvas = document.createElement('canvas');
@@ -362,7 +362,7 @@ function prepareBubbles(geojson) {
       const offset = Math.random() * length;
       const lngs = coords.map((c) => c[0]), lats = coords.map((c) => c[1]);
       bubbleReaches.push({
-        coords, cum, length, radius, speed, classIndex: flowClassIndex(q),
+        coords, cum, length, radius, speed,
         bbox: [Math.min(...lngs), Math.min(...lats), Math.max(...lngs), Math.max(...lats)],
         particles: Array.from({ length: count }, (_, i) => (offset + i * length / count) % length),
       });
@@ -371,7 +371,6 @@ function prepareBubbles(geojson) {
   map.getCanvasContainer().insertBefore(bubbleCanvas, map.getCanvas().nextSibling);
   resizeBubbleCanvas();
 }
-function flowClassIndex(q) { return FLOW_CLASSES.filter((cls) => q >= cls.from).length - 1; }
 function pointAlong(reach, distance) {
   const { coords, cum } = reach;
   let lo = 0, hi = cum.length - 1;
@@ -391,14 +390,12 @@ function drawBubbles(dt) {
   if (!bubbleReaches.length) return;
   const bounds = map.getBounds(), west = bounds.getWest(), south = bounds.getSouth(), east = bounds.getEast(), north = bounds.getNorth();
   const metresPerPixel = EARTH_M_PER_DEG * 360 * Math.cos(map.getCenter().lat * Math.PI / 180) / (TILE_PX * 2 ** map.getZoom());
-  const colours = MAP_THEMES[currentTheme()].flow.map(hexToRgb);
   const width = map.getCanvas().clientWidth, height = map.getCanvas().clientHeight;
   for (const reach of bubbleReaches) {
     const [minLng, minLat, maxLng, maxLat] = reach.bbox;
     const step = reach.speed * metresPerPixel * dt;
     for (let i = 0; i < reach.particles.length; i++) reach.particles[i] = (reach.particles[i] + step) % reach.length;
     if (maxLng < west || minLng > east || maxLat < south || minLat > north) continue;
-    const [r, g, b] = colours[reach.classIndex];
     // Zoomed out, bubbles would merge into a bead chain: draw every n-th so they stay apart.
     const spacingPx = reach.length / reach.particles.length / metresPerPixel;
     const skip = Math.max(1, Math.ceil(reach.radius * 2.4 / spacingPx));
@@ -407,21 +404,22 @@ function drawBubbles(dt) {
       const point = map.project(pointAlong(reach, distance));
       if (point.x < -10 || point.y < -10 || point.x > width + 10 || point.y > height + 10) continue;
       const alpha = Math.min(1, distance / BUBBLE_FADE_M, (reach.length - distance) / BUBBLE_FADE_M);
-      drawBubble(point.x, point.y, reach.radius, r, g, b, alpha);
+      drawBubble(point.x, point.y, reach.radius, alpha);
     }
   }
 }
-function drawBubble(x, y, radius, r, g, b, alpha) {
+// Bubbles keep one light body and a dark rim in both themes, so they show on
+// every river colour (a bubble in its river's own colour vanished on the Krishna).
+function drawBubble(x, y, radius, alpha) {
   const gradient = bubbleCtx.createRadialGradient(x - radius * 0.35, y - radius * 0.35, radius * 0.1, x, y, radius);
   gradient.addColorStop(0, `rgba(255,255,255,${0.95 * alpha})`);
-  gradient.addColorStop(0.55, `rgba(${r},${g},${b},${0.55 * alpha})`);
-  gradient.addColorStop(1, `rgba(${r},${g},${b},${0.08 * alpha})`);
+  gradient.addColorStop(0.6, `rgba(205,238,255,${0.85 * alpha})`);
+  gradient.addColorStop(1, `rgba(160,215,245,${0.6 * alpha})`);
   bubbleCtx.beginPath();
   bubbleCtx.arc(x, y, radius, 0, Math.PI * 2);
   bubbleCtx.fillStyle = gradient; bubbleCtx.fill();
-  bubbleCtx.lineWidth = 1; bubbleCtx.strokeStyle = `rgba(${r},${g},${b},${0.9 * alpha})`; bubbleCtx.stroke();
+  bubbleCtx.lineWidth = 1; bubbleCtx.strokeStyle = `rgba(11,29,74,${0.85 * alpha})`; bubbleCtx.stroke();
 }
-function hexToRgb(hex) { return [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)); }
 map.on('resize', resizeBubbleCanvas);
 
 // Hovering a stream shows its average flow.
