@@ -21,6 +21,8 @@ uv run python serve.py      # http://127.0.0.1:8765/ opens in your browser
   gives the average flow of each river through every district it crosses
 - Godavari and Krishna river-bed and flow profiles through the state; hover or
   drag the slider to follow the river on the map, click to fly there
+- Dams (arch icon) and barrages (gated-deck icon) with their height on the
+  label; the Dams chip hides them
 - 27 cities and towns ranked by elevation, with the lowest river beds for
   comparison; click one to fly to it
 - Vertical exaggeration slider, 100 m contours, district lines, labels, orbit,
@@ -63,6 +65,7 @@ uv run python web_smoke_test.py   # headless Edge check of the web map -> out/we
 | River flow | HydroRIVERS v1.0 (HydroSHEDS): `DIS_AV_CMS`, the long-term average *naturalised* discharge from the WaterGAP model, i.e. before dams and irrigation withdrawals; reaches ≥ 1 m³/s. Per-district values are length-weighted means of the main stem inside the district |
 | Cities | OpenStreetMap `place=city`, plus towns with population ≥ 40 000 (Overpass API); elevation = median DSM within 1 km |
 | River profiles | DSM 10th percentile within 1.4 km of the centreline every 2 km, median-filtered, then capped so the bed never rises downstream (the coarse line strays onto the valley sides in the Krishna's Nallamala gorge) |
+| Dams and barrages | Wikipedia: every page linked from "List of dams and reservoirs in Telangana" (plus the border dams and Kaleshwaram barrages) that has a dam infobox with coordinates; proposed or unfinished ones are skipped. Height = the infobox `dam_height` (above river bed), or height above foundation when that is all the page gives |
 | Projection | Web Mercator for the web map; Lambert Conformal Conic for forge3d |
 | Vertical exaggeration | Web: 3× default (1–6×); forge3d map 50×/30×/20× by zoom; block 12× |
 
@@ -77,6 +80,9 @@ Notes:
 - Flow figures are modelled long-term averages, not gauge readings: actual
   flow varies hugely between monsoon and dry season and is reduced by the
   Sriram Sagar, Nagarjuna Sagar and other projects.
+- Dam heights are whatever the Wikipedia infobox states and are not all
+  measured the same way; the Kaleshwaram barrages (Medigadda, Annaram,
+  Sundilla) have no height on Wikipedia, so their labels carry none.
 - The forge3d viewer DEM uses a local grid (1 unit = 20 m) because the viewer
   clamps mouse-wheel zoom to a 100–50 000 unit radius.
 - The block render is downsampled to 400 m and rendered in 800 px tiles to fit

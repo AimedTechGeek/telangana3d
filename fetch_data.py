@@ -6,9 +6,13 @@ Sources (all public, no auth):
 - Natural Earth 10m rivers, populated places
 - OpenStreetMap place=city/town nodes in Telangana (Overpass API)
 - HydroRIVERS v1.0 (HydroSHEDS) Asia river network with modelled average discharge
+- Wikipedia wikitext of "List of dams and reservoirs in Telangana" and every
+  page it links to (dam infoboxes carry height and coordinates)
 """
 from __future__ import annotations
 
+import json
+import re
 from pathlib import Path
 
 import requests
@@ -29,6 +33,13 @@ NATURAL_EARTH = {
     "places.zip": "https://naciscdn.org/naturalearth/10m/cultural/ne_10m_populated_places.zip",
 }
 HYDRORIVERS_URL = "https://data.hydrosheds.org/file/HydroRIVERS/HydroRIVERS_v10_as_shp.zip"  # ~86 MB
+WIKIPEDIA_API = "https://en.wikipedia.org/w/api.php"
+WIKIPEDIA_HEADERS = {"User-Agent": "telangana3d/1.0 (terrain map)"}
+DAM_LIST_PAGE = "List of dams and reservoirs in Telangana"
+# Border dams and Kaleshwaram barrages the list page links under other names or not at all.
+EXTRA_DAM_PAGES = ["Srisailam Dam", "Pulichinthala Project", "Nagarjuna Sagar Dam", "Jurala Project", "Nizam Sagar Dam",
+                   "Lakshmi Barrage", "Saraswati Barrage", "Sammakka Sagar Barrage", "Mid Manair Dam", "Koil Sagar",
+                   "Taliperu Project", "Sripada Yellampalli Project", "Sitamma Sagar Barrage"]
 OVERPASS_URL = "https://overpass-api.de/api/interpreter"
 OVERPASS_QUERY = (
     '[out:json][timeout:90];'
@@ -78,6 +89,32 @@ def fetch_hydrorivers() -> None:
     download(HYDRORIVERS_URL, RAW / "hydrorivers_as.zip")
 
 
+def wikitext(titles: list[str]) -> dict[str, str | None]:
+    """Current wikitext per page title (None when missing); 25 titles per request."""
+    pages: dict[str, str | None] = {}
+    for start in range(0, len(titles), 25):
+        response = requests.get(WIKIPEDIA_API, headers=WIKIPEDIA_HEADERS, timeout=TIMEOUT_S, params={
+            "action": "query", "prop": "revisions", "rvprop": "content", "rvslots": "main", "redirects": 1,
+            "titles": "|".join(titles[start:start + 25]), "format": "json", "formatversion": 2})
+        response.raise_for_status()
+        for page in response.json()["query"]["pages"]:
+            pages[page["title"]] = None if page.get("missing") else page["revisions"][0]["slots"]["main"]["content"]
+    return pages
+
+
+def fetch_wikipedia_dams() -> None:
+    target = RAW / "wikipedia_dams.json"
+    if target.exists():
+        print(f"cached  {target.name}")
+        return
+    listing = wikitext([DAM_LIST_PAGE])[DAM_LIST_PAGE]
+    linked = re.findall(r"\[\[([^\]|#]+)(?:\|[^\]]*)?\]\]", listing)
+    titles = list(dict.fromkeys(t.strip() for t in linked if not t.startswith(("File:", "Category:"))))
+    pages = wikitext(titles + EXTRA_DAM_PAGES)
+    target.write_text(json.dumps(pages, ensure_ascii=False), encoding="utf-8")
+    print(f"fetched {target.name} ({sum(1 for v in pages.values() if v)} pages)")
+
+
 if __name__ == "__main__":
     RAW.mkdir(parents=True, exist_ok=True)
     fetch_dem_tiles()
@@ -85,3 +122,4 @@ if __name__ == "__main__":
     fetch_natural_earth()
     fetch_osm_places()
     fetch_hydrorivers()
+    fetch_wikipedia_dams()

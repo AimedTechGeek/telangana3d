@@ -191,6 +191,31 @@ section { display: flex; flex-direction: column; gap: 8px; }
 #flow-profile .cross { stroke: var(--ink); stroke-width: 1; opacity: .5; }
 #flow-profile .dot { fill: var(--river); stroke: var(--panel-solid); stroke-width: 2; }
 
+/* dams and barrages */
+.dam-legend { display: flex; align-items: center; gap: 6px; margin: 0; font-size: 11px; color: var(--muted); }
+.dam-legend .ic, .mk-dam .ic {
+  display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%;
+  background: var(--panel-solid); border: 1px solid var(--border); box-shadow: 0 1px 4px rgba(0,0,0,.3);
+}
+.dam-legend .ic svg, .mk-dam .ic svg { width: 14px; height: 14px; }
+.dam-legend .ic.dam, .mk-dam.dam .ic { color: #b4532a; }
+.dam-legend .ic.barrage, .mk-dam.barrage .ic { color: #0f7f78; }
+:root[data-theme="dark"] .dam-legend .ic.dam, :root[data-theme="dark"] .mk-dam.dam .ic { color: #f2996b; }
+:root[data-theme="dark"] .dam-legend .ic.barrage, :root[data-theme="dark"] .mk-dam.barrage .ic { color: #4fd1c5; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .dam-legend .ic.dam, :root:not([data-theme="light"]) .mk-dam.dam .ic { color: #f2996b; }
+  :root:not([data-theme="light"]) .dam-legend .ic.barrage, :root:not([data-theme="light"]) .mk-dam.barrage .ic { color: #4fd1c5; }
+}
+.dam-legend .ic + .ic { margin-left: 6px; }
+.mk-dam { display: flex; align-items: center; gap: 5px; cursor: pointer; }
+.mk-dam .lbl {
+  padding: 2px 7px; border-radius: 7px; white-space: nowrap; font-size: 11px; font-weight: 600;
+  background: var(--panel); backdrop-filter: blur(6px); border: 1px solid var(--border); box-shadow: 0 2px 8px rgba(0,0,0,.18);
+}
+.mk-dam .lbl .e { font-family: var(--mono); font-weight: 500; color: var(--ink-2); margin-left: 4px; }
+body.z-far .mk-dam .lbl, body.labels-off .mk-dam .lbl { display: none; }
+body.dams-off .mk-dam { display: none; }
+
 .mk-peak { position: relative; width: 18px; height: 18px; cursor: pointer; }
 .mk-peak .ring { position: absolute; inset: 0; border-radius: 50%; border: 2px solid var(--river); animation: pulse 1.8s ease-out infinite; }
 .mk-peak .core { position: absolute; inset: 5px; border-radius: 50%; background: var(--river); border: 2px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,.4); }

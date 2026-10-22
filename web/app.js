@@ -308,6 +308,7 @@ const toggles = {
   contours: (on) => map.setLayoutProperty('contours', 'visibility', on ? 'visible' : 'none'),
   districts: (on) => { map.setLayoutProperty('districts', 'visibility', on ? 'visible' : 'none'); document.body.classList.toggle('districts-off', !on); },
   labels: (on) => document.body.classList.toggle('labels-off', !on),
+  dams: (on) => document.body.classList.toggle('dams-off', !on),
   orbit: (on) => { orbiting = on; if (on) orbitStep(); },
   flow: (on) => {
     flowAnimating = on;
@@ -569,6 +570,19 @@ function addDistrictLabels(points, cityNames) {
     new maplibregl.Marker({ element: el, anchor: 'center' }).setLngLat(feature.geometry.coordinates).addTo(map);
   }
 }
+function addDamMarker(dam) {
+  const node = document.createElement('div');
+  node.className = `mk-dam ${dam.kind}`;
+  const icon = document.createElement('span'); icon.className = 'ic';
+  const svg = document.createElementNS(SVG_NS, 'svg'); svg.setAttribute('viewBox', '0 0 16 16'); svg.setAttribute('aria-hidden', 'true');
+  const use = document.createElementNS(SVG_NS, 'use'); use.setAttribute('href', `#ic-${dam.kind}`); svg.appendChild(use); icon.appendChild(svg);
+  const label = textEl('span', 'lbl', dam.name);
+  if (dam.height) label.appendChild(textEl('span', 'e', `${dam.height} m`));
+  node.append(icon, label);
+  node.title = `${dam.kind === 'barrage' ? 'Barrage' : 'Dam'}${dam.river ? ` on the ${dam.river}` : ''}${dam.height ? ` · ${dam.height} m high` : ' · height unknown'}`;
+  node.addEventListener('click', () => flyToPoint(dam.lon, dam.lat, 11.5));
+  new maplibregl.Marker({ element: node, anchor: 'left', offset: [-11, 0] }).setLngLat([dam.lon, dam.lat]).addTo(map);
+}
 function flyToCity(city) {
   for (const [name, marker] of cityMarkers) marker.getElement().classList.toggle('active', name === city.name);
   for (const row of document.querySelectorAll('#city-list .row')) row.classList.toggle('active', row.dataset.city === city.name);
@@ -773,10 +787,12 @@ async function loadJson(url) { const response = await fetch(url); if (!response.
 map.on('load', async () => {
   debug.phase = 'style-loaded'; writeDebug();
   try {
-    const [cities, profiles, districtPoints, flowSummary, flowReaches] = await Promise.all([
+    const [cities, profiles, districtPoints, flowSummary, flowReaches, dams] = await Promise.all([
       loadJson('data/cities.json'), loadJson('data/rivers.json'), loadJson('data/district_points.geojson'),
-      loadJson('data/flow_summary.json'), loadJson('data/flow.geojson')]);
+      loadJson('data/flow_summary.json'), loadJson('data/flow.geojson'), loadJson('data/dams.json')]);
     prepareBubbles(flowReaches);
+    dams.forEach(addDamMarker);
+    debug.notes.dams = dams.length;
     debug.notes.bubbles = bubbleReaches.reduce((n, reach) => n + reach.particles.length, 0);
     profileState.profiles = profiles;
     cities.forEach(addCityMarker);

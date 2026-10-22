@@ -12,6 +12,7 @@ Outputs:
 - web/data/rivers.json        Godavari and Krishna elevation + average flow profiles
 - web/data/flow.geojson       HydroRIVERS reaches with modelled average discharge (m3/s)
 - web/data/flow_summary.json  peak flow per river and average flow per district
+- web/data/dams.json          dams and barrages from Wikipedia infoboxes (height, river)
 """
 from __future__ import annotations
 
@@ -383,6 +384,99 @@ def flow_summary(reaches: gpd.GeoDataFrame, districts: gpd.GeoDataFrame, state: 
     return summary
 
 
+# --- dams and barrages (Wikipedia infoboxes) --------------------------------
+
+DAM_CORRIDOR_M = 15000.0            # border dams (Srisailam, Nagarjuna Sagar) sit just outside the state
+EXCLUDED_TITLE_WORDS = ("lift irrigation", "scheme", "wildlife", "district")
+# Infobox dam_type codes are inconsistent ("B" marks Osman Sagar, a masonry dam), so only
+# names decide the kind, plus this list of barrages whose names do not say so.
+BARRAGE_TITLES = ("Sripada Yellampalli Project",)
+FOOT_M = 0.3048
+
+
+def infobox_field(text: str, name: str) -> str | None:
+    # [ \t]* rather than \s*: an empty value must not run on into the next line.
+    match = re.search(r"^\|[ \t]*" + name + r"[ \t]*=[ \t]*(.*?)[ \t]*$", text, re.M)
+    return match.group(1) if match and match.group(1) else None
+
+
+def strip_markup(value: str) -> str:
+    value = re.sub(r"<ref[^>]*/>|<ref[^>]*>.*?</ref>", "", value, flags=re.S)
+    value = re.sub(r"\[\[([^\]|]+)\|([^\]]+)\]\]", r"\2", value)
+    value = re.sub(r"\[\[([^\]]+)\]\]", r"\1", value)
+    value = re.sub(r"\{\{[^{}]*\}\}", "", value)
+    return re.sub(r"\s+", " ", value).strip(" ,;")
+
+
+def parse_height_m(value: str | None) -> int | None:
+    """'{{convert|124|m|ft}} from river bed' -> 124; feet are converted."""
+    if not value:
+        return None
+    match = re.search(r"(\d+(?:\.\d+)?)\s*\|?\s*(m|ft|metre|meter|feet)?\b", value)
+    if not match:
+        return None
+    metres = float(match.group(1))
+    if match.group(2) in ("ft", "feet"):
+        metres *= FOOT_M
+    return round(metres) if 3 <= metres <= 400 else None
+
+
+def parse_coord(text: str) -> tuple[float, float] | None:
+    match = re.search(r"\{\{coord\|([^}]+)\}\}", text, re.I)
+    if not match:
+        return None
+    parts = [p.strip() for p in match.group(1).split("|") if p.strip() and "=" not in p and ":" not in p]
+    numbers, hemis = [], []
+    for part in parts:
+        if re.fullmatch(r"-?\d+(?:\.\d+)?", part):
+            numbers.append(float(part))
+        elif part.upper() in ("N", "S", "E", "W"):
+            hemis.append(part.upper())
+    if hemis and len(numbers) % 2 == 0 and numbers:
+        half = len(numbers) // 2
+        lat = sum(v / 60 ** i for i, v in enumerate(numbers[:half]))
+        lon = sum(v / 60 ** i for i, v in enumerate(numbers[half:]))
+        if "S" in hemis:
+            lat = -lat
+        if "W" in hemis:
+            lon = -lon
+        return lon, lat
+    if len(numbers) >= 2:
+        return numbers[1], numbers[0]
+    return None
+
+
+def build_dams(state: gpd.GeoDataFrame) -> list[dict]:
+    pages = json.loads((RAW / "wikipedia_dams.json").read_text(encoding="utf-8"))
+    corridor = state.to_crs(TARGET_CRS).geometry.iloc[0].buffer(DAM_CORRIDOR_M)
+    to_dem = Transformer.from_crs(WGS84, TARGET_CRS, always_xy=True)
+    dams = []
+    for title, text in pages.items():
+        if not text or not re.search(r"\{\{\s*infobox dam", text, re.I):
+            continue
+        if any(word in title.lower() for word in EXCLUDED_TITLE_WORDS):
+            continue
+        status = (infobox_field(text, "status") or "").lower()
+        if re.search(r"^(p|pl|uc)$|construction|proposed|planned", status):   # NRLD codes: P proposed, UC building
+            continue
+        coord = parse_coord(text)
+        if not coord or not corridor.contains(Point(to_dem.transform(*coord))):
+            continue
+        name = strip_markup(infobox_field(text, "name") or infobox_field(text, "dam_name") or title)
+        kind_text = f"{title} {name} {infobox_field(text, 'dam_type') or ''}".lower()
+        barrage = title in BARRAGE_TITLES or re.search(r"barrage|anicut", kind_text) is not None
+        dams.append({
+            "name": name, "kind": "barrage" if barrage else "dam",
+            "lon": round(coord[0], 5), "lat": round(coord[1], 5),
+            # dam_height is above the river bed; a few pages only give height above the foundation.
+            "height": parse_height_m(infobox_field(text, "dam_height")) or parse_height_m(infobox_field(text, "dam_height_foundation")),
+            "river": strip_markup(infobox_field(text, "dam_crosses") or infobox_field(text, "crosses") or "") or None,
+            "url": "https://en.wikipedia.org/wiki/" + title.replace(" ", "_"),
+        })
+    dams.sort(key=lambda d: (d["height"] is None, -(d["height"] or 0)))
+    return dams
+
+
 # --- contours ---------------------------------------------------------------
 
 def build_contours() -> gpd.GeoDataFrame:
@@ -429,6 +523,12 @@ def main() -> None:
               f"profile flow {profiles[river]['min_q']} -> {profiles[river]['max_q']}")
     for row in summary["districts"]:
         print(f"  {row['river']:9} {row['district']:18} mean {row['mean_q']:5} max {row['max_q']:5} m3/s over {row['length_km']} km")
+    dams = build_dams(state)
+    (WEB_DATA / "dams.json").write_text(json.dumps(dams, indent=1, ensure_ascii=False), encoding="utf-8")
+    print(f"dams: {len(dams)} ({sum(1 for d in dams if d['kind'] == 'barrage')} barrages, "
+          f"{sum(1 for d in dams if d['height'] is None)} without height)")
+    for dam in dams:
+        print(f"  {dam['kind']:7} {dam['name'][:34]:34} {str(dam['height'] or '-'):>4} m  {dam['river'] or ''}")
     contours = build_contours()
     write_geojson(contours, "contours")
     print(f"contours: {len(contours)} lines, {(WEB_DATA / 'contours.geojson').stat().st_size / 1e6:.1f} MB")
