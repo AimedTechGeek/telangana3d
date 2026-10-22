@@ -27,14 +27,16 @@ const MAP_THEMES = {
   light: {
     background: '#e9e6df', mask: '#efece5', maskOpacity: 0.5,
     district: '#3b3a36', districtOpacity: 0.55, state: '#161616', stateCasing: '#ffffff',
-    contour: '#5a4634', river: '#2a78d6', riverGlow: '#ffffff', minorRiver: '#4f8fd9',
+    contour: '#5a4634', flowGlow: '#ffffff', flowDash: '#eef7ff',
+    flow: ['#9fd3f3', '#4d9be6', '#1d5fc4', '#0a3684', '#3a1d8a'],   // FLOW_CLASSES: light blue -> navy -> indigo
     shadow: '#2b2016', highlight: '#fff4e2', accent: '#4e3d2e',
     sky: { 'sky-color': '#cfe3f6', 'horizon-color': '#eef3f8', 'fog-color': '#e9e6df' },
   },
   dark: {
     background: '#0e0f12', mask: '#0e0f12', maskOpacity: 0.58,
     district: '#d8d4cc', districtOpacity: 0.38, state: '#f0efec', stateCasing: '#000000',
-    contour: '#d8d4cc', river: '#3987e5', riverGlow: '#0b1a33', minorRiver: '#5f9ae8',
+    contour: '#d8d4cc', flowGlow: '#0b1a33', flowDash: '#ffffff',
+    flow: ['#2d5f9c', '#3f8ddc', '#6fb6ff', '#b4dcff', '#e6ccff'],   // FLOW_CLASSES: brighter, then lilac, on the dark surface
     shadow: '#000000', highlight: '#b9a68c', accent: '#000000',
     sky: { 'sky-color': '#0b1020', 'horizon-color': '#1b2233', 'fog-color': '#0e0f12' },
   },
@@ -56,7 +58,7 @@ function currentTheme() {
 function setTheme(theme) {
   document.documentElement.dataset.theme = theme;
   try { localStorage.setItem('theme', theme); } catch (_) { /* storage unavailable */ }
-  if (map && map.getLayer('background')) applyMapTheme();
+  if (map && map.getLayer('background')) { applyMapTheme(); renderFlowLegend(); }
 }
 try { const saved = localStorage.getItem('theme'); if (saved) document.documentElement.dataset.theme = saved; } catch (_) { /* ignore */ }
 
@@ -64,6 +66,48 @@ try { const saved = localStorage.getItem('theme'); if (saved) document.documentE
 function reliefExpression(theme) {
   // Exactly 0 m only occurs on the flat plane outside the DEM, so it takes the page colour.
   return ['interpolate', ['linear'], ['elevation'], 0, MAP_THEMES[theme].background, ...RELIEF_STOPS.flat()];
+}
+
+// River flow styling: width and colour follow log10 of the average discharge.
+const FLOW_WIDTH_STOPS = [[-1, 0.5], [0, 0.8], [1, 1.5], [2, 2.8], [3, 5], [3.6, 8]];  // log10(m³/s) -> px
+// Colour classes (m³/s lower bounds): stepped so thin lines still read as different flows.
+const FLOW_CLASSES = [
+  { from: 0, label: '< 10' }, { from: 10, label: '10–100' }, { from: 100, label: '100–1K' },
+  { from: 1000, label: '1K–2K' }, { from: 2000, label: '2K+' },
+];
+const FLOW_LOG_Q = ['log10', ['max', ['get', 'q'], 0.1]];
+// Animation: changing line-dasharray makes MapLibre rebuild the source tiles, so
+// the page carries one layer per dash phase and only cycles their opacity.
+const FLOW_DASH = { length: 2.2, gap: 2.4 };          // in line widths
+const FLOW_DASH_STEPS = 8;                            // phase layers, all drawn every frame: keep small
+const FLOW_DASH_MIN_CMS = 10;                         // animate streams from 10 m³/s; smaller ones stay static
+const FLOW_CLASS_SPEED = { 1: 1, 2: 2, 3: 3 };        // phase steps per tick: big rivers flow faster
+const FLOW_TICK_MS = 80;
+const FLOW_DASH_OPACITY = 0.9;
+let flowStep = 0;
+let flowAnimating = true;
+
+function flowWidthExpr(scale) {
+  const px = (zoomScale) => ['interpolate', ['linear'], FLOW_LOG_Q, ...FLOW_WIDTH_STOPS.flatMap(([l, w]) => [l, w * scale * zoomScale])];
+  return ['interpolate', ['linear'], ['zoom'], 6, px(0.7), 9, px(1.3), 12, px(2.2)];
+}
+function flowColorExpr(theme) {
+  const colours = MAP_THEMES[theme].flow;
+  return ['step', ['get', 'q'], colours[0], ...FLOW_CLASSES.slice(1).flatMap((cls, i) => [cls.from, colours[i + 1]])];
+}
+/** The dash pattern shifted by `step` twelfths of a period, so successive steps slide the dashes downstream. */
+function dashPatternAt(step) {
+  const round = (v) => Math.round(v * 100) / 100;
+  const period = FLOW_DASH.length + FLOW_DASH.gap;
+  const p = round((step % FLOW_DASH_STEPS) / FLOW_DASH_STEPS * period);
+  if (p <= FLOW_DASH.gap) return [0, p, FLOW_DASH.length, round(FLOW_DASH.gap - p)];
+  const shift = round(p - FLOW_DASH.gap);
+  return [round(FLOW_DASH.length - shift), FLOW_DASH.gap, shift, 0];
+}
+/** Dash pattern of phase layer `k`: each discharge class advances at its own speed. */
+function dashExprAt(k) {
+  const pattern = (cls) => ['literal', dashPatternAt(k * FLOW_CLASS_SPEED[cls])];
+  return ['match', ['get', 'cls'], 1, pattern(1), 2, pattern(2), 3, pattern(3), pattern(1)];
 }
 
 function chipOn(name) {
@@ -84,7 +128,7 @@ function buildStyle(theme) {
       mask: { type: 'geojson', data: 'data/mask.geojson' },
       state: { type: 'geojson', data: 'data/state.geojson' },
       districts: { type: 'geojson', data: 'data/districts.geojson' },
-      rivers: { type: 'geojson', data: 'data/rivers.geojson' },
+      flow: { type: 'geojson', data: 'data/flow.geojson' },
       contours: { type: 'geojson', data: 'data/contours.geojson' },
     },
     layers: [
@@ -104,14 +148,17 @@ function buildStyle(theme) {
           'line-color': t.stateCasing, 'line-width': ['interpolate', ['linear'], ['zoom'], 6, 3, 10, 6], 'line-opacity': 0.6 } },
       { id: 'state', type: 'line', source: 'state', layout: { 'line-join': 'round' }, paint: {
           'line-color': t.state, 'line-width': ['interpolate', ['linear'], ['zoom'], 6, 1.4, 10, 2.6] } },
-      { id: 'rivers-minor', type: 'line', source: 'rivers', filter: ['!', ['in', ['get', 'name'], ['literal', ['Godavari', 'Krishna']]]],
-        layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': t.minorRiver, 'line-width': 1.2, 'line-opacity': 0.8 } },
-      { id: 'rivers-glow', type: 'line', source: 'rivers', filter: ['in', ['get', 'name'], ['literal', ['Godavari', 'Krishna']]],
+      { id: 'flow-glow', type: 'line', source: 'flow', filter: ['>=', ['get', 'q'], 300],
         layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: {
-          'line-color': t.riverGlow, 'line-width': ['interpolate', ['linear'], ['zoom'], 6, 4, 10, 9], 'line-opacity': 0.55, 'line-blur': 2 } },
-      { id: 'rivers-major', type: 'line', source: 'rivers', filter: ['in', ['get', 'name'], ['literal', ['Godavari', 'Krishna']]],
-        layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: {
-          'line-color': t.river, 'line-width': ['interpolate', ['linear'], ['zoom'], 6, 1.8, 10, 4] } },
+          'line-color': t.flowGlow, 'line-width': flowWidthExpr(2.2), 'line-opacity': 0.55, 'line-blur': 3 } },
+      { id: 'flow-lines', type: 'line', source: 'flow', layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: {
+          'line-color': flowColorExpr(theme), 'line-width': flowWidthExpr(1), 'line-opacity': 0.95 } },
+      ...Array.from({ length: FLOW_DASH_STEPS }, (_, k) => ({
+        id: `flow-dash-${k}`, type: 'line', source: 'flow', filter: ['>=', ['get', 'q'], FLOW_DASH_MIN_CMS],
+        layout: { 'line-join': 'round', 'line-cap': 'butt', visibility: chipOn('flow') },
+        paint: { 'line-color': t.flowDash, 'line-width': flowWidthExpr(0.5), 'line-dasharray': dashExprAt(k),
+                 'line-opacity': k === flowStep ? FLOW_DASH_OPACITY : 0 } })),
+      { id: 'flow-hit', type: 'line', source: 'flow', paint: { 'line-color': '#000000', 'line-opacity': 0, 'line-width': 12 } },
     ],
     terrain: { source: 'dem', exaggeration: Number($('exag').value) },
     sky: { ...t.sky, 'fog-ground-blend': 0.6, 'horizon-fog-blend': 0.7, 'sky-horizon-blend': 0.85,
@@ -125,7 +172,7 @@ const map = new maplibregl.Map({
   center: HOME.center, zoom: HOME.zoom, pitch: HOME.pitch, bearing: HOME.bearing,
   minZoom: 5.6, maxZoom: 13.5, maxPitch: 75,
   maxBounds: [[76.4, 14.5], [82.6, 20.6]],
-  attributionControl: false, hash: false, antialias: true,
+  attributionControl: false, hash: true, antialias: true,   // the URL carries the view, so views can be shared
 });
 map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'bottom-right');
 map.addControl(new maplibregl.ScaleControl({ maxWidth: 140, unit: 'metric' }), 'bottom-right');
@@ -265,7 +312,110 @@ const toggles = {
   districts: (on) => { map.setLayoutProperty('districts', 'visibility', on ? 'visible' : 'none'); document.body.classList.toggle('districts-off', !on); },
   labels: (on) => document.body.classList.toggle('labels-off', !on),
   orbit: (on) => { orbiting = on; if (on) orbitStep(); },
+  flow: (on) => {
+    flowAnimating = on;
+    for (let k = 0; k < FLOW_DASH_STEPS; k++) map.setLayoutProperty(`flow-dash-${k}`, 'visibility', on ? 'visible' : 'none');
+    if (on) { flowLast = 0; requestAnimationFrame(animateFlow); }
+  },
 };
+
+// Flow animation: show the next phase layer, hide the previous one (opacity only, no tile reload).
+let flowLast = 0;
+function animateFlow(now) {
+  if (!flowAnimating) return;
+  if (now - flowLast >= FLOW_TICK_MS) {
+    flowLast = now;
+    const previous = flowStep;
+    flowStep = (flowStep + 1) % FLOW_DASH_STEPS;
+    map.setPaintProperty(`flow-dash-${previous}`, 'line-opacity', 0);
+    map.setPaintProperty(`flow-dash-${flowStep}`, 'line-opacity', FLOW_DASH_OPACITY);
+  }
+  requestAnimationFrame(animateFlow);
+}
+
+// Hovering a stream shows its average flow.
+const flowPopup = new maplibregl.Popup({ closeButton: false, closeOnClick: false, offset: 14, className: 'flow-popup' });
+map.on('mousemove', 'flow-hit', (event) => {
+  const reach = event.features[0].properties;
+  const node = document.createElement('div');
+  node.append(bold(`${Math.round(reach.q).toLocaleString('en-IN')} m³/s`), ' ',
+              spanText(`average · ${reach.name || 'stream'} · ${Number(reach.up).toLocaleString('en-IN')} km² upstream`));
+  flowPopup.setLngLat(event.lngLat).setDOMContent(node).addTo(map);
+  map.getCanvas().style.cursor = 'pointer';
+});
+map.on('mouseleave', 'flow-hit', () => { flowPopup.remove(); map.getCanvas().style.cursor = ''; });
+
+// ---------- river flow panel ----------
+function flowWidth(q) {   // mirrors FLOW_WIDTH_STOPS at zoom scale 1
+  const l = Math.log10(Math.max(q, 0.1)), stops = FLOW_WIDTH_STOPS;
+  if (l <= stops[0][0]) return stops[0][1];
+  if (l >= stops[stops.length - 1][0]) return stops[stops.length - 1][1];
+  const i = stops.findIndex((stop, k) => l >= stop[0] && l < stops[k + 1][0]);
+  return stops[i][1] + (stops[i + 1][1] - stops[i][1]) * (l - stops[i][0]) / (stops[i + 1][0] - stops[i][0]);
+}
+function renderFlowLegend() {
+  const legend = $('flow-legend');
+  legend.textContent = '';
+  const colours = MAP_THEMES[currentTheme()].flow;
+  FLOW_CLASSES.forEach((cls, i) => {
+    const swatch = document.createElement('span'); swatch.className = 'sw';
+    const line = document.createElement('i');
+    const sampleQ = i + 1 < FLOW_CLASSES.length ? Math.sqrt(Math.max(cls.from, 1) * FLOW_CLASSES[i + 1].from) : 3000;
+    line.style.height = `${Math.max(4, flowWidth(sampleQ) * 1.6)}px`; line.style.background = colours[i];
+    const label = document.createElement('span'); label.textContent = cls.label;
+    swatch.append(line, label); legend.appendChild(swatch);
+  });
+  const unit = document.createElement('span'); unit.className = 'unit'; unit.textContent = 'm³/s';
+  legend.appendChild(unit);
+}
+function textEl(tag, className, text) { const node = document.createElement(tag); node.className = className; node.textContent = text; return node; }
+function flyToPoint(lon, lat, zoom) { map.flyTo({ center: [lon, lat], zoom, pitch: 60, bearing: -20, duration: 2200, essential: true }); }
+function renderPeaks(summary) {
+  const box = $('peaks');
+  box.textContent = '';
+  for (const [river, peak] of Object.entries(summary.peaks)) {
+    const card = document.createElement('button'); card.type = 'button'; card.className = 'peak';
+    const value = textEl('span', 'q', peak.q.toLocaleString('en-IN'));
+    value.appendChild(textEl('small', '', 'm³/s'));
+    card.append(textEl('span', 'river', river), value,
+                textEl('span', 'sub', `peak where it leaves the state · ${peak.entry_q.toLocaleString('en-IN')} m³/s at entry · ${peak.up.toLocaleString('en-IN')} km² drained`));
+    card.addEventListener('click', () => flyToPoint(peak.lon, peak.lat, 10));
+    box.appendChild(card);
+    addPeakMarker(river, peak);
+  }
+}
+function addPeakMarker(river, peak) {
+  const node = document.createElement('div'); node.className = 'mk-peak';
+  const label = textEl('span', 'lbl', `${river} peak`);
+  label.appendChild(textEl('span', 'e', `${peak.q.toLocaleString('en-IN')} m³/s`));
+  node.append(textEl('span', 'ring', ''), textEl('span', 'core', ''), label);
+  node.addEventListener('click', () => flyToPoint(peak.lon, peak.lat, 10));
+  new maplibregl.Marker({ element: node, anchor: 'center' }).setLngLat([peak.lon, peak.lat]).addTo(map);
+}
+function renderDistrictFlow(summary) {
+  const list = $('district-flow');
+  list.textContent = '';
+  const maxQ = Math.max(...summary.districts.map((row) => row.mean_q));
+  let river = null;
+  for (const row of summary.districts) {
+    if (row.river !== river) {
+      river = row.river;
+      const group = document.createElement('li'); group.className = 'group';
+      group.append(document.createElement('i'), document.createTextNode(river));
+      list.appendChild(group);
+    }
+    const item = document.createElement('li');
+    const button = document.createElement('button'); button.type = 'button'; button.className = 'row';
+    const bar = textEl('span', 'bar', ''); bar.style.width = `${Math.max(2, row.mean_q / maxQ * 100)}%`;
+    button.append(textEl('span', 'name', row.district), bar, textEl('span', 'val', `${row.mean_q.toLocaleString('en-IN')} m³/s`));
+    button.title = `${row.length_km} km of the ${row.river} in ${row.district}, up to ${row.max_q.toLocaleString('en-IN')} m³/s`;
+    button.addEventListener('click', () => {
+      for (const other of document.querySelectorAll('.district-flow .row')) other.classList.toggle('active', other === button);
+      flyToPoint(row.lon, row.lat, 9.6);
+    });
+    item.appendChild(button); list.appendChild(item);
+  }
+}
 for (const chip of document.querySelectorAll('.chip[data-toggle]')) {
   chip.addEventListener('click', () => {
     const on = chip.getAttribute('aria-pressed') !== 'true';
@@ -424,22 +574,64 @@ function renderProfile() {
   });
   svg.appendChild(hit);
   profileState.scales = { x, y };
+  renderFlowChart(profile);
 
   const first = points[0], last = points[points.length - 1];
   const summary = $('river-summary');
   summary.textContent = '';
   summary.append('Enters at ', bold(`${first.elev} m`), ', leaves at ', bold(`${last.elev} m`),
-                 ` · drops ${first.elev - last.elev} m over ${Math.round(profile.length_km)} km · lowest bed `, bold(`${profile.min_elev} m`));
+                 ` · drops ${first.elev - last.elev} m over ${Math.round(profile.length_km)} km · flow grows from `,
+                 bold(`${profile.min_q.toLocaleString('en-IN')}`), ' to ', bold(`${profile.max_q.toLocaleString('en-IN')} m³/s`));
   const tbody = $('profile-table').tBodies[0];
   tbody.textContent = '';
   for (let i = 0; i < points.length; i += 10) {
     const tr = document.createElement('tr');
-    const td1 = document.createElement('td'); td1.textContent = points[i].d.toFixed(0);
-    const td2 = document.createElement('td'); td2.textContent = String(points[i].elev);
-    tr.append(td1, td2); tbody.appendChild(tr);
+    for (const text of [points[i].d.toFixed(0), String(points[i].elev), String(points[i].q)]) {
+      const td = document.createElement('td'); td.textContent = text; tr.appendChild(td);
+    }
+    tbody.appendChild(tr);
   }
   $('scrub').max = String(points.length - 1);
   highlightProfile(Math.min(profileState.index, points.length - 1), false);
+}
+const FLOW_CHART = { w: 328, h: 110, l: 38, r: 10, t: 10, b: 22 };
+function renderFlowChart(profile) {
+  const svg = $('flow-profile');
+  while (svg.lastChild && svg.lastChild.tagName !== 'title') svg.removeChild(svg.lastChild);
+  const { w, h, l, r, t, b } = FLOW_CHART;
+  const points = profile.points;
+  const maxD = points[points.length - 1].d;
+  const yStep = niceStep(profile.max_q || 1, 3);
+  const yMax = Math.ceil(profile.max_q / yStep) * yStep;
+  const x = (d) => l + d / maxD * (w - l - r);
+  const y = (q) => t + (1 - q / yMax) * (h - t - b);
+  for (let q = 0; q <= yMax; q += yStep) {
+    svg.appendChild(svgEl('line', { class: 'grid', x1: l, x2: w - r, y1: y(q), y2: y(q) }));
+    svg.appendChild(svgEl('text', { class: 'tick', x: l - 5, y: y(q) + 3, 'text-anchor': 'end' }, q >= 1000 ? `${q / 1000}K` : String(q)));
+  }
+  const xStep = niceStep(maxD, 4);
+  for (let d = 0; d <= maxD; d += xStep) {
+    svg.appendChild(svgEl('text', { class: 'tick', x: x(d), y: h - 8, 'text-anchor': d === 0 ? 'start' : 'middle' }, d === 0 ? '0 km' : String(d)));
+  }
+  svg.appendChild(svgEl('line', { class: 'axis', x1: l, x2: w - r, y1: y(0), y2: y(0) }));
+  const path = points.map((p, i) => `${i ? 'L' : 'M'}${x(p.d).toFixed(1)} ${y(p.q).toFixed(1)}`).join(' ');
+  svg.appendChild(svgEl('path', { class: 'area', d: `${path} L${x(maxD).toFixed(1)} ${y(0)} L${l} ${y(0)} Z` }));
+  svg.appendChild(svgEl('path', { class: 'line', d: path }));
+  svg.appendChild(svgEl('line', { id: 'cross2', class: 'cross', x1: 0, x2: 0, y1: t, y2: y(0), visibility: 'hidden' }));
+  svg.appendChild(svgEl('circle', { id: 'cross2-dot', class: 'dot', r: 4.5, visibility: 'hidden' }));
+  const hit = svgEl('rect', { class: 'hit', x: l, y: 0, width: w - l - r, height: h });
+  hit.addEventListener('pointermove', (event) => {
+    const box = svg.getBoundingClientRect();
+    const d = ((event.clientX - box.left) / box.width * w - l) / (w - l - r) * maxD;
+    highlightProfile(nearestIndex(points, d), true);
+  });
+  hit.addEventListener('pointerleave', () => { $('profile-tip').hidden = true; });
+  hit.addEventListener('click', () => {
+    const p = points[profileState.index];
+    map.flyTo({ center: [p.lon, p.lat], zoom: 10.4, pitch: 62, bearing: -20, duration: 2000, essential: true });
+  });
+  svg.appendChild(hit);
+  profileState.flowScales = { x, y };
 }
 function bold(text) { const el = document.createElement('b'); el.textContent = text; return el; }
 function nearestIndex(points, d) {
@@ -455,11 +647,14 @@ function highlightProfile(index, showTip) {
   const cross = $('cross'), dot = $('cross-dot');
   cross.setAttribute('x1', x(point.d)); cross.setAttribute('x2', x(point.d)); cross.setAttribute('visibility', 'visible');
   dot.setAttribute('cx', x(point.d)); dot.setAttribute('cy', y(point.elev)); dot.setAttribute('visibility', 'visible');
+  const flow = profileState.flowScales, cross2 = $('cross2'), dot2 = $('cross2-dot');
+  cross2.setAttribute('x1', flow.x(point.d)); cross2.setAttribute('x2', flow.x(point.d)); cross2.setAttribute('visibility', 'visible');
+  dot2.setAttribute('cx', flow.x(point.d)); dot2.setAttribute('cy', flow.y(point.q)); dot2.setAttribute('visibility', 'visible');
   $('scrub').value = String(index);
   const tip = $('profile-tip');
   if (showTip) {
     tip.textContent = '';
-    tip.append(bold(`${point.elev} m`), ' ', spanText(`· ${point.d.toFixed(0)} km`));
+    tip.append(bold(`${point.elev} m`), ' ', spanText(`· ${point.q.toLocaleString('en-IN')} m³/s · ${point.d.toFixed(0)} km`));
     const box = $('profile').getBoundingClientRect();
     tip.style.left = `${x(point.d) / CHART.w * box.width}px`;
     tip.style.top = `${y(point.elev) / CHART.h * box.height}px`;
@@ -489,13 +684,18 @@ async function loadJson(url) { const response = await fetch(url); if (!response.
 map.on('load', async () => {
   debug.phase = 'style-loaded'; writeDebug();
   try {
-    const [cities, profiles, districtPoints] = await Promise.all([
-      loadJson('data/cities.json'), loadJson('data/rivers.json'), loadJson('data/district_points.geojson')]);
+    const [cities, profiles, districtPoints, flowSummary] = await Promise.all([
+      loadJson('data/cities.json'), loadJson('data/rivers.json'), loadJson('data/district_points.geojson'),
+      loadJson('data/flow_summary.json')]);
     profileState.profiles = profiles;
     cities.forEach(addCityMarker);
     addDistrictLabels(districtPoints, new Set(cities.map((c) => c.name.toLowerCase())));
     renderCities(cities, profiles);
     renderProfile();
+    renderFlowLegend();
+    renderPeaks(flowSummary);
+    renderDistrictFlow(flowSummary);
+    debug.notes.flowDistricts = flowSummary.districts.length;
     debug.phase = 'data-loaded'; writeDebug();
     if (DEBUG) {
       const hyderabad = cities.find((c) => c.name === 'Hyderabad');
@@ -510,9 +710,11 @@ map.on('load', async () => {
     return;
   }
   // 'idle' never fires while DOM markers sit on 3D terrain, so wait for the tiles instead.
+  // The flow animation starts only now: its paint updates keep map.loaded() false.
   const settle = () => {
     if (!map.loaded()) { map.once('render', settle); return; }
     $('toast').classList.add('gone');
+    if (flowAnimating) requestAnimationFrame(animateFlow);
     debug.phase = 'ready';
     if (DEBUG) { debug.notes.terrain = Boolean(map.getTerrain()); debug.notes.layers = map.getStyle().layers.map((l) => l.id); writeDebug(); document.title = 'READY ' + document.title; }
   };

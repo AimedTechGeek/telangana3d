@@ -14,8 +14,13 @@ uv run python serve.py      # http://127.0.0.1:8765/ opens in your browser
 - Hover anywhere for the elevation under the cursor, shown as a stack of
   landmark silhouettes for scale (Gateway of India 26 m, Charminar 56 m,
   Qutub Minar 73 m, Statue of Unity 182 m)
-- Godavari and Krishna river-bed profiles through the state; hover or drag the
-  slider to follow the river on the map, click to fly there
+- **River flow:** every stream drawn by its long-term average discharge
+  (HydroRIVERS): wider, darker and faster-moving dashes mean more water
+  collected upstream. Hover a stream for its m³/s and catchment area; peak
+  markers show where the Godavari and Krishna carry the most water; a list
+  gives the average flow of each river through every district it crosses
+- Godavari and Krishna river-bed and flow profiles through the state; hover or
+  drag the slider to follow the river on the map, click to fly there
 - 27 cities and towns ranked by elevation, with the lowest river beds for
   comparison; click one to fly to it
 - Vertical exaggeration slider, 100 m contours, district lines, labels, orbit,
@@ -54,7 +59,8 @@ uv run python web_smoke_test.py   # headless Edge check of the web map -> out/we
 |---|---|
 | Elevation | Copernicus GLO-90 DSM (AWS open data), smoothed (σ = 1 px); 200 m grid for forge3d, Terrarium tiles z5–11 for the web map |
 | State and 33 districts | geoBoundaries gbOpen India ADM1/ADM2 |
-| Rivers | Natural Earth 10m centrelines |
+| Rivers | Natural Earth 10m centrelines (profiles, names) |
+| River flow | HydroRIVERS v1.0 (HydroSHEDS): `DIS_AV_CMS`, the long-term average *naturalised* discharge from the WaterGAP model, i.e. before dams and irrigation withdrawals; reaches ≥ 1 m³/s. Per-district values are length-weighted means of the main stem inside the district |
 | Cities | OpenStreetMap `place=city`, plus towns with population ≥ 40 000 (Overpass API); elevation = median DSM within 1 km |
 | River profiles | DSM 10th percentile within 1.4 km of the centreline every 2 km, median-filtered, then capped so the bed never rises downstream (the coarse line strays onto the valley sides in the Krishna's Nallamala gorge) |
 | Projection | Web Mercator for the web map; Lambert Conformal Conic for forge3d |
@@ -68,6 +74,9 @@ Notes:
   typo, which is corrected.
 - The DSM includes trees and buildings, so city values can sit a few metres
   above street level, and river beds are approximate.
+- Flow figures are modelled long-term averages, not gauge readings: actual
+  flow varies hugely between monsoon and dry season and is reduced by the
+  Sriram Sagar, Nagarjuna Sagar and other projects.
 - The forge3d viewer DEM uses a local grid (1 unit = 20 m) because the viewer
   clamps mouse-wheel zoom to a 100–50 000 unit radius.
 - The block render is downsampled to 400 m and rendered in 800 px tiles to fit

@@ -9,7 +9,9 @@ Outputs:
 - web/data/*.geojson          state, districts, district label points, rivers,
                               contours, outside-state mask (all WGS84)
 - web/data/cities.json        OSM cities/towns with elevation above sea level
-- web/data/rivers.json        Godavari and Krishna elevation profiles
+- web/data/rivers.json        Godavari and Krishna elevation + average flow profiles
+- web/data/flow.geojson       HydroRIVERS reaches with modelled average discharge (m3/s)
+- web/data/flow_summary.json  peak flow per river and average flow per district
 """
 from __future__ import annotations
 
@@ -18,6 +20,7 @@ import json
 import math
 import re
 import shutil
+import zipfile
 from pathlib import Path
 
 import contourpy
@@ -34,7 +37,7 @@ from scipy.ndimage import gaussian_filter, median_filter
 from shapely.geometry import LineString, MultiLineString, Point, box, mapping
 from shapely.ops import linemerge, unary_union
 
-from prepare_data import TARGET_CRS
+from prepare_data import TARGET_CRS, read_zipped
 
 ROOT = Path(__file__).parent
 RAW = ROOT / "data" / "raw"
@@ -64,6 +67,17 @@ CITY_MIN_POPULATION = 40000
 CITY_NEAR_RIVER_M = 8000.0
 EXCLUDED_PLACES = {"Secunderabad", "Mirjapur"}  # part of Hyderabad / mistagged node
 PROFILE_DEM = DATA / "telangana_dem.tif"
+
+# HydroRIVERS: DIS_AV_CMS is the long-term average naturalised discharge (m3/s,
+# WaterGAP model), UPLAND_SKM the upstream catchment area.
+HYDRORIVERS_ZIP = RAW / "hydrorivers_as.zip"
+FLOW_BBOX = (76.5, 14.5, 82.5, 20.5)
+FLOW_MIN_CMS = 1.0                  # drop the smallest streams (about 80 % of reaches)
+FLOW_CLASS_CMS = (20.0, 300.0)      # small | medium | large, drives the animation speed
+NAMED_RIVERS = ("Godavari", "Krishna", "Bhima", "Tungabhadra", "Indravati", "Wainganga")
+NAME_MATCH_M = 4000.0               # both reach ends this close to the Natural Earth line
+MAIN_STEM_MIN_ORDER = 6             # Strahler order; keeps short tributary mouths unnamed
+PROFILE_FLOW_MATCH_M = 6000.0
 
 
 # --- terrain tiles ----------------------------------------------------------
@@ -275,6 +289,100 @@ def build_profiles(sampler: DemSampler, state: gpd.GeoDataFrame, cities: list[di
     return profiles
 
 
+# --- river flow (HydroRIVERS) -----------------------------------------------
+
+def load_reaches() -> gpd.GeoDataFrame:
+    with zipfile.ZipFile(HYDRORIVERS_ZIP) as archive:
+        shp = next(n for n in archive.namelist() if n.endswith(".shp"))
+    reaches = gpd.read_file(f"zip://{HYDRORIVERS_ZIP.as_posix()}!{shp}", bbox=FLOW_BBOX)
+    reaches = reaches[reaches["DIS_AV_CMS"] >= FLOW_MIN_CMS]
+    return reaches[["HYRIV_ID", "DIS_AV_CMS", "UPLAND_SKM", "ORD_STRA", "DIST_DN_KM", "geometry"]].copy()
+
+
+def name_reaches(reaches: gpd.GeoDataFrame) -> None:
+    """Label reaches that follow a Natural Earth named river (HydroRIVERS has no names)."""
+    named = read_zipped("rivers.zip")
+    named = named[named["name_en"].isin(NAMED_RIVERS)].to_crs(TARGET_CRS)
+    projected = reaches.to_crs(TARGET_CRS).geometry
+    starts = projected.apply(lambda line: Point(line.coords[0]))
+    ends = projected.apply(lambda line: Point(line.coords[-1]))
+    reaches["name"] = None
+    for river, group in named.groupby("name_en"):
+        line = unary_union(list(group.geometry))
+        close = (starts.distance(line) <= NAME_MATCH_M) & (ends.distance(line) <= NAME_MATCH_M)
+        if river in PROFILE_RIVERS:
+            close &= reaches["ORD_STRA"] >= MAIN_STEM_MIN_ORDER
+        reaches.loc[close & reaches["name"].isna(), "name"] = river
+
+
+def flow_class(discharge: float) -> int:
+    return 1 if discharge < FLOW_CLASS_CMS[0] else 2 if discharge < FLOW_CLASS_CMS[1] else 3
+
+
+def write_flow(reaches: gpd.GeoDataFrame) -> None:
+    out = gpd.GeoDataFrame({
+        "q": reaches["DIS_AV_CMS"].round(1), "up": reaches["UPLAND_SKM"].round().astype(int),
+        "ord": reaches["ORD_STRA"], "cls": reaches["DIS_AV_CMS"].apply(flow_class), "name": reaches["name"],
+        "geometry": reaches.geometry.simplify(0.0004),
+    }, crs=reaches.crs)
+    out.to_file(WEB_DATA / "flow.geojson", driver="GeoJSON")
+
+
+def attach_flow_to_profiles(profiles: dict, reaches: gpd.GeoDataFrame) -> None:
+    projected = reaches.to_crs(TARGET_CRS)
+    to_dem = Transformer.from_crs(WGS84, TARGET_CRS, always_xy=True)
+    for river, profile in profiles.items():
+        stem = projected[projected["name"] == river]
+        points = gpd.GeoSeries([Point(to_dem.transform(p["lon"], p["lat"])) for p in profile["points"]], crs=TARGET_CRS)
+        flows = np.full(len(points), np.nan)
+        point_idx, reach_idx = stem.sindex.nearest(points, return_all=False, max_distance=PROFILE_FLOW_MATCH_M)
+        flows[point_idx] = stem["DIS_AV_CMS"].to_numpy()[reach_idx]
+        # Interpolate gaps, then enforce the physics: flow never shrinks downstream.
+        flows = np.array(pd_interpolate(flows))
+        flows = np.maximum.accumulate(flows)
+        for point, flow in zip(profile["points"], flows):
+            point["q"] = round(float(flow))
+        profile["min_q"], profile["max_q"] = int(flows.min()), int(flows.max())
+
+
+def pd_interpolate(values: np.ndarray) -> np.ndarray:
+    index = np.arange(len(values))
+    known = ~np.isnan(values)
+    return np.interp(index, index[known], values[known])
+
+
+def flow_summary(reaches: gpd.GeoDataFrame, districts: gpd.GeoDataFrame, state: gpd.GeoDataFrame) -> dict:
+    projected = reaches.to_crs(TARGET_CRS)
+    districts = districts.to_crs(TARGET_CRS)
+    corridor = state.to_crs(TARGET_CRS).geometry.iloc[0].buffer(RIVER_CORRIDOR_M)
+    to_wgs = Transformer.from_crs(TARGET_CRS, WGS84, always_xy=True)
+    summary = {"peaks": {}, "districts": []}
+    for river in PROFILE_RIVERS:
+        stem = projected[(projected["name"] == river) & projected.intersects(corridor)]
+        peak = stem.loc[stem["DIS_AV_CMS"].idxmax()]
+        lon, lat = to_wgs.transform(*peak.geometry.coords[-1])
+        summary["peaks"][river] = {"q": round(peak["DIS_AV_CMS"]), "up": round(peak["UPLAND_SKM"]),
+                                   "entry_q": round(stem["DIS_AV_CMS"].min()), "lon": round(lon, 5), "lat": round(lat, 5)}
+        for _, district in districts.iterrows():
+            inside = stem[stem.intersects(district.geometry)]
+            if inside.empty:
+                continue
+            clipped = inside.geometry.intersection(district.geometry)
+            lengths = clipped.length
+            if lengths.sum() < 1000.0:
+                continue
+            mid = unary_union(list(clipped)).representative_point()
+            lon, lat = to_wgs.transform(mid.x, mid.y)
+            summary["districts"].append({
+                "district": district["shapeName"], "river": river,
+                "mean_q": round(float((inside["DIS_AV_CMS"] * lengths).sum() / lengths.sum())),
+                "max_q": round(float(inside["DIS_AV_CMS"].max())), "length_km": round(float(lengths.sum() / 1000.0)),
+                "dist_dn_km": float(inside["DIST_DN_KM"].min()), "lon": round(lon, 5), "lat": round(lat, 5),
+            })
+    summary["districts"].sort(key=lambda row: (row["river"], -row["dist_dn_km"]))
+    return summary
+
+
 # --- contours ---------------------------------------------------------------
 
 def build_contours() -> gpd.GeoDataFrame:
@@ -307,7 +415,20 @@ def main() -> None:
     (WEB_DATA / "cities.json").write_text(json.dumps(cities, indent=1), encoding="utf-8")
     print(f"cities {len(cities)}: " + ", ".join(f"{c['name']} {c['elev']} m" for c in cities))
     profiles = build_profiles(sampler, state, cities)
+    reaches = load_reaches()
+    name_reaches(reaches)
+    write_flow(reaches)
+    attach_flow_to_profiles(profiles, reaches)
     (WEB_DATA / "rivers.json").write_text(json.dumps(profiles), encoding="utf-8")
+    summary = flow_summary(reaches, districts, state)
+    (WEB_DATA / "flow_summary.json").write_text(json.dumps(summary, indent=1), encoding="utf-8")
+    named = reaches["name"].value_counts().to_dict()
+    print(f"flow: {len(reaches)} reaches >= {FLOW_MIN_CMS:g} m3/s, named {named}")
+    for river, peak in summary["peaks"].items():
+        print(f"{river}: {peak['entry_q']} -> {peak['q']} m3/s, catchment {peak['up']:,} km2 at peak; "
+              f"profile flow {profiles[river]['min_q']} -> {profiles[river]['max_q']}")
+    for row in summary["districts"]:
+        print(f"  {row['river']:9} {row['district']:18} mean {row['mean_q']:5} max {row['max_q']:5} m3/s over {row['length_km']} km")
     contours = build_contours()
     write_geojson(contours, "contours")
     print(f"contours: {len(contours)} lines, {(WEB_DATA / 'contours.geojson').stat().st_size / 1e6:.1f} MB")

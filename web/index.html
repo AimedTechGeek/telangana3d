@@ -71,6 +71,18 @@
     <p class="hint">Right-drag or Ctrl-drag always rotates and tilts · scroll zooms · two fingers rotate on touch</p>
   </section>
 
+  <section class="flow">
+    <div class="section-head">
+      <h2>River flow</h2>
+      <button class="chip" type="button" data-toggle="flow" aria-pressed="true">Animate</button>
+    </div>
+    <p class="summary">Long-term average flow of every stream (HydroRIVERS model). Wider, darker and faster means more water collected upstream.</p>
+    <div class="flow-legend" id="flow-legend" aria-label="Average flow scale, cubic metres per second"></div>
+    <div class="peaks" id="peaks"></div>
+    <p class="hint">Average flow of the main rivers through each district, upstream to downstream. Click a row to fly there.</p>
+    <ol class="district-flow" id="district-flow"></ol>
+  </section>
+
   <section class="rivers">
     <div class="section-head">
       <h2>River profiles</h2>
@@ -84,11 +96,15 @@
       <svg id="profile" viewBox="0 0 328 150" role="img" aria-labelledby="profile-title"><title id="profile-title">River bed elevation along the river through Telangana</title></svg>
       <div class="tip" id="profile-tip" hidden></div>
     </div>
+    <p class="chart-label">Average flow along the same stretch, m³/s</p>
+    <div class="chart-wrap">
+      <svg id="flow-profile" viewBox="0 0 328 110" role="img" aria-labelledby="flow-profile-title"><title id="flow-profile-title">Average river flow along the river through Telangana</title></svg>
+    </div>
     <input type="range" id="scrub" min="0" max="1000" value="0" aria-label="Position along the river">
     <p class="hint">Hover or drag to follow the river on the map · click to fly there</p>
     <details class="table">
       <summary>Table view</summary>
-      <table id="profile-table"><thead><tr><th>km</th><th>River bed, m ASL</th></tr></thead><tbody></tbody></table>
+      <table id="profile-table"><thead><tr><th>km</th><th>River bed, m ASL</th><th>Flow, m³/s</th></tr></thead><tbody></tbody></table>
     </details>
   </section>
 
@@ -100,7 +116,7 @@
     <ol id="city-list"></ol>
   </section>
 
-  <footer class="credits">Copernicus DEM (ESA) · geoBoundaries · Natural Earth · © OpenStreetMap contributors</footer>
+  <footer class="credits">Copernicus DEM (ESA) · HydroRIVERS (HydroSHEDS, Lehner &amp; Grill 2013) · geoBoundaries · Natural Earth · © OpenStreetMap contributors</footer>
 </aside>
 
 <button id="expand" class="icon-btn fab" type="button" aria-label="Show panel" hidden>
