@@ -121,6 +121,13 @@ h2 { margin: 0; font-size: 13px; font-weight: 600; letter-spacing: .02em; color:
 .hero #cursor-elev { font-size: 44px; font-weight: 600; letter-spacing: -.03em; line-height: 1; min-width: 3ch; }
 .hero .unit { font-size: 13px; color: var(--muted); }
 .coords { margin: 0; font-family: var(--mono); font-size: 12px; color: var(--muted); }
+.compare { display: flex; align-items: flex-end; gap: 10px; margin: 8px 0 0; }
+.lm-row { display: inline-flex; align-items: flex-end; gap: 2px; height: 26px; color: var(--ink-2); }
+.lm-row .lm { display: block; width: 18px; height: 24px; }
+.lm-row .lm-part { position: relative; width: 18px; overflow: hidden; }
+.lm-row .lm-part .lm { position: absolute; left: 0; bottom: 0; }
+.lm-text { font-size: 12px; color: var(--ink-2); padding-bottom: 3px; }
+.lm-text b { font-family: var(--mono); font-weight: 600; color: var(--ink); }
 
 /* ---------- legend ---------- */
 .legend .ramp { height: 10px; border-radius: 999px; border: 1px solid var(--border); }

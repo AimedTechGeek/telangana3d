@@ -36,6 +36,10 @@
   <section class="readout" aria-live="polite">
     <div class="hero"><span id="cursor-elev">—</span><span class="unit">m ASL</span></div>
     <p class="coords" id="cursor-pos">Move the pointer over the terrain</p>
+    <p class="compare" id="cursor-compare" hidden>
+      <span class="lm-row" id="lm-row"></span>
+      <span class="lm-text" id="lm-text"></span>
+    </p>
   </section>
 
   <section class="legend" aria-label="Elevation colour scale">
@@ -96,6 +100,14 @@
 </button>
 
 <div id="toast" class="toast" role="status">Loading terrain…</div>
+
+<!-- Landmark silhouettes for the elevation comparison (24 x 32 units, fill = currentColor) -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="lm-gateway" viewBox="0 0 24 32"><path fill-rule="evenodd" d="M1 31V11h2V8l1.5-1.5L6 8v3h2a4 4 0 0 1 8 0h2V8l1.5-1.5L21 8v3h2v20zM8.5 31V21a3.5 3.5 0 0 1 7 0v10z"/></symbol>
+  <symbol id="lm-charminar" viewBox="0 0 24 32"><path fill-rule="evenodd" d="M1 31V13h2V4l1.5-2L6 4v9h2V8l1-1 1 1v5h4V8l1-1 1 1v5h2V4l1.5-2L21 4v9h2v18zM9 31v-7a3 3 0 0 1 6 0v7z"/></symbol>
+  <symbol id="lm-qutub" viewBox="0 0 24 32"><path d="M9.5 31 10.5 2h3l1 29zM8 25h8v1.5H8zM8.6 18h6.8v1.5H8.6zM9.2 11h5.6v1.5H9.2zM10.8 2.2a1.2 1.2 0 0 1 2.4 0z"/></symbol>
+  <symbol id="lm-statue" viewBox="0 0 24 32"><path d="M12 1.5a2.4 2.4 0 1 1 0 4.8 2.4 2.4 0 0 1 0-4.8zM8.5 7.5h7l1.5 5.5v15h-10V13zM5 28h14v3H5z"/></symbol>
+</svg>
 <pre id="debug" hidden></pre>
 
 <script src="app.js"></script>

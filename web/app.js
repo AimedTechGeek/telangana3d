@@ -14,6 +14,13 @@ const LEGEND_TICKS = [0, 150, 300, 450, 600, 750, 900];
 const LEGEND_MAX = 950;
 const CITY_BAR_MAX = 700;           // bar length scale, m
 const LABEL_ZOOM = 7.6;             // towns and district names appear above this zoom
+const LANDMARKS = [                 // heights in metres (statue without its base), icons in index.html
+  { name: 'Gateway of India', height: 26, icon: 'gateway' },
+  { name: 'Charminar', height: 56, icon: 'charminar' },
+  { name: 'Qutub Minar', height: 73, icon: 'qutub' },
+  { name: 'Statue of Unity', height: 182, icon: 'statue' },
+];
+const MAX_LANDMARK_ICONS = 6;
 const ORBIT_DEG_PER_FRAME = 0.035;
 
 const MAP_THEMES = {
@@ -156,8 +163,9 @@ function loadTilePixels(key) {
   return promise;
 }
 
-/** Elevation in metres above sea level, or null while the tile is still loading. */
+/** Elevation in metres above sea level; null while the tile loads, undefined outside the DEM. */
 function elevationAt(lng, lat) {
+  if (lng < DEM_BOUNDS[0] || lng > DEM_BOUNDS[2] || lat < DEM_BOUNDS[1] || lat > DEM_BOUNDS[3]) return undefined;
   const n = 2 ** TILE_MAX_ZOOM;
   const x = (lng + 180) / 360 * n;
   const latRad = lat * Math.PI / 180;
@@ -175,16 +183,55 @@ const cursorElev = $('cursor-elev'), cursorPos = $('cursor-pos');
 let pendingCursor = null;
 function showCursor(lngLat) {
   const elevation = elevationAt(lngLat.lng, lngLat.lat);
+  if (elevation === undefined) { clearCursor(); return; }
   if (elevation === null) { pendingCursor = lngLat; setTimeout(() => { if (pendingCursor === lngLat) showCursor(lngLat); }, 120); return; }
   cursorElev.textContent = Math.round(elevation).toLocaleString('en-IN');
   cursorPos.textContent = `${Math.abs(lngLat.lat).toFixed(3)}°${lngLat.lat >= 0 ? 'N' : 'S'}  ${Math.abs(lngLat.lng).toFixed(3)}°${lngLat.lng >= 0 ? 'E' : 'W'}`;
+  showComparison(elevation);
+}
+
+/** Tallest landmark that fits into the elevation at least once (so the count stays small). */
+function landmarkFor(elevation) {
+  let pick = LANDMARKS[0];
+  for (const landmark of LANDMARKS) if (elevation >= landmark.height) pick = landmark;
+  return pick;
+}
+function landmarkIcon(icon, fraction) {
+  const svg = document.createElementNS(SVG_NS, 'svg');
+  svg.setAttribute('class', 'lm'); svg.setAttribute('viewBox', '0 0 24 32'); svg.setAttribute('aria-hidden', 'true');
+  const use = document.createElementNS(SVG_NS, 'use');
+  use.setAttribute('href', `#lm-${icon}`); svg.appendChild(use);
+  if (fraction >= 1) return svg;
+  const part = document.createElement('span');   // clipped from the top: a building cut at the elevation
+  part.className = 'lm-part';
+  part.style.height = `${Math.max(2, Math.round(fraction * 24))}px`;
+  part.appendChild(svg);
+  return part;
+}
+function showComparison(elevation) {
+  const landmark = landmarkFor(Math.max(elevation, 0));
+  const ratio = Math.max(elevation, 0) / landmark.height;
+  const whole = Math.min(Math.floor(ratio), MAX_LANDMARK_ICONS);
+  const fraction = ratio - Math.floor(ratio);
+  const row = $('lm-row');
+  row.textContent = '';
+  for (let i = 0; i < whole; i++) row.appendChild(landmarkIcon(landmark.icon, 1));
+  if (whole < MAX_LANDMARK_ICONS && fraction >= 0.08) row.appendChild(landmarkIcon(landmark.icon, fraction));
+  const text = $('lm-text');
+  text.textContent = '';
+  text.append('≈ ', bold(`${ratio >= 10 ? Math.round(ratio) : ratio.toFixed(1)} ×`), ` ${landmark.name} (${landmark.height} m)`);
+  $('cursor-compare').hidden = false;
 }
 let cursorFrame = 0;
 map.on('mousemove', (event) => {
   if (cursorFrame) return;
   cursorFrame = requestAnimationFrame(() => { cursorFrame = 0; showCursor(event.lngLat); });
 });
-map.on('mouseout', () => { cursorElev.textContent = '—'; cursorPos.textContent = 'Move the pointer over the terrain'; });
+function clearCursor() {
+  cursorElev.textContent = '—'; cursorPos.textContent = 'Move the pointer over the terrain';
+  $('cursor-compare').hidden = true;
+}
+map.on('mouseout', clearCursor);
 
 // ---------- legend ----------
 (function buildLegend() {

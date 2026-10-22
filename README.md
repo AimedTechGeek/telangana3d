@@ -11,7 +11,9 @@ uv run python serve.py      # http://127.0.0.1:8765/ opens in your browser
 ```
 
 - 3D terrain with hillshade and a colour scale in metres above sea level
-- Hover anywhere for the elevation under the cursor
+- Hover anywhere for the elevation under the cursor, shown as a stack of
+  landmark silhouettes for scale (Gateway of India 26 m, Charminar 56 m,
+  Qutub Minar 73 m, Statue of Unity 182 m)
 - Godavari and Krishna river-bed profiles through the state; hover or drag the
   slider to follow the river on the map, click to fly there
 - 27 cities and towns ranked by elevation, with the lowest river beds for
