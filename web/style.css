@@ -71,6 +71,7 @@ body {
 }
 #map { position: fixed; inset: 0; }
 #map canvas { outline: none; }
+#map canvas.bubbles { position: absolute; top: 0; left: 0; pointer-events: none; }
 button { font: inherit; color: inherit; }
 
 /* ---------- panel ---------- */

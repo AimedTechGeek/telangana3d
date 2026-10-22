@@ -28,7 +28,7 @@ const MAP_THEMES = {
     background: '#e9e6df', mask: '#efece5', maskOpacity: 0.5,
     district: '#3b3a36', districtOpacity: 0.55, state: '#161616', stateCasing: '#ffffff',
     contour: '#5a4634', flowGlow: '#ffffff', flowDash: '#eef7ff',
-    flow: ['#9fd3f3', '#4d9be6', '#1d5fc4', '#0a3684', '#3a1d8a'],   // FLOW_CLASSES: light blue -> navy -> indigo
+    flow: ['#86d9e3', '#36aee6', '#2566d8', '#1a3aa6', '#5f2aa8'],   // FLOW_CLASSES: cyan -> blue -> navy -> purple
     shadow: '#2b2016', highlight: '#fff4e2', accent: '#4e3d2e',
     sky: { 'sky-color': '#cfe3f6', 'horizon-color': '#eef3f8', 'fog-color': '#e9e6df' },
   },
@@ -36,7 +36,7 @@ const MAP_THEMES = {
     background: '#0e0f12', mask: '#0e0f12', maskOpacity: 0.58,
     district: '#d8d4cc', districtOpacity: 0.38, state: '#f0efec', stateCasing: '#000000',
     contour: '#d8d4cc', flowGlow: '#0b1a33', flowDash: '#ffffff',
-    flow: ['#2d5f9c', '#3f8ddc', '#6fb6ff', '#b4dcff', '#e6ccff'],   // FLOW_CLASSES: brighter, then lilac, on the dark surface
+    flow: ['#2f96a8', '#3cbbea', '#6a9cff', '#a9bdff', '#dcaaff'],   // FLOW_CLASSES: teal -> sky -> blue -> lilac on the dark surface
     shadow: '#000000', highlight: '#b9a68c', accent: '#000000',
     sky: { 'sky-color': '#0b1020', 'horizon-color': '#1b2233', 'fog-color': '#0e0f12' },
   },
@@ -69,7 +69,7 @@ function reliefExpression(theme) {
 }
 
 // River flow styling: width and colour follow log10 of the average discharge.
-const FLOW_WIDTH_STOPS = [[-1, 0.5], [0, 0.8], [1, 1.5], [2, 2.8], [3, 5], [3.6, 8]];  // log10(m³/s) -> px
+const FLOW_WIDTH_STOPS = [[-1, 0.6], [0, 1.0], [1, 1.9], [2, 3.0], [3, 5.2], [3.6, 8]];  // log10(m³/s) -> px
 // Colour classes (m³/s lower bounds): stepped so thin lines still read as different flows.
 const FLOW_CLASSES = [
   { from: 0, label: '< 10' }, { from: 10, label: '10–100' }, { from: 100, label: '100–1K' },
@@ -78,11 +78,13 @@ const FLOW_CLASSES = [
 const FLOW_LOG_Q = ['log10', ['max', ['get', 'q'], 0.1]];
 // Animation: changing line-dasharray makes MapLibre rebuild the source tiles, so
 // the page carries one layer per dash phase and only cycles their opacity.
+// Dashes are measured in line widths, so wider rivers get longer dashes that
+// cover more pixels per tick: that is the speed difference. Every class moves
+// one tenth of a period per tick, which always reads as forward motion.
 const FLOW_DASH = { length: 2.2, gap: 2.4 };          // in line widths
-const FLOW_DASH_STEPS = 8;                            // phase layers, all drawn every frame: keep small
-const FLOW_DASH_MIN_CMS = 10;                         // animate streams from 10 m³/s; smaller ones stay static
-const FLOW_CLASS_SPEED = { 1: 1, 2: 2, 3: 3 };        // phase steps per tick: big rivers flow faster
-const FLOW_TICK_MS = 80;
+const FLOW_DASH_STEPS = 10;                           // phase layers, all drawn every frame: keep small
+const FLOW_DASH_MIN_CMS = 20;                         // animate streams from 20 m³/s; smaller ones stay static
+const FLOW_TICK_MS = 70;
 const FLOW_DASH_OPACITY = 0.9;
 let flowStep = 0;
 let flowAnimating = true;
@@ -95,7 +97,7 @@ function flowColorExpr(theme) {
   const colours = MAP_THEMES[theme].flow;
   return ['step', ['get', 'q'], colours[0], ...FLOW_CLASSES.slice(1).flatMap((cls, i) => [cls.from, colours[i + 1]])];
 }
-/** The dash pattern shifted by `step` twelfths of a period, so successive steps slide the dashes downstream. */
+/** The dash pattern shifted by `step` tenths of a period, so successive steps slide the dashes downstream. */
 function dashPatternAt(step) {
   const round = (v) => Math.round(v * 100) / 100;
   const period = FLOW_DASH.length + FLOW_DASH.gap;
@@ -103,11 +105,6 @@ function dashPatternAt(step) {
   if (p <= FLOW_DASH.gap) return [0, p, FLOW_DASH.length, round(FLOW_DASH.gap - p)];
   const shift = round(p - FLOW_DASH.gap);
   return [round(FLOW_DASH.length - shift), FLOW_DASH.gap, shift, 0];
-}
-/** Dash pattern of phase layer `k`: each discharge class advances at its own speed. */
-function dashExprAt(k) {
-  const pattern = (cls) => ['literal', dashPatternAt(k * FLOW_CLASS_SPEED[cls])];
-  return ['match', ['get', 'cls'], 1, pattern(1), 2, pattern(2), 3, pattern(3), pattern(1)];
 }
 
 function chipOn(name) {
@@ -156,7 +153,7 @@ function buildStyle(theme) {
       ...Array.from({ length: FLOW_DASH_STEPS }, (_, k) => ({
         id: `flow-dash-${k}`, type: 'line', source: 'flow', filter: ['>=', ['get', 'q'], FLOW_DASH_MIN_CMS],
         layout: { 'line-join': 'round', 'line-cap': 'butt', visibility: chipOn('flow') },
-        paint: { 'line-color': t.flowDash, 'line-width': flowWidthExpr(0.5), 'line-dasharray': dashExprAt(k),
+        paint: { 'line-color': t.flowDash, 'line-width': flowWidthExpr(0.5), 'line-dasharray': dashPatternAt(k),
                  'line-opacity': k === flowStep ? FLOW_DASH_OPACITY : 0 } })),
       { id: 'flow-hit', type: 'line', source: 'flow', paint: { 'line-color': '#000000', 'line-opacity': 0, 'line-width': 12 } },
     ],
@@ -319,10 +316,11 @@ const toggles = {
   },
 };
 
-// Flow animation: show the next phase layer, hide the previous one (opacity only, no tile reload).
-let flowLast = 0;
+// Flow animation: show the next phase layer, hide the previous one (opacity only, no tile reload),
+// and move the bubbles every frame.
+let flowLast = 0, bubbleLast = 0;
 function animateFlow(now) {
-  if (!flowAnimating) return;
+  if (!flowAnimating) { clearBubbles(); return; }
   if (now - flowLast >= FLOW_TICK_MS) {
     flowLast = now;
     const previous = flowStep;
@@ -330,8 +328,101 @@ function animateFlow(now) {
     map.setPaintProperty(`flow-dash-${previous}`, 'line-opacity', 0);
     map.setPaintProperty(`flow-dash-${flowStep}`, 'line-opacity', FLOW_DASH_OPACITY);
   }
+  drawBubbles(bubbleLast ? Math.min((now - bubbleLast) / 1000, 0.1) : 0);
+  bubbleLast = now;
   requestAnimationFrame(animateFlow);
 }
+
+// ---------- bubbles: particles riding the bigger rivers ----------
+// [min m³/s, spacing km, radius px, speed px/s]: more water = denser, bigger, faster.
+const BUBBLE_CLASSES = [[2000, 1.5, 4.8, 60], [1000, 2.2, 3.9, 48], [300, 3.2, 3.1, 38], [100, 5.0, 2.4, 30]];
+const BUBBLE_FADE_M = 1000;                          // fade in/out over the ends of each reach
+const EARTH_M_PER_DEG = 111320;
+const bubbleCanvas = document.createElement('canvas');
+bubbleCanvas.className = 'bubbles';
+const bubbleCtx = bubbleCanvas.getContext('2d');
+let bubbleReaches = [];
+
+function prepareBubbles(geojson) {
+  bubbleReaches = [];
+  for (const feature of geojson.features) {
+    const q = feature.properties.q;
+    if (q < BUBBLE_CLASSES[BUBBLE_CLASSES.length - 1][0]) continue;
+    const parts = feature.geometry.type === 'LineString' ? [feature.geometry.coordinates] : feature.geometry.coordinates;
+    for (const coords of parts) {
+      const cum = [0];
+      for (let i = 1; i < coords.length; i++) {
+        const dx = (coords[i][0] - coords[i - 1][0]) * EARTH_M_PER_DEG * Math.cos(coords[i][1] * Math.PI / 180);
+        const dy = (coords[i][1] - coords[i - 1][1]) * EARTH_M_PER_DEG;
+        cum.push(cum[i - 1] + Math.hypot(dx, dy));
+      }
+      const length = cum[cum.length - 1];
+      const [, spacingKm, radius, speed] = BUBBLE_CLASSES.find((cls) => q >= cls[0]);
+      const count = Math.max(1, Math.round(length / (spacingKm * 1000)));
+      const offset = Math.random() * length;
+      const lngs = coords.map((c) => c[0]), lats = coords.map((c) => c[1]);
+      bubbleReaches.push({
+        coords, cum, length, radius, speed, classIndex: flowClassIndex(q),
+        bbox: [Math.min(...lngs), Math.min(...lats), Math.max(...lngs), Math.max(...lats)],
+        particles: Array.from({ length: count }, (_, i) => (offset + i * length / count) % length),
+      });
+    }
+  }
+  map.getCanvasContainer().insertBefore(bubbleCanvas, map.getCanvas().nextSibling);
+  resizeBubbleCanvas();
+}
+function flowClassIndex(q) { return FLOW_CLASSES.filter((cls) => q >= cls.from).length - 1; }
+function pointAlong(reach, distance) {
+  const { coords, cum } = reach;
+  let lo = 0, hi = cum.length - 1;
+  while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (cum[mid] <= distance) lo = mid; else hi = mid; }
+  const t = (distance - cum[lo]) / ((cum[hi] - cum[lo]) || 1);
+  return [coords[lo][0] + (coords[hi][0] - coords[lo][0]) * t, coords[lo][1] + (coords[hi][1] - coords[lo][1]) * t];
+}
+function resizeBubbleCanvas() {
+  const canvas = map.getCanvas(), ratio = window.devicePixelRatio || 1;
+  bubbleCanvas.width = canvas.clientWidth * ratio; bubbleCanvas.height = canvas.clientHeight * ratio;
+  bubbleCanvas.style.width = `${canvas.clientWidth}px`; bubbleCanvas.style.height = `${canvas.clientHeight}px`;
+  bubbleCtx.setTransform(ratio, 0, 0, ratio, 0, 0);
+}
+function clearBubbles() { bubbleCtx.clearRect(0, 0, bubbleCanvas.width, bubbleCanvas.height); }
+function drawBubbles(dt) {
+  clearBubbles();
+  if (!bubbleReaches.length) return;
+  const bounds = map.getBounds(), west = bounds.getWest(), south = bounds.getSouth(), east = bounds.getEast(), north = bounds.getNorth();
+  const metresPerPixel = EARTH_M_PER_DEG * 360 * Math.cos(map.getCenter().lat * Math.PI / 180) / (TILE_PX * 2 ** map.getZoom());
+  const colours = MAP_THEMES[currentTheme()].flow.map(hexToRgb);
+  const width = map.getCanvas().clientWidth, height = map.getCanvas().clientHeight;
+  for (const reach of bubbleReaches) {
+    const [minLng, minLat, maxLng, maxLat] = reach.bbox;
+    const step = reach.speed * metresPerPixel * dt;
+    for (let i = 0; i < reach.particles.length; i++) reach.particles[i] = (reach.particles[i] + step) % reach.length;
+    if (maxLng < west || minLng > east || maxLat < south || minLat > north) continue;
+    const [r, g, b] = colours[reach.classIndex];
+    // Zoomed out, bubbles would merge into a bead chain: draw every n-th so they stay apart.
+    const spacingPx = reach.length / reach.particles.length / metresPerPixel;
+    const skip = Math.max(1, Math.ceil(reach.radius * 2.4 / spacingPx));
+    for (let i = 0; i < reach.particles.length; i += skip) {
+      const distance = reach.particles[i];
+      const point = map.project(pointAlong(reach, distance));
+      if (point.x < -10 || point.y < -10 || point.x > width + 10 || point.y > height + 10) continue;
+      const alpha = Math.min(1, distance / BUBBLE_FADE_M, (reach.length - distance) / BUBBLE_FADE_M);
+      drawBubble(point.x, point.y, reach.radius, r, g, b, alpha);
+    }
+  }
+}
+function drawBubble(x, y, radius, r, g, b, alpha) {
+  const gradient = bubbleCtx.createRadialGradient(x - radius * 0.35, y - radius * 0.35, radius * 0.1, x, y, radius);
+  gradient.addColorStop(0, `rgba(255,255,255,${0.95 * alpha})`);
+  gradient.addColorStop(0.55, `rgba(${r},${g},${b},${0.55 * alpha})`);
+  gradient.addColorStop(1, `rgba(${r},${g},${b},${0.08 * alpha})`);
+  bubbleCtx.beginPath();
+  bubbleCtx.arc(x, y, radius, 0, Math.PI * 2);
+  bubbleCtx.fillStyle = gradient; bubbleCtx.fill();
+  bubbleCtx.lineWidth = 1; bubbleCtx.strokeStyle = `rgba(${r},${g},${b},${0.9 * alpha})`; bubbleCtx.stroke();
+}
+function hexToRgb(hex) { return [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)); }
+map.on('resize', resizeBubbleCanvas);
 
 // Hovering a stream shows its average flow.
 const flowPopup = new maplibregl.Popup({ closeButton: false, closeOnClick: false, offset: 14, className: 'flow-popup' });
@@ -684,9 +775,11 @@ async function loadJson(url) { const response = await fetch(url); if (!response.
 map.on('load', async () => {
   debug.phase = 'style-loaded'; writeDebug();
   try {
-    const [cities, profiles, districtPoints, flowSummary] = await Promise.all([
+    const [cities, profiles, districtPoints, flowSummary, flowReaches] = await Promise.all([
       loadJson('data/cities.json'), loadJson('data/rivers.json'), loadJson('data/district_points.geojson'),
-      loadJson('data/flow_summary.json')]);
+      loadJson('data/flow_summary.json'), loadJson('data/flow.geojson')]);
+    prepareBubbles(flowReaches);
+    debug.notes.bubbles = bubbleReaches.reduce((n, reach) => n + reach.particles.length, 0);
     profileState.profiles = profiles;
     cities.forEach(addCityMarker);
     addDistrictLabels(districtPoints, new Set(cities.map((c) => c.name.toLowerCase())));
