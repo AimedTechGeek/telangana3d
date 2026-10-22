@@ -1,0 +1,11 @@
+{
+"type": "FeatureCollection",
+"name": "cities",
+"features": [
+{ "type": "Feature", "properties": { "name": "Khammam", "population": 290839 }, "geometry": { "type": "Point", "coordinates": [ 91422.387229442669195, -68338.093200032133609 ] } },
+{ "type": "Feature", "properties": { "name": "Karimnagar", "population": 288251 }, "geometry": { "type": "Point", "coordinates": [ -20063.659030215116218, 62020.044595117600693 ] } },
+{ "type": "Feature", "properties": { "name": "Nizamabad", "population": 388505 }, "geometry": { "type": "Point", "coordinates": [ -126558.670910197470221, 85652.534473334948416 ] } },
+{ "type": "Feature", "properties": { "name": "Warangal", "population": 1203853 }, "geometry": { "type": "Point", "coordinates": [ 29640.533442914584157, 12192.762528631494206 ] } },
+{ "type": "Feature", "properties": { "name": "Hyderabad", "population": 6376000 }, "geometry": { "type": "Point", "coordinates": [ -87316.53593910431664, -54913.579544312378857 ] } }
+]
+}
