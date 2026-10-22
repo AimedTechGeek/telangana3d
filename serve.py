@@ -27,6 +27,12 @@ class QuietHandler(SimpleHTTPRequestHandler):
     def log_message(self, *args) -> None:
         pass
 
+    def copyfile(self, source, outputfile) -> None:
+        try:
+            super().copyfile(source, outputfile)
+        except (ConnectionAbortedError, ConnectionResetError, BrokenPipeError):
+            pass  # the browser cancelled a tile request mid-transfer (normal while panning)
+
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
