@@ -123,9 +123,12 @@ public and were downloaded by `fetch_data.py` into `data/raw/` (not committed);
   MediaWiki API (`action=query&prop=revisions`), cached as `wikipedia_dams.json`.
 - **Terms:** text under CC BY-SA 4.0 (https://en.wikipedia.org/wiki/Wikipedia:Copyrights);
   facts and figures are reused with a link to each article.
-- **Used for:** the 22 dam and barrage markers: coordinates (`{{coord}}`),
+- **Used for:** the dam and barrage markers: coordinates (`{{coord}}`),
   name, river (`dam_crosses`), height (`dam_height`, or
-  `dam_height_foundation` when that is all the page gives) and kind.
+  `dam_height_foundation` when that is all the page gives), years
+  (`construction_began`, `opening`), gross capacity (`res_capacity_total`,
+  converted to tmcft from m³, Mm³ or km³ where needed) and kind. The popup's
+  "average inflow" is the HydroRIVERS reach (source 5) within 3 km of the dam.
 - **Rules:** only pages with an `Infobox dam` and coordinates within 15 km of
   the state; pages whose infobox status is proposed or under construction
   (NRLD codes `P`, `UC`) are dropped; kind is “barrage” when the name says

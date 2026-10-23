@@ -595,6 +595,14 @@ function renderEraCounts(dams) {
 }
 for (const button of document.querySelectorAll('[data-era]')) button.addEventListener('click', () => setEra(button.dataset.era));
 
+const formatTmcft = (value) => `${value.toLocaleString('en-IN', { maximumFractionDigits: value < 10 ? 2 : 0 })} tmcft`;
+const damYears = (dam) => (dam.began && dam.opened ? `${dam.began}–${dam.opened}` : dam.opened ? `${dam.opened}` : dam.began ? `since ${dam.began}` : null);
+
+// The label carries name and capacity; while a dam's popup is open it shrinks to the name.
+const damPopup = new maplibregl.Popup({ closeButton: true, closeOnClick: true, offset: 16, className: 'dam-popup', maxWidth: '320px' });
+let openDamNode = null;
+damPopup.on('close', () => { if (openDamNode) openDamNode.classList.remove('open'); openDamNode = null; });
+
 function addDamMarker(dam) {
   const node = document.createElement('div');
   node.className = `mk-dam ${dam.kind}`;
@@ -603,14 +611,39 @@ function addDamMarker(dam) {
   const svg = document.createElementNS(SVG_NS, 'svg'); svg.setAttribute('viewBox', '0 0 16 16'); svg.setAttribute('aria-hidden', 'true');
   const use = document.createElementNS(SVG_NS, 'use'); use.setAttribute('href', `#ic-${dam.kind}`); svg.appendChild(use); icon.appendChild(svg);
   const label = textEl('span', 'lbl', dam.name);
-  if (dam.height) label.appendChild(textEl('span', 'e', `${dam.height} m`));
-  const years = dam.began && dam.opened ? `${dam.began}–${dam.opened}` : dam.opened ? `${dam.opened}` : dam.began ? `${dam.began}–` : null;
-  if (years) label.appendChild(textEl('span', 'y', years));
+  if (dam.capacity_tmcft) label.appendChild(textEl('span', 'e', formatTmcft(dam.capacity_tmcft)));
   node.append(icon, label);
-  const built = dam.began && dam.opened ? ` · built ${dam.began}–${dam.opened}` : dam.opened ? ` · opened ${dam.opened}` : dam.began ? ` · construction began ${dam.began}` : '';
-  node.title = `${dam.kind === 'barrage' ? 'Barrage' : 'Dam'}${dam.river ? ` on the ${dam.river}` : ''}${dam.height ? ` · ${dam.height} m high` : ' · height unknown'}${built}`;
-  node.addEventListener('click', () => flyToPoint(dam.lon, dam.lat, 11.5));
+  node.title = `${dam.kind === 'barrage' ? 'Barrage' : 'Dam'}${dam.river ? ` on the ${dam.river}` : ''} · click for details`;
+  node.addEventListener('click', (event) => { event.stopPropagation(); openDamPopup(dam, node); flyToPoint(dam.lon, dam.lat, 11.5); });
   new maplibregl.Marker({ element: node, anchor: 'left', offset: [-11, 0] }).setLngLat([dam.lon, dam.lat]).addTo(map);
+}
+
+function openDamPopup(dam, node) {
+  damPopup.remove();                                   // closes any other dam's popup (restoring its label)
+  const content = document.createElement('div');
+  const head = textEl('div', 'head', '');
+  head.append(textEl('span', `kind ${dam.kind}`, dam.kind === 'barrage' ? 'Barrage' : dam.river && dam.river.includes('off-river') ? 'Reservoir' : 'Dam'),
+              textEl('strong', '', dam.name));
+  content.appendChild(head);
+  const rows = [
+    ['Height', dam.height ? `${dam.height} m` : null],
+    ['Built', damYears(dam)],
+    ['Average inflow', dam.inflow_q ? `${dam.inflow_q.toLocaleString('en-IN')} m³/s${dam.inflow_name ? ` · ${dam.inflow_name}` : ''}` : null],
+    ['Gross capacity', dam.capacity_tmcft ? formatTmcft(dam.capacity_tmcft) : null],
+    ['River', dam.river],
+  ];
+  const list = document.createElement('dl');
+  for (const [term, value] of rows) {
+    if (!value) continue;
+    list.append(textEl('dt', '', term), textEl('dd', '', value));
+  }
+  content.appendChild(list);
+  const link = document.createElement('a');
+  link.href = dam.url; link.target = '_blank'; link.rel = 'noopener'; link.textContent = 'Source: Wikipedia ↗';
+  content.appendChild(link);
+  node.classList.add('open');
+  openDamNode = node;
+  damPopup.setLngLat([dam.lon, dam.lat]).setDOMContent(content).addTo(map);
 }
 function flyToCity(city) {
   for (const [name, marker] of cityMarkers) marker.getElement().classList.toggle('active', name === city.name);

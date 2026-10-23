@@ -21,10 +21,11 @@ uv run python serve.py      # http://127.0.0.1:8765/ opens in your browser
   gives the average flow of each river through every district it crosses
 - Godavari and Krishna river-bed and flow profiles through the state; hover or
   drag the slider to follow the river on the map, click to fly there
-- Dams (arch icon) and barrages (gated-deck icon) with height and
-  construction-start–opening years on the label, including the Kaleshwaram
+- Dams (arch icon) and barrages (gated-deck icon), including the Kaleshwaram
   barrages and its Mallanna Sagar, Konda Pochamma Sagar and Ranganayaka Sagar
-  reservoirs; the Dams chip hides them
+  reservoirs. Labels show name and gross capacity; clicking one zooms in and
+  opens a popup with height, construction-start–opening years, the average
+  river inflow at that point (HydroRIVERS) and capacity
 - 27 cities and towns ranked by elevation, with the lowest river beds for
   comparison; click one to fly to it
 - A "View & filters" card on the right groups the controls: Terrain
