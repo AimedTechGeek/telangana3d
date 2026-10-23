@@ -21,8 +21,10 @@ uv run python serve.py      # http://127.0.0.1:8765/ opens in your browser
   gives the average flow of each river through every district it crosses
 - Godavari and Krishna river-bed and flow profiles through the state; hover or
   drag the slider to follow the river on the map, click to fly there
-- Dams (arch icon) and barrages (gated-deck icon) with their height on the
-  label; the Dams chip hides them
+- Dams (arch icon) and barrages (gated-deck icon) with height and
+  construction-start–opening years on the label, including the Kaleshwaram
+  barrages and its Mallanna Sagar, Konda Pochamma Sagar and Ranganayaka Sagar
+  reservoirs; the Dams chip hides them
 - 27 cities and towns ranked by elevation, with the lowest river beds for
   comparison; click one to fly to it
 - Vertical exaggeration slider, 100 m contours, district lines, labels, orbit,
@@ -85,7 +87,10 @@ Notes:
   Sriram Sagar, Nagarjuna Sagar and other projects.
 - Dam heights are whatever the Wikipedia infobox states and are not all
   measured the same way; the Kaleshwaram barrages (Medigadda, Annaram,
-  Sundilla) have no height on Wikipedia, so their labels carry none.
+  Sundilla) and the new Kaleshwaram reservoirs have no published height, so
+  their labels carry none. Years are construction start and opening (no
+  source records a proposal year); the smaller Kaleshwaram "online storages"
+  are missing because nothing publishes their coordinates (see DATA_SOURCES.md).
 - The forge3d viewer DEM uses a local grid (1 unit = 20 m) because the viewer
   clamps mouse-wheel zoom to a 100–50 000 unit radius.
 - The block render is downsampled to 400 m and rendered in 800 px tiles to fit

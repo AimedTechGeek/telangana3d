@@ -578,8 +578,11 @@ function addDamMarker(dam) {
   const use = document.createElementNS(SVG_NS, 'use'); use.setAttribute('href', `#ic-${dam.kind}`); svg.appendChild(use); icon.appendChild(svg);
   const label = textEl('span', 'lbl', dam.name);
   if (dam.height) label.appendChild(textEl('span', 'e', `${dam.height} m`));
+  const years = dam.began && dam.opened ? `${dam.began}–${dam.opened}` : dam.opened ? `${dam.opened}` : dam.began ? `${dam.began}–` : null;
+  if (years) label.appendChild(textEl('span', 'y', years));
   node.append(icon, label);
-  node.title = `${dam.kind === 'barrage' ? 'Barrage' : 'Dam'}${dam.river ? ` on the ${dam.river}` : ''}${dam.height ? ` · ${dam.height} m high` : ' · height unknown'}`;
+  const built = dam.began && dam.opened ? ` · built ${dam.began}–${dam.opened}` : dam.opened ? ` · opened ${dam.opened}` : dam.began ? ` · construction began ${dam.began}` : '';
+  node.title = `${dam.kind === 'barrage' ? 'Barrage' : 'Dam'}${dam.river ? ` on the ${dam.river}` : ''}${dam.height ? ` · ${dam.height} m high` : ' · height unknown'}${built}`;
   node.addEventListener('click', () => flyToPoint(dam.lon, dam.lat, 11.5));
   new maplibregl.Marker({ element: node, anchor: 'left', offset: [-11, 0] }).setLngLat([dam.lon, dam.lat]).addTo(map);
 }

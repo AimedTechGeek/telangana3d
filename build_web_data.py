@@ -391,6 +391,15 @@ EXCLUDED_TITLE_WORDS = ("lift irrigation", "scheme", "wildlife", "district")
 # Infobox dam_type codes are inconsistent ("B" marks Osman Sagar, a masonry dam), so only
 # names decide the kind, plus this list of barrages whose names do not say so.
 BARRAGE_TITLES = ("Sripada Yellampalli Project",)
+# Kaleshwaram reservoirs without a Wikipedia page: dams come from OSM (osm_reservoirs.json),
+# the dates were checked by hand (sources in DATA_SOURCES.md). 2016 is the project's
+# construction start; Ranganayaka Sagar's 2020 is its first filling.
+OSM_RESERVOIRS = {
+    "Mallanna Sagar": {"began": 2016, "opened": 2022, "capacity_tmc": 50},
+    "Konda Pochamma Sagar": {"began": 2016, "opened": 2020, "capacity_tmc": 15},
+    "Ranganayaka Sagar": {"began": 2016, "opened": 2020, "capacity_tmc": 3.5},
+}
+KALESHWARAM_URL = "https://en.wikipedia.org/wiki/Kaleshwaram_Lift_Irrigation_Project"
 FOOT_M = 0.3048
 
 
@@ -419,6 +428,11 @@ def parse_height_m(value: str | None) -> int | None:
     if match.group(2) in ("ft", "feet"):
         metres *= FOOT_M
     return round(metres) if 3 <= metres <= 400 else None
+
+
+def parse_year(value: str | None) -> int | None:
+    match = re.search(r"\b(1[5-9]\d\d|20\d\d)\b", value or "")
+    return int(match.group(1)) if match else None
 
 
 def parse_coord(text: str) -> tuple[float, float] | None:
@@ -471,9 +485,32 @@ def build_dams(state: gpd.GeoDataFrame) -> list[dict]:
             # dam_height is above the river bed; a few pages only give height above the foundation.
             "height": parse_height_m(infobox_field(text, "dam_height")) or parse_height_m(infobox_field(text, "dam_height_foundation")),
             "river": strip_markup(infobox_field(text, "dam_crosses") or infobox_field(text, "crosses") or "") or None,
+            # Infoboxes record when building started and when the dam opened; no page states a proposal year.
+            "began": parse_year(infobox_field(text, "construction_began")),
+            "opened": parse_year(infobox_field(text, "opening") or infobox_field(text, "dam_opening") or infobox_field(text, "completion")),
             "url": "https://en.wikipedia.org/wiki/" + title.replace(" ", "_"),
         })
+    dams.extend(osm_reservoir_dams())
     dams.sort(key=lambda d: (d["height"] is None, -(d["height"] or 0)))
+    return dams
+
+
+def osm_reservoir_dams() -> list[dict]:
+    elements = json.loads((RAW / "osm_reservoirs.json").read_text(encoding="utf-8"))["elements"]
+    dams = []
+    for key, facts in OSM_RESERVOIRS.items():
+        matches = [e for e in elements if key.lower() in e["tags"].get("name", "").lower()]
+        if not matches:
+            print(f"  warning: {key} not found in OSM data")
+            continue
+        element = sorted(matches, key=lambda e: e["tags"].get("waterway") != "dam")[0]   # the dam line over the lake
+        centre = element.get("center", element)
+        dams.append({
+            "name": key, "kind": "dam", "lon": round(centre["lon"], 5), "lat": round(centre["lat"], 5),
+            "height": parse_height_m(element["tags"].get("height")), "river": "Kaleshwaram lift scheme (off-river)",
+            "began": facts["began"], "opened": facts["opened"], "capacity_tmc": facts["capacity_tmc"],
+            "url": KALESHWARAM_URL,
+        })
     return dams
 
 
@@ -528,7 +565,8 @@ def main() -> None:
     print(f"dams: {len(dams)} ({sum(1 for d in dams if d['kind'] == 'barrage')} barrages, "
           f"{sum(1 for d in dams if d['height'] is None)} without height)")
     for dam in dams:
-        print(f"  {dam['kind']:7} {dam['name'][:34]:34} {str(dam['height'] or '-'):>4} m  {dam['river'] or ''}")
+        print(f"  {dam['kind']:7} {dam['name'][:34]:34} {str(dam['height'] or '-'):>4} m  "
+              f"{dam['began'] or '----'}-{dam['opened'] or '----'}  {dam['river'] or ''}")
     contours = build_contours()
     write_geojson(contours, "contours")
     print(f"contours: {len(contours)} lines, {(WEB_DATA / 'contours.geojson').stat().st_size / 1e6:.1f} MB")

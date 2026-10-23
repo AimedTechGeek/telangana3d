@@ -8,6 +8,7 @@ Sources (all public, no auth):
 - HydroRIVERS v1.0 (HydroSHEDS) Asia river network with modelled average discharge
 - Wikipedia wikitext of "List of dams and reservoirs in Telangana" and every
   page it links to (dam infoboxes carry height and coordinates)
+- OpenStreetMap dams of the Kaleshwaram reservoirs that have no Wikipedia page
 """
 from __future__ import annotations
 
@@ -46,6 +47,14 @@ OVERPASS_QUERY = (
     'area["name"="Telangana"]["admin_level"="4"]->.a;'
     '(node["place"~"^(city|town)$"](area.a););'
     'out body;'
+)
+# Kaleshwaram reservoirs that have no Wikipedia page of their own: OSM has their dams.
+OVERPASS_RESERVOIRS_QUERY = (
+    '[out:json][timeout:90];'
+    'area["name"="Telangana"]["admin_level"="4"]->.a;'
+    '(nwr["waterway"="dam"]["name"~"Mallanna Sagar|Konda Pochamma Sagar|Ranganayaka Sagar",i](area.a);'
+    'nwr["water"="reservoir"]["name"~"Mallanna Sagar|Konda Pochamma Sagar|Ranganayaka Sagar",i](area.a););'
+    'out center tags;'
 )
 # Overpass rejects requests without a descriptive User-Agent.
 OVERPASS_HEADERS = {"User-Agent": "telangana3d/1.0 (terrain map)", "Accept": "application/json"}
@@ -102,6 +111,10 @@ def wikitext(titles: list[str]) -> dict[str, str | None]:
     return pages
 
 
+def fetch_osm_reservoirs() -> None:
+    download(OVERPASS_URL, RAW / "osm_reservoirs.json", params={"data": OVERPASS_RESERVOIRS_QUERY}, headers=OVERPASS_HEADERS)
+
+
 def fetch_wikipedia_dams() -> None:
     target = RAW / "wikipedia_dams.json"
     if target.exists():
@@ -123,3 +136,4 @@ if __name__ == "__main__":
     fetch_osm_places()
     fetch_hydrorivers()
     fetch_wikipedia_dams()
+    fetch_osm_reservoirs()

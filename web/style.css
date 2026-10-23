@@ -213,6 +213,7 @@ section { display: flex; flex-direction: column; gap: 8px; }
   background: var(--panel); backdrop-filter: blur(6px); border: 1px solid var(--border); box-shadow: 0 2px 8px rgba(0,0,0,.18);
 }
 .mk-dam .lbl .e { font-family: var(--mono); font-weight: 500; color: var(--ink-2); margin-left: 4px; }
+.mk-dam .lbl .y { font-family: var(--mono); font-weight: 400; font-size: 10px; color: var(--muted); margin-left: 5px; }
 body.z-far .mk-dam .lbl, body.labels-off .mk-dam .lbl { display: none; }
 body.dams-off .mk-dam { display: none; }
 

@@ -136,6 +136,27 @@ public and were downloaded by `fetch_data.py` into `data/raw/` (not committed);
   source. Medigadda, Saraswati (Annaram) and Parvati (Sundilla) barrages have
   no height on Wikipedia.
 
+## 6b. OpenStreetMap dams of the Kaleshwaram reservoirs
+
+- **What:** `waterway=dam` / `water=reservoir` features named Mallanna Sagar,
+  Konda Pochamma Sagar and Ranganayaka Sagar, which have no Wikipedia page
+  of their own. Fetched through Overpass (query in `fetch_data.py`), cached as
+  `osm_reservoirs.json`. Terms as in source 4 (ODbL).
+- **Hand-checked facts** (`OSM_RESERVOIRS` in `build_web_data.py`):
+  construction start 2016 = start of the Kaleshwaram project
+  (https://en.wikipedia.org/wiki/Kaleshwaram_Lift_Irrigation_Project);
+  Mallanna Sagar inaugurated February 2022 (same article; 50 tmcft);
+  Konda Pochamma Sagar inaugurated 29 May 2020
+  (https://www.thenewsminute.com/telangana/kondapochamma-reservoir-under-kaleshwaram-project-inaugurated-telangana-125526;
+  15 tmcft); Ranganayaka Sagar first filled April 2020
+  (https://etvbharat.com/english/state/telangana/godavari-project-brings-cheer-to-telangana-amid-gloom/na20200425191409541;
+  about 3.5 tmcft), no formal inauguration date found. Capacities are from the
+  Kaleshwaram article's reservoir table.
+- **Not included:** the smaller Kaleshwaram "online storages" (Medaram,
+  Ananthagiri, Malkapet, Amarlabanda, Katchapur, Thimmakka Palli, Issaipet,
+  Bhoompally, Gujjal, Katewadi, Mothe, Kondem Cheruvu, Gandamalla, Baswapuram)
+  have no coordinates in Wikipedia, Wikidata or OSM at the time of writing.
+
 ## 7. Landmark heights (elevation comparison)
 
 Hard-coded in `web/app.js` (`LANDMARKS`), checked on 2026-10-22:
