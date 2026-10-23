@@ -214,7 +214,7 @@ section { display: flex; flex-direction: column; gap: 8px; }
 }
 .mk-dam .lbl .e { font-family: var(--mono); font-weight: 500; color: var(--ink-2); margin-left: 4px; }
 .mk-dam .lbl .y { font-family: var(--mono); font-weight: 400; font-size: 10px; color: var(--muted); margin-left: 5px; }
-body.labels-off .mk-dam .lbl { display: none; }   /* dam labels stay at every zoom while Dams is on */
+/* Dam labels follow only the Dams chip: visible at every zoom, unaffected by Labels. */
 body.dams-off .mk-dam { display: none; }
 
 .mk-peak { position: relative; width: 18px; height: 18px; cursor: pointer; }
@@ -227,7 +227,7 @@ body.dams-off .mk-dam { display: none; }
 }
 .mk-peak .lbl .e { font-family: var(--mono); font-weight: 500; color: var(--ink-2); margin-left: 4px; }
 @keyframes pulse { 0% { transform: scale(.6); opacity: 1; } 100% { transform: scale(2.4); opacity: 0; } }
-body.labels-off .mk-peak .lbl { display: none; }
+body.labels-off .mk-peak .lbl { display: none; }   /* Labels governs city, district and peak labels */
 @media (prefers-reduced-motion: reduce) { .mk-peak .ring { animation: none; } }
 
 .flow-popup .maplibregl-popup-content {
