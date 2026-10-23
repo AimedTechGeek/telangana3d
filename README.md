@@ -57,6 +57,9 @@ uv run python web_smoke_test.py   # headless Edge check of the web map -> out/we
 
 ## Data and choices
 
+Full provenance, licences, access dates and processing notes for every dataset
+are in [DATA_SOURCES.md](DATA_SOURCES.md).
+
 | Item | Source / value |
 |---|---|
 | Elevation | Copernicus GLO-90 DSM (AWS open data), smoothed (σ = 1 px); 200 m grid for forge3d, Terrarium tiles z5–11 for the web map |
