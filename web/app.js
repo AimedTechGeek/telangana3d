@@ -572,9 +572,31 @@ function addDistrictLabels(points, cityNames) {
     new maplibregl.Marker({ element: el, anchor: 'center' }).setLngLat(feature.geometry.coordinates).addTo(map);
   }
 }
+// ---------- dams: markers and the year filter (Telangana was formed in 2014) ----------
+const ERA_YEAR = 2014;
+const damMarkers = [];                       // { dam, element }
+function damYear(dam) { return dam.opened || dam.began || null; }
+function damInEra(dam, era) {
+  const year = damYear(dam);
+  return era === 'all' || (year !== null && (era === 'before' ? year < ERA_YEAR : year >= ERA_YEAR));
+}
+function setEra(era) {
+  for (const button of document.querySelectorAll('[data-era]')) button.setAttribute('aria-pressed', String(button.dataset.era === era));
+  for (const { dam, element } of damMarkers) element.classList.toggle('era-hidden', !damInEra(dam, era));
+}
+function renderEraCounts(dams) {
+  for (const button of document.querySelectorAll('[data-era]')) {
+    const count = dams.filter((dam) => damInEra(dam, button.dataset.era)).length;
+    const badge = button.querySelector('b') || button.appendChild(textEl('b', '', ''));
+    badge.textContent = String(count);
+  }
+}
+for (const button of document.querySelectorAll('[data-era]')) button.addEventListener('click', () => setEra(button.dataset.era));
+
 function addDamMarker(dam) {
   const node = document.createElement('div');
   node.className = `mk-dam ${dam.kind}`;
+  damMarkers.push({ dam, element: node });
   const icon = document.createElement('span'); icon.className = 'ic';
   const svg = document.createElementNS(SVG_NS, 'svg'); svg.setAttribute('viewBox', '0 0 16 16'); svg.setAttribute('aria-hidden', 'true');
   const use = document.createElementNS(SVG_NS, 'use'); use.setAttribute('href', `#ic-${dam.kind}`); svg.appendChild(use); icon.appendChild(svg);
@@ -797,6 +819,7 @@ map.on('load', async () => {
       loadJson('data/flow_summary.json'), loadJson('data/flow.geojson'), loadJson('data/dams.json')]);
     prepareBubbles(flowReaches);
     dams.forEach(addDamMarker);
+    renderEraCounts(dams);
     debug.notes.dams = dams.length;
     debug.notes.bubbles = bubbleReaches.reduce((n, reach) => n + reach.particles.length, 0);
     profileState.profiles = profiles;
