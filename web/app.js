@@ -544,8 +544,10 @@ $('reset').addEventListener('click', () => map.flyTo({ ...HOME, duration: 1800, 
 $('theme').addEventListener('click', () => setTheme(currentTheme() === 'dark' ? 'light' : 'dark'));
 $('collapse').addEventListener('click', () => { $('panel').classList.add('hidden'); $('expand').hidden = false; });
 $('expand').addEventListener('click', () => { $('panel').classList.remove('hidden'); $('expand').hidden = true; });
-map.on('zoom', () => document.body.classList.toggle('z-far', map.getZoom() < LABEL_ZOOM));
-document.body.classList.toggle('z-far', HOME.zoom < LABEL_ZOOM);
+const updateLabelDensity = () => document.body.classList.toggle('z-far', map.getZoom() < LABEL_ZOOM);
+map.on('zoom', updateLabelDensity);
+map.on('load', updateLabelDensity);   // a view restored from the URL hash fires no zoom event
+updateLabelDensity();
 
 // ---------- markers ----------
 const cityMarkers = new Map();
