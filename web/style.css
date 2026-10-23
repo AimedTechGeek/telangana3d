@@ -214,7 +214,7 @@ section { display: flex; flex-direction: column; gap: 8px; }
 }
 .mk-dam .lbl .e { font-family: var(--mono); font-weight: 500; color: var(--ink-2); margin-left: 4px; }
 .mk-dam .lbl .y { font-family: var(--mono); font-weight: 400; font-size: 10px; color: var(--muted); margin-left: 5px; }
-body.z-far .mk-dam .lbl, body.labels-off .mk-dam .lbl { display: none; }
+body.labels-off .mk-dam .lbl { display: none; }   /* dam labels stay at every zoom while Dams is on */
 body.dams-off .mk-dam { display: none; }
 
 .mk-peak { position: relative; width: 18px; height: 18px; cursor: pointer; }
