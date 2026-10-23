@@ -19,6 +19,11 @@ uv run python serve.py      # http://127.0.0.1:8765/ opens in your browser
   collected upstream. Hover a stream for its m³/s and catchment area; peak
   markers show where the Godavari and Krishna carry the most water; a list
   gives the average flow of each river through every district it crosses
+- **Kaleshwaram links:** orange arrows show how the lift scheme moves water
+  from Medigadda through the barrages and pump houses to Yellampalli, Mid
+  Manair and the Siddipet reservoirs (solid = operating, dashed = in
+  progress); the list in the panel frames each link. Lines are schematic,
+  not real canal alignments
 - Godavari and Krishna river-bed and flow profiles through the state; hover or
   drag the slider to follow the river on the map, click to fly there
 - Dams (arch icon) and barrages (gated-deck icon), including the Kaleshwaram

@@ -160,6 +160,32 @@ public and were downloaded by `fetch_data.py` into `data/raw/` (not committed);
   Bhoompally, Gujjal, Katewadi, Mothe, Kondem Cheruvu, Gandamalla, Baswapuram)
   have no coordinates in Wikipedia, Wikidata or OSM at the time of writing.
 
+## 6c. Kaleshwaram water links and pump houses
+
+- **Edges** (`KALESHWARAM_LINKS` in `build_web_data.py`) follow the "Links"
+  section of https://en.wikipedia.org/wiki/Kaleshwaram_Lift_Irrigation_Project
+  (Link I Medigadda → Annaram → Sundilla → Yellampalli with three lifts;
+  Link II Yellampalli → Mid Manair; Link III Mid Manair → Upper Manair;
+  Link VI Mallanna Sagar → Singur; Link VII SRSP foreshore → Nizam Sagar
+  canals). Link IV is taken as Mid Manair → Annapurna → Ranganayaka Sagar →
+  Mallanna Sagar → Konda Pochamma Sagar after the Union government's reply to
+  Parliament (https://cwc.gov.in/sites/default/files/reply_70.pdf, "Link IV:
+  Mid Manair Reservoir to Konda Pochamma Reservoir") and Deccan Chronicle's
+  pumping sequence
+  (https://www.deccanchronicle.com/amp/southern-states/telangana/intermittent-power-hits-pumping-irrigation-department-1898970);
+  the Wikipedia list's "upper Manair" start is treated as an error. The SRSP
+  flood-flow canal edge comes from the Mid Manair infobox (`dam_crosses`).
+- **Status** (operating / in progress) reflects those sources as of
+  2026-10-23 and is not an official schedule.
+- **Geometry is schematic:** curves drawn between the structures' coordinates
+  (through the pump house where OSM has one). Real canal, tunnel and
+  pressure-main alignments are not available as open data.
+- **Pump houses:** OpenStreetMap `man_made=pumping_station` features named
+  Medigadda, Annaram and Sundilla (alt names Lakshmi, Saraswathi, Parvathi),
+  with their `power:input` and `start_date` tags; cached as
+  `osm_pumphouses.json`. Terms as in source 4 (ODbL). Other Kaleshwaram pump
+  houses (Nandi, Gayatri, Markook …) are not mapped there yet.
+
 ## 7. Landmark heights (elevation comparison)
 
 Hard-coded in `web/app.js` (`LANDMARKS`), checked on 2026-10-22:

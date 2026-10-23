@@ -56,6 +56,12 @@ OVERPASS_RESERVOIRS_QUERY = (
     'nwr["water"="reservoir"]["name"~"Mallanna Sagar|Konda Pochamma Sagar|Ranganayaka Sagar",i](area.a););'
     'out center tags;'
 )
+OVERPASS_PUMPHOUSES_QUERY = (
+    '[out:json][timeout:90];'
+    'area["name"="Telangana"]["admin_level"="4"]->.a;'
+    '(nwr["man_made"="pumping_station"]["name"~"Medigadda|Annaram|Sundilla",i](area.a););'
+    'out center tags;'
+)
 # Overpass rejects requests without a descriptive User-Agent.
 OVERPASS_HEADERS = {"User-Agent": "telangana3d/1.0 (terrain map)", "Accept": "application/json"}
 TIMEOUT_S = 120
@@ -113,6 +119,7 @@ def wikitext(titles: list[str]) -> dict[str, str | None]:
 
 def fetch_osm_reservoirs() -> None:
     download(OVERPASS_URL, RAW / "osm_reservoirs.json", params={"data": OVERPASS_RESERVOIRS_QUERY}, headers=OVERPASS_HEADERS)
+    download(OVERPASS_URL, RAW / "osm_pumphouses.json", params={"data": OVERPASS_PUMPHOUSES_QUERY}, headers=OVERPASS_HEADERS)
 
 
 def fetch_wikipedia_dams() -> None:

@@ -27,7 +27,7 @@ const MAP_THEMES = {
   light: {
     background: '#e9e6df', mask: '#efece5', maskOpacity: 0.5,
     district: '#3b3a36', districtOpacity: 0.55, state: '#161616', stateCasing: '#ffffff',
-    contour: '#5a4634', flowGlow: '#ffffff', flowDash: '#eef7ff',
+    contour: '#5a4634', flowGlow: '#ffffff', flowDash: '#eef7ff', link: '#c2410c', linkDash: '#fff4e8',
     flow: ['#86d9e3', '#36aee6', '#2566d8', '#1a3aa6', '#5f2aa8'],   // FLOW_CLASSES: cyan -> blue -> navy -> purple
     shadow: '#2b2016', highlight: '#fff4e2', accent: '#4e3d2e',
     sky: { 'sky-color': '#cfe3f6', 'horizon-color': '#eef3f8', 'fog-color': '#e9e6df' },
@@ -35,7 +35,7 @@ const MAP_THEMES = {
   dark: {
     background: '#0e0f12', mask: '#0e0f12', maskOpacity: 0.58,
     district: '#d8d4cc', districtOpacity: 0.38, state: '#f0efec', stateCasing: '#000000',
-    contour: '#d8d4cc', flowGlow: '#0b1a33', flowDash: '#ffffff',
+    contour: '#d8d4cc', flowGlow: '#0b1a33', flowDash: '#ffffff', link: '#fb923c', linkDash: '#fff7ed',
     flow: ['#2f96a8', '#3cbbea', '#6a9cff', '#a9bdff', '#dcaaff'],   // FLOW_CLASSES: teal -> sky -> blue -> lilac on the dark surface
     shadow: '#000000', highlight: '#b9a68c', accent: '#000000',
     sky: { 'sky-color': '#0b1020', 'horizon-color': '#1b2233', 'fog-color': '#0e0f12' },
@@ -58,7 +58,7 @@ function currentTheme() {
 function setTheme(theme) {
   document.documentElement.dataset.theme = theme;
   try { localStorage.setItem('theme', theme); } catch (_) { /* storage unavailable */ }
-  if (map && map.getLayer('background')) { applyMapTheme(); renderFlowLegend(); }
+  if (map && map.getLayer('background')) { applyMapTheme(); renderFlowLegend(); syncArrowImage(); }
 }
 try { const saved = localStorage.getItem('theme'); if (saved) document.documentElement.dataset.theme = saved; } catch (_) { /* ignore */ }
 
@@ -127,6 +127,7 @@ function buildStyle(theme) {
       districts: { type: 'geojson', data: 'data/districts.geojson' },
       flow: { type: 'geojson', data: 'data/flow.geojson' },
       contours: { type: 'geojson', data: 'data/contours.geojson' },
+      links: { type: 'geojson', data: 'data/links.geojson' },
     },
     layers: [
       { id: 'background', type: 'background', paint: { 'background-color': t.background } },
@@ -156,6 +157,25 @@ function buildStyle(theme) {
         paint: { 'line-color': t.flowDash, 'line-width': flowWidthExpr(0.5), 'line-dasharray': dashPatternAt(k),
                  'line-opacity': k === flowStep ? FLOW_DASH_OPACITY : 0 } })),
       { id: 'flow-hit', type: 'line', source: 'flow', paint: { 'line-color': '#000000', 'line-opacity': 0, 'line-width': 12 } },
+      // Kaleshwaram links: solid where water flows today, dashed where the link is still being built.
+      { id: 'links-highlight', type: 'line', source: 'links', filter: ['==', ['get', 'link'], ''],
+        layout: { 'line-join': 'round', 'line-cap': 'round', visibility: chipOn('links') },
+        paint: { 'line-color': t.link, 'line-width': 12, 'line-opacity': 0.25, 'line-blur': 2 } },
+      { id: 'links-casing', type: 'line', source: 'links', layout: { 'line-join': 'round', 'line-cap': 'round', visibility: chipOn('links') },
+        paint: { 'line-color': t.linkDash, 'line-width': ['interpolate', ['linear'], ['zoom'], 6, 5, 10, 7.5], 'line-opacity': 0.8 } },
+      { id: 'links-line', type: 'line', source: 'links', layout: { 'line-join': 'round', 'line-cap': 'round', visibility: chipOn('links') },
+        paint: { 'line-color': t.link, 'line-width': ['interpolate', ['linear'], ['zoom'], 6, 2.6, 10, 4.2],
+                 'line-opacity': ['case', ['==', ['get', 'status'], 'operational'], 0.9, 0.6],
+                 'line-dasharray': ['case', ['==', ['get', 'status'], 'operational'], ['literal', [1, 0]], ['literal', [2, 2]]] } },
+      ...Array.from({ length: FLOW_DASH_STEPS }, (_, k) => ({
+        id: `links-dash-${k}`, type: 'line', source: 'links', filter: ['==', ['get', 'status'], 'operational'],
+        layout: { 'line-join': 'round', 'line-cap': 'butt', visibility: chipOn('links') },
+        paint: { 'line-color': t.linkDash, 'line-width': ['interpolate', ['linear'], ['zoom'], 6, 1, 10, 1.8],
+                 'line-dasharray': dashPatternAt(k), 'line-opacity': k === flowStep ? FLOW_DASH_OPACITY : 0 } })),
+      { id: 'links-arrows', type: 'symbol', source: 'links',
+        layout: { 'symbol-placement': 'line', 'symbol-spacing': 70, 'icon-image': 'arrow', 'icon-size': ['interpolate', ['linear'], ['zoom'], 6, 0.55, 10, 0.85],
+                  'icon-rotation-alignment': 'map', 'icon-allow-overlap': true, 'icon-ignore-placement': true, visibility: chipOn('links') },
+        paint: { 'icon-opacity': ['case', ['==', ['get', 'status'], 'operational'], 1, 0.6] } },
     ],
     terrain: { source: 'dem', exaggeration: Number($('exag').value) },
     sky: { ...t.sky, 'fog-ground-blend': 0.6, 'horizon-fog-blend': 0.7, 'sky-horizon-blend': 0.85,
@@ -175,6 +195,22 @@ map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'bott
 map.addControl(new maplibregl.ScaleControl({ maxWidth: 140, unit: 'metric' }), 'bottom-right');
 map.on('error', (event) => { const message = event && event.error ? event.error.message : String(event); debug.errors.push(message); console.error(message); writeDebug(); });
 debug.phase = 'map-created'; writeDebug();
+
+// Direction arrows for the links, drawn on a canvas so no sprite is needed; recoloured per theme.
+function arrowImage(colour) {
+  const size = 32, canvas = document.createElement('canvas');
+  canvas.width = canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  ctx.beginPath(); ctx.moveTo(6, 6); ctx.lineTo(26, 16); ctx.lineTo(6, 26); ctx.lineTo(11, 16); ctx.closePath();
+  ctx.fillStyle = colour; ctx.fill();
+  ctx.lineWidth = 2; ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.lineJoin = 'round'; ctx.stroke();
+  return ctx.getImageData(0, 0, size, size);
+}
+function syncArrowImage() {
+  const image = arrowImage(MAP_THEMES[currentTheme()].link);
+  if (map.hasImage('arrow')) map.updateImage('arrow', image); else map.addImage('arrow', image, { pixelRatio: 2 });
+}
+map.on('styleimagemissing', (event) => { if (event.id === 'arrow') syncArrowImage(); });
 
 function applyMapTheme() {
   // The style is the single source of truth for colours; a diffed setStyle
@@ -309,6 +345,13 @@ const toggles = {
   districts: (on) => { map.setLayoutProperty('districts', 'visibility', on ? 'visible' : 'none'); document.body.classList.toggle('districts-off', !on); },
   labels: (on) => document.body.classList.toggle('labels-off', !on),
   dams: (on) => document.body.classList.toggle('dams-off', !on),
+  links: (on) => {
+    const visibility = on ? 'visible' : 'none';
+    for (const id of ['links-highlight', 'links-casing', 'links-line', 'links-arrows', ...Array.from({ length: FLOW_DASH_STEPS }, (_, k) => `links-dash-${k}`)]) {
+      map.setLayoutProperty(id, 'visibility', visibility);
+    }
+    document.body.classList.toggle('links-off', !on);
+  },
   orbit: (on) => { orbiting = on; if (on) orbitStep(); },
   flow: (on) => {
     flowAnimating = on;
@@ -328,6 +371,8 @@ function animateFlow(now) {
     flowStep = (flowStep + 1) % FLOW_DASH_STEPS;
     map.setPaintProperty(`flow-dash-${previous}`, 'line-opacity', 0);
     map.setPaintProperty(`flow-dash-${flowStep}`, 'line-opacity', FLOW_DASH_OPACITY);
+    map.setPaintProperty(`links-dash-${previous}`, 'line-opacity', 0);
+    map.setPaintProperty(`links-dash-${flowStep}`, 'line-opacity', FLOW_DASH_OPACITY);
   }
   drawBubbles(bubbleLast ? Math.min((now - bubbleLast) / 1000, 0.1) : 0);
   bubbleLast = now;
@@ -618,6 +663,48 @@ function addDamMarker(dam) {
   new maplibregl.Marker({ element: node, anchor: 'left', offset: [-11, 0] }).setLngLat([dam.lon, dam.lat]).addTo(map);
 }
 
+// ---------- Kaleshwaram links: pump houses and the link list ----------
+function addPumpMarker(house) {
+  const node = document.createElement('div'); node.className = 'mk-pump';
+  const icon = document.createElement('span'); icon.className = 'ic';
+  const svg = document.createElementNS(SVG_NS, 'svg'); svg.setAttribute('viewBox', '0 0 16 16'); svg.setAttribute('aria-hidden', 'true');
+  const use = document.createElementNS(SVG_NS, 'use'); use.setAttribute('href', '#ic-pump'); svg.appendChild(use); icon.appendChild(svg);
+  const label = textEl('span', 'lbl', `${house.name}${house.power ? ` · ${house.power.replace('MW', ' MW')}` : ''}`);
+  node.append(icon, label);
+  node.title = `${house.name} (${house.osm_name})${house.since ? ` · pumping since ${house.since}` : ''}`;
+  new maplibregl.Marker({ element: node, anchor: 'left', offset: [-10, 0] }).setLngLat([house.lon, house.lat]).addTo(map);
+}
+
+function renderLinkList(links) {
+  const groups = new Map();                      // link name -> { chain: [names], features, status }
+  for (const feature of links.features) {
+    const p = feature.properties;
+    const group = groups.get(p.link) || { chain: [p.from], features: [], status: p.status, notes: [] };
+    if (group.chain[group.chain.length - 1] !== p.from) group.chain.push(p.from);
+    group.chain.push(p.to);
+    group.features.push(feature); group.notes.push(p.note);
+    groups.set(p.link, group);
+  }
+  const list = $('link-list');
+  list.textContent = '';
+  for (const [name, group] of groups) {
+    const item = document.createElement('li');
+    const button = document.createElement('button'); button.type = 'button';
+    button.className = `row${group.status === 'operational' ? '' : ' planned'}`;
+    const chain = textEl('span', 'chain', group.chain.join(' → '));
+    chain.appendChild(textEl('small', '', `${group.status === 'operational' ? 'operating' : group.status} · ${group.notes[0]}`));
+    button.append(textEl('span', 'tag', name), chain);
+    button.addEventListener('click', () => {
+      for (const other of document.querySelectorAll('.link-list .row')) other.classList.toggle('active', other === button);
+      map.setFilter('links-highlight', ['==', ['get', 'link'], name]);
+      const bounds = new maplibregl.LngLatBounds();
+      for (const feature of group.features) for (const coord of feature.geometry.coordinates) bounds.extend(coord);
+      map.fitBounds(bounds, { padding: { top: 80, bottom: 80, left: 400, right: 340 }, pitch: 50, bearing: -15, duration: 1800, maxZoom: 10.5 });
+    });
+    item.appendChild(button); list.appendChild(item);
+  }
+}
+
 function openDamPopup(dam, node) {
   damPopup.remove();                                   // closes any other dam's popup (restoring its label)
   const content = document.createElement('div');
@@ -849,13 +936,17 @@ async function loadJson(url) { const response = await fetch(url); if (!response.
 map.on('load', async () => {
   debug.phase = 'style-loaded'; writeDebug();
   try {
-    const [cities, profiles, districtPoints, flowSummary, flowReaches, dams] = await Promise.all([
+    const [cities, profiles, districtPoints, flowSummary, flowReaches, dams, links, pumphouses] = await Promise.all([
       loadJson('data/cities.json'), loadJson('data/rivers.json'), loadJson('data/district_points.geojson'),
-      loadJson('data/flow_summary.json'), loadJson('data/flow.geojson'), loadJson('data/dams.json')]);
+      loadJson('data/flow_summary.json'), loadJson('data/flow.geojson'), loadJson('data/dams.json'),
+      loadJson('data/links.geojson'), loadJson('data/pumphouses.json')]);
     prepareBubbles(flowReaches);
     dams.forEach(addDamMarker);
     renderEraCounts(dams);
+    pumphouses.forEach(addPumpMarker);
+    renderLinkList(links);
     debug.notes.dams = dams.length;
+    debug.notes.links = links.features.length;
     debug.notes.bubbles = bubbleReaches.reduce((n, reach) => n + reach.particles.length, 0);
     profileState.profiles = profiles;
     cities.forEach(addCityMarker);

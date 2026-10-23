@@ -13,6 +13,8 @@ Outputs:
 - web/data/flow.geojson       HydroRIVERS reaches with modelled average discharge (m3/s)
 - web/data/flow_summary.json  peak flow per river and average flow per district
 - web/data/dams.json          dams and barrages from Wikipedia infoboxes (height, river)
+- web/data/links.geojson      schematic Kaleshwaram water links between those structures
+- web/data/pumphouses.json    Kaleshwaram pump houses from OpenStreetMap
 """
 from __future__ import annotations
 
@@ -400,6 +402,76 @@ OSM_RESERVOIRS = {
     "Ranganayaka Sagar": {"began": 2016, "opened": 2020, "capacity_tmc": 3.5},
 }
 KALESHWARAM_URL = "https://en.wikipedia.org/wiki/Kaleshwaram_Lift_Irrigation_Project"
+
+# How Kaleshwaram moves water: (link, from, to, via pump house, kind, status, note).
+# Edges follow the Wikipedia article's link list and the Union government's reply
+# on Link IV (Mid Manair -> Konda Pochamma); sources in DATA_SOURCES.md. Lines are
+# schematic: canal and tunnel alignments are not published as open data.
+KALESHWARAM_LINKS = [
+    ("Link I", "Medigadda Barrage", "Saraswati Barrage", "Medigadda pump house", "lift", "operational",
+     "Lakshmi pump house lifts Godavari water from Medigadda into the Annaram pool"),
+    ("Link I", "Saraswati Barrage", "Parvati Barrage", "Annaram pump house", "lift", "operational",
+     "Saraswathi pump house lifts into the Sundilla pool"),
+    ("Link I", "Parvati Barrage", "Sripada Yellampalli Project", "Sundilla pump house", "lift", "operational",
+     "Parvathi pump house lifts into the Yellampalli reservoir"),
+    ("Link II", "Sripada Yellampalli Project", "Mid Manair Dam", None, "lift", "operational",
+     "lifts and gravity tunnels from Yellampalli to Mid Manair"),
+    ("Link III", "Mid Manair Dam", "Upper Manair Dam", None, "lift", "in progress", "86,150 acres planned"),
+    ("Link IV", "Mid Manair Dam", "Ranganayaka Sagar", None, "lift", "operational",
+     "via the Annapurna (Anantha Sagar) reservoir, which has no published coordinates"),
+    ("Link IV", "Ranganayaka Sagar", "Mallanna Sagar", None, "lift", "operational", "water first let out in May 2020"),
+    ("Link IV", "Mallanna Sagar", "Konda Pochamma Sagar", None, "lift", "operational", "Markook pump house, opened May 2020"),
+    ("Link VI", "Mallanna Sagar", "Singur Dam", None, "canal", "in progress", "gravity canals, tunnels and lifts towards Singur"),
+    ("Link VII", "Sriram Sagar Project", "Nizam Sagar", None, "lift", "in progress", "from the SRSP foreshore to the Nizam Sagar canals"),
+    ("SRSP flood-flow canal", "Sriram Sagar Project", "Mid Manair Dam", None, "canal", "operational",
+     "existing gravity canal that also fills Mid Manair"),
+]
+LINK_BULGE = 0.12                   # schematic arc height as a fraction of the straight distance
+
+
+def arc(start: tuple[float, float], end: tuple[float, float], bulge: float, steps: int = 24) -> list[list[float]]:
+    """Quadratic curve from start to end, bowed to the left of travel so edges never overlap the river."""
+    (x0, y0), (x1, y1) = start, end
+    mx, my = (x0 + x1) / 2, (y0 + y1) / 2
+    dx, dy = x1 - x0, y1 - y0
+    cx, cy = mx - dy * bulge, my + dx * bulge
+    points = []
+    for i in range(steps + 1):
+        t = i / steps
+        points.append([round((1 - t) ** 2 * x0 + 2 * (1 - t) * t * cx + t ** 2 * x1, 5),
+                       round((1 - t) ** 2 * y0 + 2 * (1 - t) * t * cy + t ** 2 * y1, 5)])
+    return points
+
+
+def load_pumphouses() -> list[dict]:
+    elements = json.loads((RAW / "osm_pumphouses.json").read_text(encoding="utf-8"))["elements"]
+    houses = []
+    for element in elements:
+        tags, centre = element["tags"], element.get("center", element)
+        houses.append({"name": tags.get("alt_name") or tags["name"], "osm_name": tags["name"],
+                       "power": tags.get("power:input"), "since": (tags.get("start_date") or "")[:4] or None,
+                       "lon": round(centre["lon"], 5), "lat": round(centre["lat"], 5)})
+    return houses
+
+
+def build_links(dams: list[dict], pumphouses: list[dict]) -> dict:
+    nodes = {dam["name"]: (dam["lon"], dam["lat"]) for dam in dams}
+    nodes.update({house["osm_name"]: (house["lon"], house["lat"]) for house in pumphouses})
+    features = []
+    for index, (link, source, target, via, kind, status, note) in enumerate(KALESHWARAM_LINKS):
+        missing = [n for n in (source, target, via) if n and n not in nodes]
+        if missing:
+            print(f"  warning: link {link} skipped, unknown node(s) {missing}")
+            continue
+        stops = [nodes[source]] + ([nodes[via]] if via else []) + [nodes[target]]
+        coords = []
+        for a, b in zip(stops, stops[1:]):
+            coords.extend(arc(a, b, LINK_BULGE if not via else LINK_BULGE / 2)[: -1])
+        coords.append([round(stops[-1][0], 5), round(stops[-1][1], 5)])
+        features.append({"type": "Feature", "geometry": {"type": "LineString", "coordinates": coords},
+                         "properties": {"id": index, "link": link, "from": source, "to": target, "via": via,
+                                        "kind": kind, "status": status, "note": note}})
+    return {"type": "FeatureCollection", "features": features}
 FOOT_M = 0.3048
 
 
@@ -609,6 +681,11 @@ def main() -> None:
         print(f"  {dam['kind']:7} {dam['name'][:30]:30} {str(dam['height'] or '-'):>4} m  "
               f"{dam['began'] or '----'}-{dam['opened'] or '----'}  cap {str(dam['capacity_tmcft'] or '-'):>7} tmcft  "
               f"inflow {str(dam['inflow_q'] or '-'):>5} m3/s {dam['inflow_name'] or ''}")
+    pumphouses = load_pumphouses()
+    (WEB_DATA / "pumphouses.json").write_text(json.dumps(pumphouses, indent=1, ensure_ascii=False), encoding="utf-8")
+    links = build_links(dams, pumphouses)
+    (WEB_DATA / "links.geojson").write_text(json.dumps(links), encoding="utf-8")
+    print(f"kaleshwaram: {len(pumphouses)} pump houses, {len(links['features'])} links")
     contours = build_contours()
     write_geojson(contours, "contours")
     print(f"contours: {len(contours)} lines, {(WEB_DATA / 'contours.geojson').stat().st_size / 1e6:.1f} MB")
