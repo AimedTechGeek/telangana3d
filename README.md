@@ -27,8 +27,11 @@ uv run python serve.py      # http://127.0.0.1:8765/ opens in your browser
   reservoirs; the Dams chip hides them
 - 27 cities and towns ranked by elevation, with the lowest river beds for
   comparison; click one to fly to it
-- Vertical exaggeration slider, 100 m contours, district lines, labels, orbit,
-  light/dark theme (follows the OS setting; the toggle overrides it)
+- A "View & filters" card on the right groups the controls: Terrain
+  (exaggeration, hillshade, contours), Layers (districts, place labels, flow
+  animation, dams), the dams' opening-year filter (before / from 2014) and
+  Navigation (drag mode, orbit, reset). Light/dark theme follows the OS
+  setting; the toggle in the left panel overrides it
 - Mouse: left-drag pans (switch "Left-drag" to *Rotates* for a full 360° orbit
   with tilt), right-drag or Ctrl-drag always rotates and tilts, scroll zooms
 
