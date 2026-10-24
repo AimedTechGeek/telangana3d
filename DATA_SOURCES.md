@@ -160,31 +160,62 @@ public and were downloaded by `fetch_data.py` into `data/raw/` (not committed);
   Bhoompally, Gujjal, Katewadi, Mothe, Kondem Cheruvu, Gandamalla, Baswapuram)
   have no coordinates in Wikipedia, Wikidata or OSM at the time of writing.
 
-## 6c. Kaleshwaram water links and pump houses
+## 6c. Water links, pump houses and intakes
 
-- **Edges** (`KALESHWARAM_LINKS` in `build_web_data.py`) follow the "Links"
-  section of https://en.wikipedia.org/wiki/Kaleshwaram_Lift_Irrigation_Project
-  (Link I Medigadda → Annaram → Sundilla → Yellampalli with three lifts;
-  Link II Yellampalli → Mid Manair; Link III Mid Manair → Upper Manair;
-  Link VI Mallanna Sagar → Singur; Link VII SRSP foreshore → Nizam Sagar
-  canals). Link IV is taken as Mid Manair → Annapurna → Ranganayaka Sagar →
-  Mallanna Sagar → Konda Pochamma Sagar after the Union government's reply to
-  Parliament (https://cwc.gov.in/sites/default/files/reply_70.pdf, "Link IV:
-  Mid Manair Reservoir to Konda Pochamma Reservoir") and Deccan Chronicle's
-  pumping sequence
-  (https://www.deccanchronicle.com/amp/southern-states/telangana/intermittent-power-hits-pumping-irrigation-department-1898970);
-  the Wikipedia list's "upper Manair" start is treated as an error. The SRSP
-  flood-flow canal edge comes from the Mid Manair infobox (`dam_crosses`).
+- **Edges** (`LINKS` in `build_web_data.py`), each with years *planned /
+  construction began / first water / complete* where a source gives them:
+  - *Kaleshwaram* — the "Links" section of
+    https://en.wikipedia.org/wiki/Kaleshwaram_Lift_Irrigation_Project (Link I
+    Medigadda → Annaram → Sundilla → Yellampalli with three lifts, 2016–2019;
+    Link II Yellampalli → Mid Manair, water reached Mid Manair in November
+    2019 per https://www.pressreader.com/india/deccan-chronicle/20191113/281749861177429;
+    Link III; Link VI; Link VII). Link IV is taken as Mid Manair → Annapurna →
+    Ranganayaka Sagar → Mallanna Sagar → Konda Pochamma Sagar after the Union
+    government's reply to Parliament (https://cwc.gov.in/sites/default/files/reply_70.pdf)
+    and Deccan Chronicle's pumping sequence
+    (https://www.deccanchronicle.com/amp/southern-states/telangana/intermittent-power-hits-pumping-irrigation-department-1898970);
+    the Wikipedia list's "upper Manair" start is treated as an error. "Planned
+    2016" is the year the Pranahita–Chevella scheme was redesigned as
+    Kaleshwaram; its construction start is the infobox `construction_began`.
+  - *Sriram Sagar canals* — the SRSP flood-flow canal (Mid Manair infobox
+    `dam_crosses`) and the Kakatiya canal to Lower Manair Dam
+    (https://en.wikipedia.org/wiki/Lower_Manair_Dam: "balancing reservoir for
+    the Kakatiya Canal"; years from the SRSP and LMD infoboxes).
+  - *Srisailam Left Bank Canal* — Nagarjuna Sagar foreshore → Puttamgandi pump
+    house (coordinates and "completed by 2004" from
+    https://en.wikipedia.org/wiki/Srisailam_Left_Bank_Canal). The Akkampalli
+    reservoir it feeds has no published coordinates.
+  - *Kalwakurthy* — Srisailam backwaters → Yellur intake (infobox coordinates
+    of https://en.wikipedia.org/wiki/Mahatma_Gandhi_Kalwakurthy_lift_irrigation_scheme,
+    construction 1984, opened 2017) → Singotam reservoir (Wikidata Q62033088).
+    Stage II to Jonnalaboguda and Stage III to Gudipally (National Green
+    Tribunal order, https://www.greentribunal.gov.in/sites/default/files/news_updates/3217120_0.pdf)
+    have no published coordinates.
+  - *Palamuru-Rangareddy* — Jurala foreshore → Yellur-Narlapur pump house
+    (infobox coordinates of https://en.wikipedia.org/wiki/Palamuru-Rangareddy_Lift_Irrigation_Scheme,
+    foundation 2015, first phase started 16 September 2023; 104 m lift per
+    https://thesouthfirst.com/telangana/palamuru-rangareddy-lift-irrigation-scheme-in-telangana-gets-new-deadline-december-2027/).
+    Narlapur, Yedula, Vattem, Karvena, Udandapur and KP Laxmidevipally
+    reservoirs have no published coordinates.
+  - *Not drawn for lack of coordinates:* Devadula (intake, Dharmasagar,
+    Ghanpur), Sitarama, Dindi and Koil Sagar lift schemes.
 - **Status** (operating / in progress) reflects those sources as of
-  2026-10-23 and is not an official schedule.
+  2026-10-24 and is not an official schedule.
 - **Geometry is schematic:** curves drawn between the structures' coordinates
-  (through the pump house where OSM has one). Real canal, tunnel and
-  pressure-main alignments are not available as open data.
+  (through the pump house where one is known). Real canal, tunnel and
+  pressure-main alignments are not available as open data. The popup's
+  distance is the straight line between the structures, and its terrain
+  heights are the Copernicus DEM (source 1) at each structure, not water
+  levels.
 - **Pump houses:** OpenStreetMap `man_made=pumping_station` features named
   Medigadda, Annaram and Sundilla (alt names Lakshmi, Saraswathi, Parvathi),
   with their `power:input` and `start_date` tags; cached as
   `osm_pumphouses.json`. Terms as in source 4 (ODbL). Other Kaleshwaram pump
-  houses (Nandi, Gayatri, Markook …) are not mapped there yet.
+  houses (Nandi, Gayatri, Markook …) are not mapped there yet. The Puttamgandi,
+  Yellur and Narlapur intakes come from the Wikipedia pages above.
+- **Wikidata** (https://query.wikidata.org, CC0): dams within 76.9–81.6 °E,
+  15.4–20.0 °N with coordinates, cached as `wikidata_dams.csv`; used for the
+  Singotam reservoir.
 
 ## 7. Landmark heights (elevation comparison)
 

@@ -122,6 +122,23 @@ def fetch_osm_reservoirs() -> None:
     download(OVERPASS_URL, RAW / "osm_pumphouses.json", params={"data": OVERPASS_PUMPHOUSES_QUERY}, headers=OVERPASS_HEADERS)
 
 
+WIKIDATA_SPARQL = "https://query.wikidata.org/sparql"
+WIKIDATA_DAMS_QUERY = """SELECT ?item ?itemLabel ?typeLabel ?coord ?height ?riverLabel ?inception WHERE {
+  SERVICE wikibase:box { ?item wdt:P625 ?coord .
+    bd:serviceParam wikibase:cornerSouthWest "Point(76.9 15.4)"^^geo:wktLiteral ;
+                    wikibase:cornerNorthEast "Point(81.6 20.0)"^^geo:wktLiteral . }
+  ?item wdt:P31 ?type . ?type wdt:P279* wd:Q12323 .
+  OPTIONAL { ?item wdt:P2048 ?height } OPTIONAL { ?item wdt:P206 ?river } OPTIONAL { ?item wdt:P571 ?inception }
+  SERVICE wikibase:label { bd:serviceParam wikibase:language "en". }
+}"""
+
+
+def fetch_wikidata_dams() -> None:
+    """Dams around Telangana from Wikidata (CSV); supplies reservoirs with no Wikipedia page."""
+    download(WIKIDATA_SPARQL, RAW / "wikidata_dams.csv", params={"query": WIKIDATA_DAMS_QUERY},
+             headers={**WIKIPEDIA_HEADERS, "Accept": "text/csv"})
+
+
 def fetch_wikipedia_dams() -> None:
     target = RAW / "wikipedia_dams.json"
     if target.exists():
@@ -143,4 +160,5 @@ if __name__ == "__main__":
     fetch_osm_places()
     fetch_hydrorivers()
     fetch_wikipedia_dams()
+    fetch_wikidata_dams()
     fetch_osm_reservoirs()

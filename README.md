@@ -19,11 +19,13 @@ uv run python serve.py      # http://127.0.0.1:8765/ opens in your browser
   collected upstream. Hover a stream for its m³/s and catchment area; peak
   markers show where the Godavari and Krishna carry the most water; a list
   gives the average flow of each river through every district it crosses
-- **Kaleshwaram links:** orange lines show how the lift scheme moves water
-  from Medigadda through the barrages and pump houses to Yellampalli, Mid
-  Manair and the Siddipet reservoirs. Operating links carry moving chevrons
-  in the direction of pumping; links still being built are dashed with a
-  work-in-progress cone. The list in the panel frames each link. Lines are
+- **Water links:** orange lines show how water is moved between the
+  structures by Kaleshwaram, the Sriram Sagar canals, the Srisailam Left Bank
+  Canal, Kalwakurthy and Palamuru-Rangareddy. Operating links carry moving
+  chevrons in the direction of flow; links still being built are dashed with
+  a work-in-progress cone. Click a link (on the map or in the list) for its
+  status, years (planned, construction, first water, complete), terrain
+  heights at both ends, straight-line distance and source. Lines are
   schematic, not real canal alignments
 - Godavari and Krishna river-bed and flow profiles through the state; hover or
   drag the slider to follow the river on the map, click to fly there

@@ -172,6 +172,8 @@ function buildStyle(theme) {
         layout: { 'symbol-placement': 'line', 'symbol-spacing': 70, 'icon-image': 'arrow', 'icon-size': ['interpolate', ['linear'], ['zoom'], 6, 0.4, 10, 0.6],
                   'icon-rotation-alignment': 'map', 'icon-allow-overlap': true, 'icon-ignore-placement': true, visibility: chipOn('links') },
         paint: { 'icon-opacity': 0.7 } },
+      { id: 'links-hit', type: 'line', source: 'links', layout: { visibility: chipOn('links') },
+        paint: { 'line-color': '#000000', 'line-opacity': 0, 'line-width': 16 } },
     ],
     terrain: { source: 'dem', exaggeration: Number($('exag').value) },
     sky: { ...t.sky, 'fog-ground-blend': 0.6, 'horizon-fog-blend': 0.7, 'sky-horizon-blend': 0.85,
@@ -343,8 +345,9 @@ const toggles = {
   dams: (on) => document.body.classList.toggle('dams-off', !on),
   links: (on) => {
     const visibility = on ? 'visible' : 'none';
-    for (const id of ['links-highlight', 'links-casing', 'links-line', 'links-arrows']) map.setLayoutProperty(id, 'visibility', visibility);
+    for (const id of ['links-highlight', 'links-casing', 'links-line', 'links-arrows', 'links-hit']) map.setLayoutProperty(id, 'visibility', visibility);
     document.body.classList.toggle('links-off', !on);
+    if (!on) linkPopup.remove();
   },
   orbit: (on) => { orbiting = on; if (on) orbitStep(); },
   flow: (on) => {
@@ -714,16 +717,65 @@ function addPumpMarker(house) {
   const use = document.createElementNS(SVG_NS, 'use'); use.setAttribute('href', '#ic-pump'); svg.appendChild(use); icon.appendChild(svg);
   const label = textEl('span', 'lbl', `${house.name}${house.power ? ` · ${house.power.replace('MW', ' MW')}` : ''}`);
   node.append(icon, label);
-  node.title = `${house.name} (${house.osm_name})${house.since ? ` · pumping since ${house.since}` : ''}`;
+  node.title = `${house.name}${house.elev_m ? ` · terrain ${house.elev_m} m` : ''}${house.since ? ` · pumping since ${house.since}` : ''} · ${house.source === 'OpenStreetMap' ? 'OpenStreetMap' : 'Wikipedia'}`;
   new maplibregl.Marker({ element: node, anchor: 'left', offset: [-10, 0] }).setLngLat([house.lon, house.lat]).addTo(map);
 }
+
+// ---------- link popup ----------
+const linkPopup = new maplibregl.Popup({ closeButton: true, closeOnClick: true, offset: 10, className: 'dam-popup link-popup', maxWidth: '340px' });
+linkPopup.on('close', () => map.setFilter('links-highlight', ['==', ['get', 'link'], '']));
+const linkKey = (p) => `${p.scheme} · ${p.link}`;
+
+function linkYears(p) {
+  const parts = [];
+  if (p.planned) parts.push(`planned ${p.planned}`);
+  if (p.began) parts.push(`construction ${p.began}`);
+  if (p.water) parts.push(`first water ${p.water}`);
+  if (p.done) parts.push(`complete ${p.done}`);
+  return parts.length ? parts.join(' · ') : null;
+}
+function linkElevation(p) {
+  if (p.elev_from === null || p.elev_to === null) return null;
+  const change = p.lift_m > 0 ? `rise +${p.lift_m} m (lifted)` : p.lift_m < 0 ? `fall ${Math.abs(p.lift_m)} m (gravity)` : 'level';
+  return `${p.elev_from} m → ${p.elev_to} m · ${change}`;
+}
+function openLinkPopup(p, lngLat) {
+  damPopup.remove();
+  map.setFilter('links-highlight', ['==', ['get', 'link'], p.link]);
+  const content = document.createElement('div');
+  const head = textEl('div', 'head', '');
+  head.append(textEl('span', `kind link ${p.status === 'operational' ? '' : 'planned'}`, `${p.scheme} · ${p.kind}`), textEl('strong', '', `${p.link}: ${p.from} → ${p.to}`));
+  content.appendChild(head);
+  const rows = [
+    ['Status', p.status === 'operational' ? 'operating' : p.status],
+    ['Via', p.via || null],
+    ['Years', linkYears(p)],
+    ['Terrain', linkElevation(p)],
+    ['Distance', `${p.straight_km} km straight line`],
+    ['Note', p.note],
+  ];
+  const list = document.createElement('dl');
+  for (const [term, value] of rows) {
+    if (!value) continue;
+    list.append(textEl('dt', '', term), textEl('dd', term === 'Note' ? 'prose' : '', value));
+  }
+  content.appendChild(list);
+  content.appendChild(textEl('p', 'fine', 'Terrain heights are the DEM at each structure, not water levels; the line is schematic, not the canal route.'));
+  const link = document.createElement('a');
+  link.href = p.source; link.target = '_blank'; link.rel = 'noopener'; link.textContent = 'Source ↗';
+  content.appendChild(link);
+  linkPopup.setLngLat(lngLat).setDOMContent(content).addTo(map);
+}
+map.on('click', 'links-hit', (event) => { event.originalEvent.stopPropagation(); openLinkPopup(event.features[0].properties, event.lngLat); });
+map.on('mouseenter', 'links-hit', () => { map.getCanvas().style.cursor = 'pointer'; });
+map.on('mouseleave', 'links-hit', () => { map.getCanvas().style.cursor = ''; });
 
 function addWorkInProgressMarkers(links) {
   const seen = new Set();
   for (const feature of links.features) {
     const p = feature.properties;
-    if (p.status === 'operational' || seen.has(p.link)) continue;
-    seen.add(p.link);
+    if (p.status === 'operational' || seen.has(linkKey(p))) continue;
+    seen.add(linkKey(p));
     const coords = feature.geometry.coordinates, mid = coords[Math.floor(coords.length / 2)];
     const node = document.createElement('div'); node.className = 'mk-wip';
     const icon = document.createElement('span'); icon.className = 'ic';
@@ -736,30 +788,39 @@ function addWorkInProgressMarkers(links) {
 }
 
 function renderLinkList(links) {
-  const groups = new Map();                      // link name -> { chain: [names], features, status }
+  const groups = new Map();                      // "scheme · link" -> { chain, features, status, props }
   for (const feature of links.features) {
-    const p = feature.properties;
-    const group = groups.get(p.link) || { chain: [p.from], features: [], status: p.status, notes: [] };
+    const p = feature.properties, key = linkKey(p);
+    const group = groups.get(key) || { scheme: p.scheme, link: p.link, chain: [p.from], features: [], status: p.status, props: p };
     if (group.chain[group.chain.length - 1] !== p.from) group.chain.push(p.from);
     group.chain.push(p.to);
-    group.features.push(feature); group.notes.push(p.note);
-    groups.set(p.link, group);
+    group.features.push(feature);
+    groups.set(key, group);
   }
   const list = $('link-list');
   list.textContent = '';
-  for (const [name, group] of groups) {
+  let scheme = null;
+  for (const group of groups.values()) {
+    if (group.scheme !== scheme) {
+      scheme = group.scheme;
+      const header = document.createElement('li'); header.className = 'group';
+      header.append(document.createElement('i'), document.createTextNode(scheme));
+      list.appendChild(header);
+    }
     const item = document.createElement('li');
     const button = document.createElement('button'); button.type = 'button';
     button.className = `row${group.status === 'operational' ? '' : ' planned'}`;
     const chain = textEl('span', 'chain', group.chain.join(' → '));
-    chain.appendChild(textEl('small', '', `${group.status === 'operational' ? 'operating' : group.status} · ${group.notes[0]}`));
-    button.append(textEl('span', 'tag', name), chain);
+    const years = linkYears(group.props);
+    chain.appendChild(textEl('small', '', `${group.status === 'operational' ? 'operating' : group.status}${years ? ` · ${years}` : ''}`));
+    button.append(textEl('span', 'tag', group.link), chain);
     button.addEventListener('click', () => {
       for (const other of document.querySelectorAll('.link-list .row')) other.classList.toggle('active', other === button);
-      map.setFilter('links-highlight', ['==', ['get', 'link'], name]);
       const bounds = new maplibregl.LngLatBounds();
       for (const feature of group.features) for (const coord of feature.geometry.coordinates) bounds.extend(coord);
       map.fitBounds(bounds, { padding: { top: 80, bottom: 80, left: 400, right: 340 }, pitch: 50, bearing: -15, duration: 1800, maxZoom: 10.5 });
+      const first = group.features[0], mid = first.geometry.coordinates[Math.floor(first.geometry.coordinates.length / 2)];
+      openLinkPopup(first.properties, mid);
     });
     item.appendChild(button); list.appendChild(item);
   }
@@ -767,6 +828,7 @@ function renderLinkList(links) {
 
 function openDamPopup(dam, node) {
   damPopup.remove();                                   // closes any other dam's popup (restoring its label)
+  linkPopup.remove();
   const content = document.createElement('div');
   const head = textEl('div', 'head', '');
   head.append(textEl('span', `kind ${dam.kind}`, dam.kind === 'barrage' ? 'Barrage' : dam.river && dam.river.includes('off-river') ? 'Reservoir' : 'Dam'),
@@ -774,6 +836,7 @@ function openDamPopup(dam, node) {
   content.appendChild(head);
   const rows = [
     ['Height', dam.height ? `${dam.height} m` : null],
+    ['Terrain', dam.elev_m ? `${dam.elev_m} m above sea level` : null],
     ['Built', damYears(dam)],
     ['Average inflow', dam.inflow_q ? `${dam.inflow_q.toLocaleString('en-IN')} m³/s${dam.inflow_name ? ` · ${dam.inflow_name}` : ''}` : null],
     ['Gross capacity', dam.capacity_tmcft ? formatTmcft(dam.capacity_tmcft) : null],

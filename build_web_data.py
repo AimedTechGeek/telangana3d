@@ -402,31 +402,67 @@ OSM_RESERVOIRS = {
     "Ranganayaka Sagar": {"began": 2016, "opened": 2020, "capacity_tmc": 3.5},
 }
 KALESHWARAM_URL = "https://en.wikipedia.org/wiki/Kaleshwaram_Lift_Irrigation_Project"
+WIKI = "https://en.wikipedia.org/wiki/"
 
-# How Kaleshwaram moves water: (link, from, to, via pump house, kind, status, note).
-# Edges follow the Wikipedia article's link list and the Union government's reply
-# on Link IV (Mid Manair -> Konda Pochamma); sources in DATA_SOURCES.md. Lines are
+# Intakes, pump houses and reservoirs that are nodes of a water link but not in dams.json.
+# Coordinates come from the article named in `source` (see DATA_SOURCES.md).
+EXTRA_NODES = {
+    "Puttamgandi pump house": {"lon": 79.11694, "lat": 16.61028, "kind": "pump",
+                               "source": WIKI + "Srisailam_Left_Bank_Canal"},
+    "Kalwakurthy intake (Yellur)": {"lon": 78.39972, "lat": 16.10139, "kind": "pump",
+                                    "source": WIKI + "Mahatma_Gandhi_Kalwakurthy_lift_irrigation_scheme"},
+    "Narlapur pump house": {"lon": 78.14639, "lat": 15.96361, "kind": "pump",
+                            "source": WIKI + "Palamuru-Rangareddy_Lift_Irrigation_Scheme"},
+}
+WIKIDATA_NODES = {"Singotam reservoir": "Singotam Dam"}     # node name -> Wikidata label
+
+# Water links between the structures. Years: planned (scheme sanctioned or redesigned),
+# began (construction start), water (first water delivered), done (link complete), all
+# from the sources listed in DATA_SOURCES.md; None where no source gives one. Lines are
 # schematic: canal and tunnel alignments are not published as open data.
-KALESHWARAM_LINKS = [
-    ("Link I", "Medigadda Barrage", "Saraswati Barrage", "Medigadda pump house", "lift", "operational",
-     "Lakshmi pump house lifts Godavari water from Medigadda into the Annaram pool"),
-    ("Link I", "Saraswati Barrage", "Parvati Barrage", "Annaram pump house", "lift", "operational",
-     "Saraswathi pump house lifts into the Sundilla pool"),
-    ("Link I", "Parvati Barrage", "Sripada Yellampalli Project", "Sundilla pump house", "lift", "operational",
-     "Parvathi pump house lifts into the Yellampalli reservoir"),
-    ("Link II", "Sripada Yellampalli Project", "Mid Manair Dam", None, "lift", "operational",
-     "lifts and gravity tunnels from Yellampalli to Mid Manair"),
-    ("Link III", "Mid Manair Dam", "Upper Manair Dam", None, "lift", "in progress", "86,150 acres planned"),
-    ("Link IV", "Mid Manair Dam", "Ranganayaka Sagar", None, "lift", "operational",
-     "via the Annapurna (Anantha Sagar) reservoir, which has no published coordinates"),
-    ("Link IV", "Ranganayaka Sagar", "Mallanna Sagar", None, "lift", "operational", "water first let out in May 2020"),
-    ("Link IV", "Mallanna Sagar", "Konda Pochamma Sagar", None, "lift", "operational", "Markook pump house, opened May 2020"),
-    ("Link VI", "Mallanna Sagar", "Singur Dam", None, "canal", "in progress", "gravity canals, tunnels and lifts towards Singur"),
-    ("Link VII", "Sriram Sagar Project", "Nizam Sagar", None, "lift", "in progress", "from the SRSP foreshore to the Nizam Sagar canals"),
-    ("SRSP flood-flow canal", "Sriram Sagar Project", "Mid Manair Dam", None, "canal", "operational",
-     "existing gravity canal that also fills Mid Manair"),
+LINKS = [
+    # scheme, link, from, to, via, kind, status, years {planned, began, water, done}, note
+    ("Kaleshwaram", "Link I", "Medigadda Barrage", "Saraswati Barrage", "Medigadda pump house", "lift", "operational",
+     {"planned": 2016, "began": 2016, "water": 2019, "done": 2019}, "Lakshmi pump house lifts Godavari water from Medigadda into the Annaram pool"),
+    ("Kaleshwaram", "Link I", "Saraswati Barrage", "Parvati Barrage", "Annaram pump house", "lift", "operational",
+     {"planned": 2016, "began": 2016, "water": 2019, "done": 2019}, "Saraswathi pump house lifts into the Sundilla pool"),
+    ("Kaleshwaram", "Link I", "Parvati Barrage", "Sripada Yellampalli Project", "Sundilla pump house", "lift", "operational",
+     {"planned": 2016, "began": 2016, "water": 2019, "done": 2019}, "Parvathi pump house lifts into the Yellampalli reservoir"),
+    ("Kaleshwaram", "Link II", "Sripada Yellampalli Project", "Mid Manair Dam", None, "lift", "operational",
+     {"planned": 2016, "began": 2016, "water": 2019, "done": None}, "Nandi and Gayatri pump houses with two tunnels of about 25 km; Godavari water reached Mid Manair in November 2019"),
+    ("Kaleshwaram", "Link III", "Mid Manair Dam", "Upper Manair Dam", None, "lift", "in progress",
+     {"planned": 2016, "began": 2016, "water": None, "done": None}, "86,150 acres planned"),
+    ("Kaleshwaram", "Link IV", "Mid Manair Dam", "Ranganayaka Sagar", None, "lift", "operational",
+     {"planned": 2016, "began": 2016, "water": 2020, "done": 2020}, "via the Annapurna (Anantha Sagar) reservoir, which has no published coordinates; first filled April 2020"),
+    ("Kaleshwaram", "Link IV", "Ranganayaka Sagar", "Mallanna Sagar", None, "lift", "operational",
+     {"planned": 2016, "began": 2016, "water": 2020, "done": 2022}, "water first let out in May 2020; Mallanna Sagar inaugurated February 2022"),
+    ("Kaleshwaram", "Link IV", "Mallanna Sagar", "Konda Pochamma Sagar", None, "lift", "operational",
+     {"planned": 2016, "began": 2016, "water": 2020, "done": 2020}, "Markook pump house, opened May 2020"),
+    ("Kaleshwaram", "Link VI", "Mallanna Sagar", "Singur Dam", None, "canal", "in progress",
+     {"planned": 2016, "began": None, "water": None, "done": None}, "gravity canals, tunnels and lifts towards Singur"),
+    ("Kaleshwaram", "Link VII", "Sriram Sagar Project", "Nizam Sagar", None, "lift", "in progress",
+     {"planned": 2016, "began": None, "water": None, "done": None}, "from the SRSP foreshore to the Nizam Sagar canals"),
+    ("Sriram Sagar canals", "SRSP flood-flow canal", "Sriram Sagar Project", "Mid Manair Dam", None, "canal", "operational",
+     {"planned": None, "began": None, "water": None, "done": None}, "gravity canal from the SRSP spillway that also fills Mid Manair"),
+    ("Sriram Sagar canals", "Kakatiya canal", "Sriram Sagar Project", "Lower Manair Dam", None, "canal", "operational",
+     {"planned": 1963, "began": 1963, "water": 1977, "done": 1985}, "SRSP's right-bank Kakatiya canal; Lower Manair Dam is its balancing reservoir"),
+    ("Srisailam Left Bank Canal", "Puttamgandi lift", "Nagarjuna Sagar Dam", "Puttamgandi pump house", None, "lift", "operational",
+     {"planned": None, "began": None, "water": 2004, "done": 2004}, "pumps from the Nagarjuna Sagar foreshore into Puttamgandi tank, then by gravity to the Akkampalli reservoir (no published coordinates)"),
+    ("Kalwakurthy", "Stage I", "Srisailam Dam", "Kalwakurthy intake (Yellur)", None, "lift", "operational",
+     {"planned": 1984, "began": 1984, "water": 2017, "done": 2017}, "lift from the Srisailam backwaters near Kollapur"),
+    ("Kalwakurthy", "Stage I", "Kalwakurthy intake (Yellur)", "Singotam reservoir", None, "lift", "operational",
+     {"planned": 1984, "began": 1984, "water": 2017, "done": 2017}, "Stage II continues from Singotam to the Jonnalaboguda and Gudipally reservoirs, which have no published coordinates"),
+    ("Palamuru-Rangareddy", "Stage I", "Jurala Project", "Narlapur pump house", None, "lift", "operational",
+     {"planned": 2015, "began": 2015, "water": 2023, "done": None}, "Yellur-Narlapur pump house started in September 2023, lifting 104 m into the Narlapur reservoir; the Yedula, Vattem, Karvena, Udandapur and KP Laxmidevipally stages have no published coordinates; completion target December 2027"),
 ]
+LINK_SOURCES = {
+    "Kaleshwaram": KALESHWARAM_URL, "Sriram Sagar canals": WIKI + "Sriram_Sagar_Project",
+    "Srisailam Left Bank Canal": WIKI + "Srisailam_Left_Bank_Canal",
+    "Kalwakurthy": WIKI + "Mahatma_Gandhi_Kalwakurthy_lift_irrigation_scheme",
+    "Palamuru-Rangareddy": WIKI + "Palamuru-Rangareddy_Lift_Irrigation_Scheme",
+}
 LINK_BULGE = 0.12                   # schematic arc height as a fraction of the straight distance
+NODE_ELEV_RADIUS_PX = 2             # 400 m window for a structure's elevation
 
 
 def arc(start: tuple[float, float], end: tuple[float, float], bulge: float, steps: int = 24) -> list[list[float]]:
@@ -444,33 +480,67 @@ def arc(start: tuple[float, float], end: tuple[float, float], bulge: float, step
 
 
 def load_pumphouses() -> list[dict]:
+    """Kaleshwaram pump houses from OSM plus the intakes listed in EXTRA_NODES."""
     elements = json.loads((RAW / "osm_pumphouses.json").read_text(encoding="utf-8"))["elements"]
     houses = []
     for element in elements:
         tags, centre = element["tags"], element.get("center", element)
-        houses.append({"name": tags.get("alt_name") or tags["name"], "osm_name": tags["name"],
+        houses.append({"name": tags.get("alt_name") or tags["name"], "osm_name": tags["name"], "scheme": "Kaleshwaram",
                        "power": tags.get("power:input"), "since": (tags.get("start_date") or "")[:4] or None,
-                       "lon": round(centre["lon"], 5), "lat": round(centre["lat"], 5)})
+                       "lon": round(centre["lon"], 5), "lat": round(centre["lat"], 5), "source": "OpenStreetMap"})
+    for name, node in EXTRA_NODES.items():
+        houses.append({"name": name, "osm_name": name, "scheme": None, "power": None, "since": None,
+                       "lon": node["lon"], "lat": node["lat"], "source": node["source"]})
     return houses
 
 
-def build_links(dams: list[dict], pumphouses: list[dict]) -> dict:
-    nodes = {dam["name"]: (dam["lon"], dam["lat"]) for dam in dams}
-    nodes.update({house["osm_name"]: (house["lon"], house["lat"]) for house in pumphouses})
-    features = []
-    for index, (link, source, target, via, kind, status, note) in enumerate(KALESHWARAM_LINKS):
-        missing = [n for n in (source, target, via) if n and n not in nodes]
-        if missing:
-            print(f"  warning: link {link} skipped, unknown node(s) {missing}")
+def wikidata_nodes() -> list[dict]:
+    """Reservoirs with a Wikidata item but no Wikipedia page (Singotam)."""
+    import csv
+    rows = list(csv.DictReader((RAW / "wikidata_dams.csv").open(encoding="utf-8")))
+    nodes = []
+    for name, label in WIKIDATA_NODES.items():
+        row = next((r for r in rows if r["itemLabel"] == label), None)
+        if not row:
+            print(f"  warning: {label} not in wikidata_dams.csv")
             continue
-        stops = [nodes[source]] + ([nodes[via]] if via else []) + [nodes[target]]
+        lon, lat = (float(v) for v in re.findall(r"-?\d+(?:\.\d+)?", row["coord"]))
+        nodes.append({"name": name, "kind": "dam", "lon": round(lon, 5), "lat": round(lat, 5),
+                      "height": float(row["height"]) if row["height"] else None, "river": "Kalwakurthy lift scheme (off-river)",
+                      "began": None, "opened": None, "capacity_tmcft": None,
+                      "url": row["item"].replace("http://www.wikidata.org/entity/", "https://www.wikidata.org/wiki/")})
+    return nodes
+
+
+def geodesic_km(a: tuple[float, float], b: tuple[float, float]) -> float:
+    lat = (a[1] + b[1]) / 2 * math.pi / 180
+    return math.hypot((b[0] - a[0]) * EARTH_M_PER_DEG * math.cos(lat), (b[1] - a[1]) * EARTH_M_PER_DEG) / 1000
+
+
+EARTH_M_PER_DEG = 111_320
+
+
+def build_links(nodes_by_name: dict[str, dict]) -> dict:
+    features = []
+    for index, (scheme, link, source, target, via, kind, status, years, note) in enumerate(LINKS):
+        missing = [n for n in (source, target, via) if n and n not in nodes_by_name]
+        if missing:
+            print(f"  warning: {scheme} {link} skipped, unknown node(s) {missing}")
+            continue
+        stop_names = [source] + ([via] if via else []) + [target]
+        stops = [(nodes_by_name[n]["lon"], nodes_by_name[n]["lat"]) for n in stop_names]
         coords = []
         for a, b in zip(stops, stops[1:]):
             coords.extend(arc(a, b, LINK_BULGE if not via else LINK_BULGE / 2)[: -1])
         coords.append([round(stops[-1][0], 5), round(stops[-1][1], 5)])
+        elev_from, elev_to = nodes_by_name[source].get("elev_m"), nodes_by_name[target].get("elev_m")
         features.append({"type": "Feature", "geometry": {"type": "LineString", "coordinates": coords},
-                         "properties": {"id": index, "link": link, "from": source, "to": target, "via": via,
-                                        "kind": kind, "status": status, "note": note}})
+                         "properties": {"id": index, "scheme": scheme, "link": link, "from": source, "to": target, "via": via,
+                                        "kind": kind, "status": status, "note": note, "source": LINK_SOURCES[scheme],
+                                        "straight_km": round(sum(geodesic_km(a, b) for a, b in zip(stops, stops[1:])), 1),
+                                        "elev_from": elev_from, "elev_to": elev_to,
+                                        "lift_m": (elev_to - elev_from) if elev_from is not None and elev_to is not None else None,
+                                        **years}})
     return {"type": "FeatureCollection", "features": features}
 FOOT_M = 0.3048
 
@@ -542,8 +612,10 @@ def parse_coord(text: str) -> tuple[float, float] | None:
             hemis.append(part.upper())
     if hemis and len(numbers) % 2 == 0 and numbers:
         half = len(numbers) // 2
-        lat = sum(v / 60 ** i for i, v in enumerate(numbers[:half]))
-        lon = sum(v / 60 ** i for i, v in enumerate(numbers[half:]))
+        first = sum(v / 60 ** i for i, v in enumerate(numbers[:half]))
+        second = sum(v / 60 ** i for i, v in enumerate(numbers[half:]))
+        # A few pages write longitude first ("78|8|47|E|15|57|49|N"); the hemisphere letters say which is which.
+        lat, lon = (second, first) if hemis[0] in ("E", "W") else (first, second)
         if "S" in hemis:
             lat = -lat
         if "W" in hemis:
@@ -586,6 +658,7 @@ def build_dams(state: gpd.GeoDataFrame, reaches: gpd.GeoDataFrame) -> list[dict]
             "url": "https://en.wikipedia.org/wiki/" + title.replace(" ", "_"),
         })
     dams.extend(osm_reservoir_dams())
+    dams.extend(wikidata_nodes())
     attach_inflow(dams, reaches)
     dams.sort(key=lambda d: (d["height"] is None, -(d["height"] or 0)))
     return dams
@@ -673,7 +746,6 @@ def main() -> None:
     for row in summary["districts"]:
         print(f"  {row['river']:9} {row['district']:18} mean {row['mean_q']:5} max {row['max_q']:5} m3/s over {row['length_km']} km")
     dams = build_dams(state, reaches)
-    (WEB_DATA / "dams.json").write_text(json.dumps(dams, indent=1, ensure_ascii=False), encoding="utf-8")
     print(f"dams: {len(dams)} ({sum(1 for d in dams if d['kind'] == 'barrage')} barrages, "
           f"{sum(1 for d in dams if d['height'] is None)} without height, "
           f"{sum(1 for d in dams if d['capacity_tmcft'] is None)} without capacity)")
@@ -682,10 +754,18 @@ def main() -> None:
               f"{dam['began'] or '----'}-{dam['opened'] or '----'}  cap {str(dam['capacity_tmcft'] or '-'):>7} tmcft  "
               f"inflow {str(dam['inflow_q'] or '-'):>5} m3/s {dam['inflow_name'] or ''}")
     pumphouses = load_pumphouses()
+    for node in [*dams, *pumphouses]:
+        elevation = sampler.median(node["lon"], node["lat"], NODE_ELEV_RADIUS_PX)
+        node["elev_m"] = round(elevation) if elevation is not None else None
+    (WEB_DATA / "dams.json").write_text(json.dumps(dams, indent=1, ensure_ascii=False), encoding="utf-8")
     (WEB_DATA / "pumphouses.json").write_text(json.dumps(pumphouses, indent=1, ensure_ascii=False), encoding="utf-8")
-    links = build_links(dams, pumphouses)
+    links = build_links({node["name"]: node for node in dams} | {node["osm_name"]: node for node in pumphouses})
     (WEB_DATA / "links.geojson").write_text(json.dumps(links), encoding="utf-8")
-    print(f"kaleshwaram: {len(pumphouses)} pump houses, {len(links['features'])} links")
+    print(f"links: {len(pumphouses)} pump houses/intakes, {len(links['features'])} links")
+    for f in links["features"]:
+        p = f["properties"]
+        print(f"  {p['scheme'][:20]:20} {p['link'][:22]:22} {p['from'][:26]:26} -> {p['to'][:28]:28} {p['status']:12} "
+              f"{p['straight_km']:6} km  {p['elev_from']} -> {p['elev_to']} m (lift {p['lift_m']})")
     contours = build_contours()
     write_geojson(contours, "contours")
     print(f"contours: {len(contours)} lines, {(WEB_DATA / 'contours.geojson').stat().st_size / 1e6:.1f} MB")
