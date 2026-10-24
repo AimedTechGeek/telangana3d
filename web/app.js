@@ -169,7 +169,7 @@ function buildStyle(theme) {
                  'line-dasharray': ['case', ['==', ['get', 'status'], 'operational'], ['literal', [1, 0]], ['literal', [2, 2]]] } },
       // Static arrows give direction on links still being built; operating links get moving chevrons on the canvas.
       { id: 'links-arrows', type: 'symbol', source: 'links', filter: ['!=', ['get', 'status'], 'operational'],
-        layout: { 'symbol-placement': 'line', 'symbol-spacing': 70, 'icon-image': 'arrow', 'icon-size': ['interpolate', ['linear'], ['zoom'], 6, 0.55, 10, 0.85],
+        layout: { 'symbol-placement': 'line', 'symbol-spacing': 70, 'icon-image': 'arrow', 'icon-size': ['interpolate', ['linear'], ['zoom'], 6, 0.4, 10, 0.6],
                   'icon-rotation-alignment': 'map', 'icon-allow-overlap': true, 'icon-ignore-placement': true, visibility: chipOn('links') },
         paint: { 'icon-opacity': 0.7 } },
     ],
@@ -424,7 +424,7 @@ function resizeBubbleCanvas() {
 }
 function clearBubbles() { bubbleCtx.clearRect(0, 0, bubbleCanvas.width, bubbleCanvas.height); }
 // Operating Kaleshwaram links carry moving chevrons so the direction of pumping is unmistakable.
-const LINK_CHEVRON = { spacingM: 4000, speedPx: 45, size: 7 };
+const LINK_CHEVRON = { spacingM: 4000, speedPx: 45, size: 4.5 };
 let linkTracks = [];
 
 function prepareLinkParticles(links) {
@@ -469,7 +469,7 @@ function drawChevron(x, y, angle, size, colour, alpha) {
   bubbleCtx.beginPath();
   bubbleCtx.moveTo(size, 0); bubbleCtx.lineTo(-size * 0.8, size * 0.9); bubbleCtx.lineTo(-size * 0.3, 0); bubbleCtx.lineTo(-size * 0.8, -size * 0.9); bubbleCtx.closePath();
   bubbleCtx.fillStyle = colour; bubbleCtx.fill();
-  bubbleCtx.lineWidth = 1.5; bubbleCtx.strokeStyle = 'rgba(255,255,255,0.95)'; bubbleCtx.lineJoin = 'round'; bubbleCtx.stroke();
+  bubbleCtx.lineWidth = 1; bubbleCtx.strokeStyle = 'rgba(255,255,255,0.95)'; bubbleCtx.lineJoin = 'round'; bubbleCtx.stroke();
   bubbleCtx.restore();
 }
 
