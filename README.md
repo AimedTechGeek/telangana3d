@@ -4,6 +4,62 @@ Interactive 3D relief map of Telangana in the browser (elevation above sea
 level, Godavari and Krishna river profiles, city elevations), plus a
 path-traced 3D terrain block and a native forge3d viewer.
 
+## At a glance
+
+| Theme | What the map shows | Where the numbers come from |
+|---|---|---|
+| Relief | 3D terrain with hillshade, 100 m contours, elevation under the cursor, city heights, Godavari and Krishna river-bed profiles | Copernicus GLO-90 DEM |
+| River flow | Every stream drawn and animated by its long-term average discharge; peak flow where each river leaves the state; flow per district | HydroRIVERS (HydroSHEDS) |
+| Water works | Dams, barrages, reservoirs, pump houses and the links that move water between them, each with status (operating, under construction, proposed), years, heights and capacity; a "Still to be built" list | Wikipedia and Wikidata infoboxes, OpenStreetMap, CAG audit, CWC replies, news (every entry cites its source) |
+| Canals | Canals, tunnels and pressure mains dug after 2014 or all of them; the Kaleshwaram network figures against what OSM has mapped | OpenStreetMap, CAG |
+| Tanks | About 4,800 village tanks and lakes; districts shaded by tanks restored under Mission Kakatiya 2015–18 | OpenStreetMap, Government of India report |
+| Groundwater | 1,605 monitoring wells with depth to water in May before (2010–14) and after 2014 (2015–23), the change per well and district, a state curve 2005–2023 | India-WRIS via India Data Portal |
+| Cropland | Share of land under crops before and after 2014 and the change, with cultivated area per district | GLAD global cropland (Potapov et al. 2021) |
+
+Every figure on the map is traceable in [DATA_SOURCES.md](DATA_SOURCES.md);
+sources that could not be reached are listed in
+[README_UNREACHABLE_SOURCES.md](README_UNREACHABLE_SOURCES.md).
+
+## Screenshots
+
+**Overview**: relief, river flow, dams and barrages with capacities, water links
+with moving chevrons, tanks as blue dots, and the collapsible cards on both
+sides.
+
+![Overview, light theme](docs/screenshots/01-overview-light.jpg)
+
+**Dark theme**: follows the OS setting, toggle in the top-left card.
+
+![Overview, dark theme](docs/screenshots/02-overview-dark.jpg)
+
+**Still to be built**: the Status filter keeps only the works under
+construction or proposed (dashed outline and cone), with the pending links
+and canals.
+
+![Still to be built filter](docs/screenshots/03-still-to-build.jpg)
+
+**Mission Kakatiya**: districts shaded and labelled by the tanks taken up for
+restoration in 2015–18, from the Government of India report.
+
+![Mission Kakatiya restoration by district](docs/screenshots/04-mission-kakatiya.jpg)
+
+**Groundwater before and after 2014**: wells and districts coloured by the
+change in May depth to water between 2010–14 and 2015–23 (red fell, blue
+rose); the Groundwater card carries the state curve and the district table.
+
+![Groundwater change since 2014](docs/screenshots/05-groundwater-change.jpg)
+
+**Cropland change**: more (blue) or less (red) land under crops between
+2008–11 and 2016–19, with the Cropland card's state figures.
+
+![Cropland change](docs/screenshots/06-cropland-change.jpg)
+
+**Kaleshwaram country up close**: Mid Manair, Ranganayaka Sagar and Mallanna
+Sagar with the links, the canals and tunnels dug after 2014 (magenta) and the
+real outlines of the tanks.
+
+![Kaleshwaram reservoirs, canals and tanks](docs/screenshots/07-kaleshwaram-canals-tanks.jpg)
+
 ## Web map (MapLibre, runs locally)
 
 ```powershell
