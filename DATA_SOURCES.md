@@ -253,8 +253,22 @@ announced, not a forecast.
   entry names a place (`approx`): the OpenStreetMap village or tank centre
   from Nominatim (https://nominatim.openstreetmap.org, ODbL) stands in for
   the structure, which is why those markers carry a dotted ring and their
-  links omit terrain heights. Overpass was unavailable (timeouts, 2026-10-24),
-  so no structure outlines could be taken from OSM.
+  links omit terrain heights. Overpass area queries timed out all day
+  (2026-10-24), so no outlines of these reservoirs could be taken from OSM.
+- **OpenStreetMap works under construction** (`osm_construction.json`,
+  `OVERPASS_CONSTRUCTION_QUERY` in `fetch_data.py`, ODbL as in source 4): a
+  bounding-box query for `construction=dam|reservoir|weir|pumping_station`,
+  `waterway=dam|weir` with `construction`, and every
+  `man_made=pumping_station` around the state (36 features, fetched
+  2026-10-24). It supplies, at surveyed positions: the four Sitarama pump
+  houses ("Pump house - 1" … "Pump House - 4", the last tagged
+  `landuse=construction`, note "SRLIP - Package no. 11"), drawn as a lift
+  chain from the Sitamma Sagar barrage and all marked under construction
+  because the scheme has delivered no water; and the *Maikapet Reservoir*
+  (`construction=reservoir`, Kamareddy district), whose scheme and capacity no
+  source names. Nettempadu and Koilsagar stage pump houses are in the file but
+  not drawn (operating schemes without links); the unnamed Kaleshwaram pump
+  houses in it cannot be matched to names.
   - *Baswapur reservoir* (11.39 TMC per the Kaleshwaram DPR as quoted in a
     CWC RTI reply, https://cwc.gov.in/sites/default/files/reply-rti-shri-srinivas-rao-cwcnd-00108-2.pdf;
     R&R not started per the CAG's 2024 report,

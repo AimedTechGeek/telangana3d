@@ -496,8 +496,8 @@ PENDING_NOTES = [
      "note": "240 km main canal and 95 km of tunnels in all; completion target December 2027", "url": NEWS["prlis"]},
     {"scheme": "Dindi lift scheme", "item": "Nakkalagandi, Shivannagudem and the other reservoirs", "kind": "reservoirs", "status": "under construction",
      "note": "Nine reservoirs including Nakkalagandi (Dindi balancing reservoir, 7.5 TMC) along a 66 km canal with a 5.5 km tunnel; works since 2015, no water yet (October 2026)", "url": NEWS["dindi"]},
-    {"scheme": "Sitarama lift scheme", "item": "Pump houses and main canals", "kind": "pump houses", "status": "under construction",
-     "note": "Three pump houses and the Dummugudem–Sagar tail pond canals; the canals tagged under construction in OpenStreetMap are these", "url": WIKI + "Sitamma_Sagar_Barrage"},
+    {"scheme": "Sitarama lift scheme", "item": "Main canals and distributaries", "kind": "canals", "status": "under construction",
+     "note": "The Dummugudem–Sagar tail pond canals for 9.36 lakh acres; the canals tagged under construction in OpenStreetMap are these", "url": WIKI + "Sitamma_Sagar_Barrage"},
     {"scheme": "Mukteshwar (Chinna Kaleshwaram)", "item": "Lift from the Godavari at Kannepalli, Nizamabad", "kind": "lift scheme", "status": "proposed",
      "note": "Techno-economic viability accepted by the Centre's advisory committee in 2024; ₹545 crore estimate", "url": NEWS["mukteshwar"]},
     {"scheme": "Kalwakurthy, Nettempadu, Bhima, Koilsagar", "item": "Remaining canals and distributaries", "kind": "canals", "status": "under construction",
@@ -577,6 +577,14 @@ LINKS = [
      {"planned": None, "began": None, "water": 2025, "done": None, "target": 2027}, "49 km tunnel (Package III) with leakage repairs and the Devannapet pump house, seven of ten pumps running (July 2026); phases I and II irrigate since the 2000s; full operation targeted for 2027"),
     ("Kaleshwaram", "Link V", "Konda Pochamma Sagar", "Baswapur reservoir", None, "canal", "planned",
      {"planned": 2016, "began": None, "water": None, "done": None}, "gravity canals and a 1.2 km tunnel from the Link IV anicut to the Gandhamalla (no published coordinates) and Baswapur reservoirs, 2.4 lakh acres towards Chityala"),
+    ("Sitarama lift scheme", "Lift chain", "Sitamma Sagar Barrage", "Sitarama pump house 1", None, "canal", "in progress",
+     {"planned": 2016, "began": None, "water": None, "done": None, "target": 2026}, "gravity canal from the barrage pool to the first pump house (positions from OpenStreetMap); the scheme merges the Rajiv Dummugudem and Indira Sagar Rudramkota lifts for 9.36 lakh acres"),
+    ("Sitarama lift scheme", "Lift chain", "Sitarama pump house 1", "Sitarama pump house 2", None, "lift", "in progress",
+     {"planned": 2016, "began": None, "water": None, "done": None, "target": 2026}, "second lift towards the Khammam plains"),
+    ("Sitarama lift scheme", "Lift chain", "Sitarama pump house 2", "Sitarama pump house 3", None, "lift", "in progress",
+     {"planned": 2016, "began": None, "water": None, "done": None, "target": 2026}, "third lift"),
+    ("Sitarama lift scheme", "Lift chain", "Sitarama pump house 3", "Sitarama pump house 4", None, "lift", "in progress",
+     {"planned": 2016, "began": None, "water": None, "done": None, "target": 2026}, "fourth pump house (Package 11), tagged under construction in OpenStreetMap; the canals continue towards the Nagarjuna Sagar tail pond"),
 ]
 LINK_SOURCES = {
     "Kaleshwaram": KALESHWARAM_URL, "Sriram Sagar canals": WIKI + "Sriram_Sagar_Project",
@@ -585,6 +593,7 @@ LINK_SOURCES = {
     "Palamuru-Rangareddy": WIKI + "Palamuru-Rangareddy_Lift_Irrigation_Scheme",
     "Dindi lift scheme": WIKI + "R._Vidyasagar_Rao_Dindi_Lift_Irrigation_Scheme",
     "Devadula lift scheme": WIKI + "J._Chokka_Rao_Devadula_Lift_Irrigation_Scheme",
+    "Sitarama lift scheme": WIKI + "Sitamma_Sagar_Barrage",
 }
 LINK_BULGE = 0.12                   # schematic arc height as a fraction of the straight distance
 NODE_ELEV_RADIUS_PX = 2             # 400 m window for a structure's elevation
@@ -618,7 +627,26 @@ def load_pumphouses() -> list[dict]:
         houses.append({"name": name, "osm_name": name, "scheme": None, "power": None, "since": None,
                        "lon": node["lon"], "lat": node["lat"], "source": node["source"], "kind": node["kind"],
                        "status": node.get("status", "operational"), "approx": node.get("approx")})
+    # Sitarama's pump houses are mapped as "Pump house - N" (one tagged landuse=construction, Package 11);
+    # the scheme has delivered no water yet, so all four count as under construction.
+    for element in osm_construction():
+        tags = element.get("tags", {})
+        match = re.fullmatch(r"pump house - (\d)", (tags.get("name") or "").lower())
+        if match and tags.get("man_made") == "pumping_station" and element.get("center", element)["lon"] > 80.5:
+            centre = element.get("center", element)
+            houses.append({"name": f"Sitarama pump house {match.group(1)}", "osm_name": f"Sitarama pump house {match.group(1)}",
+                           "scheme": "Sitarama lift scheme", "power": None, "since": None, "lon": round(centre["lon"], 5),
+                           "lat": round(centre["lat"], 5), "source": "OpenStreetMap", "kind": "pump", "status": "under construction", "approx": None})
     return houses
+
+
+def osm_construction() -> list[dict]:
+    """Water works tagged under construction and pumping stations around the state (osm_construction.json)."""
+    path = RAW / "osm_construction.json"
+    if not path.exists():
+        print("  warning: data/raw/osm_construction.json missing (fetch_data.py); Sitarama pump houses not built")
+        return []
+    return json.loads(path.read_text(encoding="utf-8"))["elements"]
 
 
 def wikidata_nodes() -> list[dict]:
@@ -789,6 +817,14 @@ def build_dams(state: gpd.GeoDataFrame, reaches: gpd.GeoDataFrame) -> list[dict]
     dams.extend(osm_reservoir_dams())
     dams.extend(wikidata_nodes())
     dams.extend(copy.deepcopy(EXTRA_STRUCTURES))
+    # Named reservoirs OSM tags as under construction (landuse=construction + construction=reservoir) inside the state.
+    for element in osm_construction():
+        tags, centre = element.get("tags", {}), element.get("center", element)
+        if tags.get("construction") == "reservoir" and tags.get("name") and corridor.contains(Point(to_dem.transform(centre["lon"], centre["lat"]))):
+            dams.append({"name": tags["name"], "kind": "dam", "lon": round(centre["lon"], 5), "lat": round(centre["lat"], 5),
+                         "status": "under construction", "river": "scheme not identified (off-river)",
+                         "note": "Tagged in OpenStreetMap as a reservoir under construction; no source names its scheme or capacity",
+                         "url": f"https://www.openstreetmap.org/{element['type']}/{element['id']}"})
     for dam in dams:
         for key, default in (("status", "operational"), ("scheme", None), ("planned", None), ("target", None),
                              ("note", None), ("approx", None), ("height", None), ("river", None), ("began", None),

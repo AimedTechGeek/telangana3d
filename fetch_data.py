@@ -76,6 +76,16 @@ OVERPASS_PUMPHOUSES_QUERY = (
     '(nwr["man_made"="pumping_station"]["name"~"Medigadda|Annaram|Sundilla",i](area.a););'
     'out center tags;'
 )
+# Water works tagged as under construction, and every pumping station, in a box around the
+# state (an area filter made Overpass time out); the Sitarama pump houses come from here.
+OVERPASS_CONSTRUCTION_QUERY = (
+    '[out:json][timeout:90];'
+    '(nwr["construction"~"^(dam|reservoir|weir|pumping_station|water_works)$"](15.6,77.0,19.95,81.6);'
+    'nwr["waterway"~"^(dam|weir)$"]["construction"](15.6,77.0,19.95,81.6);'
+    'nwr["man_made"="pumping_station"](15.6,77.0,19.95,81.6);'
+    'nwr["landuse"="construction"]["construction:landuse"~"reservoir|basin"](15.6,77.0,19.95,81.6););'
+    'out center tags;'
+)
 # Overpass rejects requests without a descriptive User-Agent.
 OVERPASS_HEADERS = {"User-Agent": "telangana3d/1.0 (terrain map)", "Accept": "application/json"}
 TIMEOUT_S = 120
@@ -134,6 +144,7 @@ def wikitext(titles: list[str]) -> dict[str, str | None]:
 def fetch_osm_reservoirs() -> None:
     download(OVERPASS_URL, RAW / "osm_reservoirs.json", params={"data": OVERPASS_RESERVOIRS_QUERY}, headers=OVERPASS_HEADERS)
     download(OVERPASS_URL, RAW / "osm_pumphouses.json", params={"data": OVERPASS_PUMPHOUSES_QUERY}, headers=OVERPASS_HEADERS)
+    download(OVERPASS_URL, RAW / "osm_construction.json", params={"data": OVERPASS_CONSTRUCTION_QUERY}, headers=OVERPASS_HEADERS)
     # ~1,600 ways with geometry; the public Overpass servers are often busy, so retry on failure.
     download(OVERPASS_URL, RAW / "osm_canals.json", params={"data": OVERPASS_CANALS_QUERY}, headers=OVERPASS_HEADERS)
     download(OVERPASS_URL, RAW / "osm_waterpipes.json", params={"data": OVERPASS_WATERPIPES_QUERY}, headers=OVERPASS_HEADERS)

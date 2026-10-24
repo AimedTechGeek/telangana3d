@@ -57,7 +57,8 @@ uv run python serve.py      # http://127.0.0.1:8765/ opens in your browser
   ring. A "Still to be built" list in the left panel groups them by scheme
   (Kaleshwaram Link III/V/VI/VII and Baswapur, the Palamuru-Rangareddy
   reservoirs and tunnels, Dindi, the SLBC tunnel, Devadula Phase III, Sitamma
-  Sagar, Chanaka–Korata, Gouravelli, Tummidihetti, Icchampally …) with the
+  Sagar and the four Sitarama pump houses, Chanaka–Korata, Gouravelli,
+  Tummidihetti, Icchampally …) with the
   years and last announced target; works with no published location are
   listed in grey
 - 27 cities and towns ranked by elevation, with the lowest river beds for
