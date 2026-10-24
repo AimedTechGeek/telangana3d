@@ -77,7 +77,9 @@ rotate. It has no mouse pan, so type a place name at the prompt, `all`, `list`,
 ## Rebuild the data
 
 ```powershell
-uv run python fetch_data.py       # downloads into data/raw (~210 MB)
+uv run python fetch_data.py       # downloads into data/raw (~250 MB); the small OSM, Wikipedia
+                                  # and Wikidata snapshots are committed, so only the big
+                                  # stable files (DEM, HydroRIVERS, boundaries, GLAD) are fetched
 uv run python prepare_data.py     # mosaic, reproject, clip -> data/
 uv run python make_overlay.py     # map colours and lines -> data/overlay.png (forge3d)
 uv run python build_web_data.py   # terrain tiles, profiles, contours -> web/ (~120 MB)

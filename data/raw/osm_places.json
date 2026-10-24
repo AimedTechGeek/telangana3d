@@ -1,0 +1,2320 @@
+{
+  "version": 0.6,
+  "generator": "Overpass API 0.7.62.11 87bfad18",
+  "osm3s": {
+    "timestamp_osm_base": "2026-10-22T19:18:23Z",
+    "timestamp_areas_base": "2026-10-22T15:16:01Z",
+    "copyright": "The data included in this document is from www.openstreetmap.org. The data is made available under ODbL."
+  },
+  "elements": [
+
+{
+  "type": "node",
+  "id": 245634035,
+  "lat": 16.0154973,
+  "lon": 77.6665729,
+  "tags": {
+    "name": "Aija",
+    "name:kn": "ಐಜ",
+    "name:ml": "ഐസ",
+    "name:te": "ఐజ",
+    "place": "town",
+    "population": "70689",
+    "wikidata": "Q3416819",
+    "wikipedia": "en:Ieeja"
+  }
+},
+{
+  "type": "node",
+  "id": 245636442,
+  "lat": 16.5010823,
+  "lon": 77.5133174,
+  "tags": {
+    "name": "Makhtal",
+    "name:kn": "ಮಖ್ತಲ್",
+    "name:ml": "മഖ്തൽ",
+    "name:te": "మఖ్తల్",
+    "place": "town",
+    "population": "20000",
+    "wikidata": "Q6739432"
+  }
+},
+{
+  "type": "node",
+  "id": 245638244,
+  "lat": 16.7477612,
+  "lon": 77.4949954,
+  "tags": {
+    "name": "Narayanpet",
+    "name:kn": "ನಾರಾಯಣಪೇಟೆ",
+    "name:ml": "നാരായൺപേട്ട്",
+    "name:te": "నారాయణపేట",
+    "place": "town",
+    "postal_code": "509210",
+    "wikidata": "Q2575718",
+    "wikipedia": "en:Narayanpet"
+  }
+},
+{
+  "type": "node",
+  "id": 245638257,
+  "lat": 16.7434538,
+  "lon": 77.9923191,
+  "tags": {
+    "name": "Mahbubnagar",
+    "name:ar": "محبوب ناغار",
+    "name:bn": "মাহবুবনগর",
+    "name:en": "Mahbubnagar",
+    "name:fa": "محبوب نگر",
+    "name:hi": "महबूबनगर",
+    "name:ja": "マフブーブナガル",
+    "name:kn": "ಮಹಬೂಬ್ ನಗರ",
+    "name:ml": "മഹബൂബ്നഗർ",
+    "name:ru": "Махбубнагар",
+    "name:ta": "மகபூப்நகர்",
+    "name:te": "మహబూబ్నగర్",
+    "name:ur": "محبوب نگر",
+    "place": "city",
+    "population": "157700",
+    "postal_code": "509001",
+    "wikidata": "Q2768192",
+    "wikipedia": "en:Mahbubnagar"
+  }
+},
+{
+  "type": "node",
+  "id": 245638776,
+  "lat": 16.8710119,
+  "lon": 79.5617353,
+  "tags": {
+    "name": "Miryalaguda",
+    "name:ar": "ميريالاغودا",
+    "name:en": "Miryalaguda",
+    "name:fa": "مریالاگودا",
+    "name:hi": "मिरयालगुड़ा",
+    "name:kn": "ಮಿರ್ಯಾಲಗೂಡ",
+    "name:ml": "മിരിയാലഗുഡ",
+    "name:pa": "ਮਿਰਯਾਲਗੁੜਾ",
+    "name:ru": "Мириялагуда",
+    "name:ta": "மிரியலகுடா",
+    "name:te": "మిర్యాలగూడ",
+    "name:zh": "密亚拉古达",
+    "place": "city",
+    "population": "103900",
+    "postal_code": "508200",
+    "wikidata": "Q15528101"
+  }
+},
+{
+  "type": "node",
+  "id": 245639211,
+  "lat": 16.9947802,
+  "lon": 79.9749826,
+  "tags": {
+    "alt_name": "Kodad",
+    "name": "Kodada",
+    "name:kn": "ಕೋದಾಡ",
+    "name:ml": "കോദാട",
+    "name:te": "కోదాడ",
+    "place": "town",
+    "population": "5000",
+    "postal_code": "508206",
+    "wikidata": "Q3250597"
+  }
+},
+{
+  "type": "node",
+  "id": 245639494,
+  "lat": 17.0504406,
+  "lon": 79.2669235,
+  "tags": {
+    "name": "Nalgonda",
+    "name:ar": "نالغوندا",
+    "name:bpy": "নলগনদা",
+    "name:en": "Nalgonda",
+    "name:fa": "نلگنده",
+    "name:hi": "नलगोंडा",
+    "name:ja": "ナルゴンダ",
+    "name:kn": "ನಲ್ಗೊಂಡ",
+    "name:ml": "നൽഗൊണ്ട",
+    "name:new": "नलगोंडा",
+    "name:ta": "நல்கொண்டா",
+    "name:te": "నల్లగొండ",
+    "name:ur": "نلگنڈہ",
+    "name:zh": "纳尔戈恩达",
+    "place": "city",
+    "population": "135163",
+    "postal_code": "508001",
+    "wikidata": "Q1949850",
+    "wikipedia": "en:Nalgonda"
+  }
+},
+{
+  "type": "node",
+  "id": 245640004,
+  "lat": 17.2255710,
+  "lon": 79.9554551,
+  "tags": {
+    "name": "Kusumanchi",
+    "name:kn": "ಕುಸುಮಾಂಚಿ",
+    "name:ml": "കുസുമഞ്ചി",
+    "name:te": "కుసుమంచి",
+    "place": "town",
+    "population": "10000",
+    "postal_code": "507159",
+    "wikidata": "Q3420749",
+    "wikipedia": "en:Kusumanchi"
+  }
+},
+{
+  "type": "node",
+  "id": 245640039,
+  "lat": 17.2314588,
+  "lon": 79.1293471,
+  "tags": {
+    "is_in": "Nalgonda, Andhra Pradesh",
+    "name": "Chityal",
+    "name:ml": "ചിത്യാൽ",
+    "name:new": "चिट्याल मण्डल",
+    "name:te": "చిట్యాల",
+    "place": "town",
+    "population": "5000",
+    "postal_code": "508114",
+    "source": "AND;Bing",
+    "wikidata": "Q3416958",
+    "wikipedia": "en:Chityal, Nalgonda"
+  }
+},
+{
+  "type": "node",
+  "id": 245640543,
+  "lat": 17.3605890,
+  "lon": 78.4740613,
+  "tags": {
+    "capital": "4",
+    "ele": "505",
+    "gns:dsg": "ADM2",
+    "gns:uni": "-2912533",
+    "is_capital": "state",
+    "name": "Hyderabad",
+    "name:ar": "حيدر آباد",
+    "name:az": "Heydərabad",
+    "name:be": "Хайдарабад",
+    "name:bg": "Хайдарабад",
+    "name:bn": "হায়দরাবাদ",
+    "name:cs": "Hajdarábád",
+    "name:de": "Hyderabad",
+    "name:el": "Χαϊντεραμπάντ",
+    "name:en": "Hyderabad",
+    "name:es": "Hyderabad",
+    "name:fa": "حیدرآباد",
+    "name:fr": "Hyderabad",
+    "name:he": "היידראבאד",
+    "name:hi": "हैदराबाद",
+    "name:hr": "Hyderabad",
+    "name:hu": "Haidarábád",
+    "name:hy": "Հայդարաբադ",
+    "name:ja": "ハイデラバード",
+    "name:ka": "ჰაიდარაბადი",
+    "name:kn": "ಹೈದರಾಬಾದ್",
+    "name:ko": "하이데라바드",
+    "name:ml": "ഹൈദരാബാദ്",
+    "name:mr": "हैदराबाद",
+    "name:ne": "हैदराबाद",
+    "name:nl": "Haiderabad",
+    "name:oc": "Haidarabad",
+    "name:pl": "Hajdarabad",
+    "name:pt": "Haiderabade",
+    "name:ru": "Хайдарабад",
+    "name:sa": "भाग्यनगरम्",
+    "name:sat": "ᱦᱟᱭᱫᱽᱨᱟᱵᱟᱫᱽ",
+    "name:sk": "Hajdarábad",
+    "name:sl": "Hajderabad",
+    "name:sr": "Хајдерабад",
+    "name:ta": "ஐதராபாத்து",
+    "name:te": "హైదరాబాదు",
+    "name:tr": "Haydarâbâd",
+    "name:tt": "Хәйдәрабад",
+    "name:uk": "Гайдарабад",
+    "name:ur": "حیدرآباد",
+    "name:zh": "海得拉巴",
+    "note": "It is best to have city nodes in otherwise empty mapping space. Definitely not on the Charminar.",
+    "place": "city",
+    "place:cca": "a1",
+    "population": "6809970",
+    "population:date": "2011",
+    "source": "GNS",
+    "source:name:oc": "Lo Congrès",
+    "wikidata": "Q1361"
+  }
+},
+{
+  "type": "node",
+  "id": 245641119,
+  "lat": 17.5996678,
+  "lon": 77.7169218,
+  "tags": {
+    "name": "Kohir",
+    "name:kn": "ಕೋಹಿರ್",
+    "name:ml": "കോഹിർ",
+    "name:te": "కోహిర్‌",
+    "place": "town",
+    "postal_code": "502210",
+    "wikidata": "Q3418888",
+    "wikipedia": "en:Kohir"
+  }
+},
+{
+  "type": "node",
+  "id": 245641220,
+  "lat": 17.5976713,
+  "lon": 80.7057072,
+  "tags": {
+    "name": "Palwancha",
+    "name:kn": "ಪಾಲವಂಚ",
+    "name:te": "పాల్వంచ",
+    "place": "town",
+    "population": "69088",
+    "postal_code": "507115",
+    "source": "AND",
+    "wikidata": "Q772160",
+    "wikipedia": "en:Palwancha"
+  }
+},
+{
+  "type": "node",
+  "id": 245642040,
+  "lat": 17.7733267,
+  "lon": 79.5761394,
+  "tags": {
+    "name": "Wardhannapet",
+    "name:kn": "ವರ್ಧನ್ನಪೇಟೆ",
+    "name:ml": "വർധന്നപേട്ട",
+    "name:te": "వర్ధన్నపేట",
+    "place": "town",
+    "population": "5000",
+    "postal_code": "506313",
+    "source": "AND",
+    "wikidata": "Q7969158"
+  }
+},
+{
+  "type": "node",
+  "id": 245642240,
+  "lat": 17.8406731,
+  "lon": 78.4777406,
+  "tags": {
+    "name": "Tupran",
+    "name:kn": "ತೂಪ್ರಾನ್",
+    "name:ml": "തൂപ്രാൻ",
+    "name:te": "తూప్రాన్",
+    "place": "town",
+    "postal_code": "502334",
+    "wikidata": "Q3428157"
+  }
+},
+{
+  "type": "node",
+  "id": 245642273,
+  "lat": 17.8520633,
+  "lon": 79.3766411,
+  "tags": {
+    "name": "Ghanpur",
+    "name:kn": "ಘಾನ್ಪುರ್",
+    "name:ml": "ഘൻപൂർ",
+    "name:te": "ఘనపూర్",
+    "place": "town",
+    "population": "5000",
+    "postal_code": "506345",
+    "wikidata": "Q5555593",
+    "wikipedia": "en:Ghanpur"
+  }
+},
+{
+  "type": "node",
+  "id": 245642298,
+  "lat": 17.8456745,
+  "lon": 78.6828741,
+  "tags": {
+    "name": "Gajwel",
+    "name:kn": "ಗಜ್ವೇಲ್",
+    "name:ml": "ഗജ്വേൽ",
+    "name:te": "గజ్వేల్",
+    "place": "town",
+    "population": "1000",
+    "postal_code": "502278",
+    "source": "AND;Bing;wikipedia",
+    "wikidata": "Q5517641",
+    "wikipedia": "en:Gajwel"
+  }
+},
+{
+  "type": "node",
+  "id": 245643698,
+  "lat": 18.2018461,
+  "lon": 79.3956971,
+  "tags": {
+    "name": "Huzurabad",
+    "name:kn": "ಹುಜುರ್ಬಾದ್",
+    "name:te": "హుజూరాబాద్",
+    "place": "town",
+    "population": "50000",
+    "postal_code": "505498",
+    "wikidata": "Q3430080",
+    "wikipedia": "en:Huzurabad"
+  }
+},
+{
+  "type": "node",
+  "id": 245643711,
+  "lat": 18.1983314,
+  "lon": 79.7010601,
+  "tags": {
+    "name": "Parkal",
+    "name:kn": "ಪರಕಾಲ",
+    "name:ml": "പർക്കാൽ",
+    "name:te": "పరకాల",
+    "place": "town",
+    "population": "1000",
+    "postal_code": "506164",
+    "source": "AND",
+    "wikidata": "Q7138183",
+    "wikipedia": "en:Parkal"
+  }
+},
+{
+  "type": "node",
+  "id": 245644568,
+  "lat": 18.3897573,
+  "lon": 78.8085973,
+  "tags": {
+    "alt_name": "Sirsilla",
+    "name": "Sircilla",
+    "name:kn": "ಸಿರಿಸಿಲ್ಲ",
+    "name:ml": "സിർസില്ല",
+    "name:te": "సిరిసిల్ల",
+    "place": "town",
+    "population": "92910",
+    "population:date": "2011",
+    "source": "AND",
+    "source:population": "https://en.wikipedia.org/wiki/Sircilla",
+    "wikidata": "Q2563435",
+    "wikipedia": "en:Sircilla"
+  }
+},
+{
+  "type": "node",
+  "id": 245649847,
+  "lat": 18.6177235,
+  "lon": 79.3868069,
+  "tags": {
+    "name": "Peddapalli",
+    "name:kn": "ಪೆದ್ದಪಲ್ಲಿ",
+    "name:ml": "പെദ്ദപ്പള്ളി",
+    "name:te": "పెద్దపల్లి",
+    "place": "town",
+    "population": "5000",
+    "postal_code": "505100",
+    "source": "AND",
+    "wikidata": "Q7159047",
+    "wikipedia": "en:Peddapalli"
+  }
+},
+{
+  "type": "node",
+  "id": 245650150,
+  "lat": 18.6731912,
+  "lon": 78.0978195,
+  "tags": {
+    "name": "Nizamabad",
+    "name:ar": "نظام أباد",
+    "name:bn": "নিজামাবাদ",
+    "name:en": "Nizamabad",
+    "name:fa": "نظام آباد",
+    "name:hi": "निज़ामाबाद",
+    "name:ja": "ニザーマーバード",
+    "name:kn": "ನಿಜಾಮಾಬಾದು",
+    "name:ml": "നിസാമാബാദ്",
+    "name:pa": "ਨਿਜ਼ਾਮਾਬਾਦ",
+    "name:ru": "Низамабад",
+    "name:te": "నిజామాబాదు",
+    "name:ur": "نظام آباد",
+    "place": "city",
+    "population": "100000",
+    "postal_code": "503001",
+    "wikidata": "Q41473",
+    "wikipedia": "en:Nizamabad, Telangana"
+  }
+},
+{
+  "type": "node",
+  "id": 245650192,
+  "lat": 18.6536941,
+  "lon": 77.8936802,
+  "tags": {
+    "district": "Nizamabad",
+    "name": "Bodhan",
+    "name:kn": "ಬೊದಾನ್",
+    "name:ml": "ബോധൻ",
+    "name:te": "బోధన్",
+    "name:ur": "بودھن",
+    "place": "town",
+    "population": "10000",
+    "postal_code": "503185",
+    "wikidata": "Q859167",
+    "wikipedia": "en:Bodhan"
+  }
+},
+{
+  "type": "node",
+  "id": 245651836,
+  "lat": 18.7957081,
+  "lon": 78.9161959,
+  "tags": {
+    "AND_a_nosr_p": "10012753",
+    "alt_name": "Tower Circle",
+    "name": "Jagtial",
+    "name:bpy": "জগতিয়াল",
+    "name:hi": "जगित्याल",
+    "name:ja": "ジャグティアル",
+    "name:kn": "ಜಗಿತ್ಯಾಲ",
+    "name:ml": "ജഗിത്യാൽ",
+    "name:mr": "जगत्याल",
+    "name:new": "जग्तियाल",
+    "name:ru": "Джагтиял",
+    "name:te": "జగిత్యాల",
+    "name:zh": "贾格蒂亚尔",
+    "place": "town",
+    "population": "171825",
+    "postal_code": "505327",
+    "source": "AND, Bing, wikipedia",
+    "wikidata": "Q2016650",
+    "wikipedia": "en:Jagtial"
+  }
+},
+{
+  "type": "node",
+  "id": 245652158,
+  "lat": 18.8488213,
+  "lon": 78.6258901,
+  "tags": {
+    "AND_a_nosr_p": "10012838",
+    "name": "Metpalli",
+    "name:kn": "ಮೇಟಪಲ್ಲಿ",
+    "name:te": "మెట్పల్లి",
+    "place": "town",
+    "population": "5000",
+    "postal_code": "505325",
+    "source": "AND",
+    "wikidata": "Q15253263",
+    "wikipedia": "en:Metpally"
+  }
+},
+{
+  "type": "node",
+  "id": 245664076,
+  "lat": 19.0639032,
+  "lon": 79.4873121,
+  "tags": {
+    "name": "Bellampalli",
+    "name:hi": "बेल्लमपल्ली",
+    "name:kn": "ಬೆಲ್ಲಂಪಲ್ಲಿ",
+    "name:ml": "ബെല്ലംപള്ളി",
+    "name:te": "బెల్లంపల్లి",
+    "place": "town",
+    "postal_code": "504251",
+    "source": "AND",
+    "wikidata": "Q759677"
+  }
+},
+{
+  "type": "node",
+  "id": 245683856,
+  "lat": 19.3695940,
+  "lon": 78.7736687,
+  "tags": {
+    "name": "Utnur",
+    "name:kn": "ಉಟ್ನೂರ್",
+    "name:ml": "ഉട്ട്നൂർ",
+    "name:te": "ఉట్నూర్",
+    "place": "town",
+    "postal_code": "504311",
+    "wikidata": "Q3412853",
+    "wikipedia": "en:Utnoor"
+  }
+},
+{
+  "type": "node",
+  "id": 245683866,
+  "lat": 19.3593461,
+  "lon": 79.2960404,
+  "tags": {
+    "AND_a_nosr_p": "10012830",
+    "name": "Asifabad",
+    "name:hi": "आसिफाबाद",
+    "name:kn": "ಆಸಿಫಾಬಾದ್",
+    "name:ml": "ആസിഫാബാദ്",
+    "name:te": "ఆసిఫాబాద్",
+    "place": "town",
+    "population": "5000",
+    "postal_code": "504293",
+    "source": "AND",
+    "wikidata": "Q589709"
+  }
+},
+{
+  "type": "node",
+  "id": 571122167,
+  "lat": 17.1405328,
+  "lon": 79.6225105,
+  "tags": {
+    "alt_name:ur": "سوریا پیٹ",
+    "name": "Suryapet",
+    "name:ar": "سوريابت",
+    "name:en": "Suryapet",
+    "name:fa": "سوریاپیت",
+    "name:hi": "सूर्यापेट",
+    "name:ja": "サーヤペット",
+    "name:kn": "ಸುರಿಯಾಪೆಟ್",
+    "name:ml": "സൂര്യപേട്ട",
+    "name:pa": "ਸੂਰਿਆਪੇਟ",
+    "name:ru": "Сурьяпет",
+    "name:ta": "சூர்யபேட்டை",
+    "name:te": "సూర్యాపేట",
+    "name:ur": "سوریہ پیٹ",
+    "name:zh": "苏里亚佩特",
+    "place": "city",
+    "population": "105500",
+    "postal_code": "508213",
+    "wikidata": "Q2573090",
+    "wikipedia": "en:Suryapet"
+  }
+},
+{
+  "type": "node",
+  "id": 571122168,
+  "lat": 17.2465351,
+  "lon": 80.1500326,
+  "tags": {
+    "name": "Khammam",
+    "name:ar": "خامام",
+    "name:en": "Khammam",
+    "name:fa": "خمم",
+    "name:hi": "खम्मम",
+    "name:kn": "ಖಮ್ಮಂ",
+    "name:ml": "ഖമ്മം",
+    "name:mr": "खम्मम",
+    "name:or": "ଖମ୍ମମ",
+    "name:pa": "ਖੱਮਮ",
+    "name:ru": "Кхаммам",
+    "name:ta": "கம்மம்",
+    "name:te": "ఖమ్మం",
+    "name:ur": "کھمم",
+    "old_name": "Stambhadri",
+    "place": "city",
+    "population": "184200",
+    "wikidata": "Q1921496",
+    "wikipedia": "en:Khammam"
+  }
+},
+{
+  "type": "node",
+  "id": 571122170,
+  "lat": 17.2181818,
+  "lon": 80.4199516,
+  "tags": {
+    "name": "Tallada",
+    "name:kn": "ತಲ್ಲಾಡ",
+    "name:te": "తల్లాడ",
+    "place": "town",
+    "population": "5000",
+    "postal_code": "507167",
+    "source": "AND",
+    "wikidata": "Q3416929",
+    "wikipedia": "en:Thallada"
+  }
+},
+{
+  "type": "node",
+  "id": 571122172,
+  "lat": 17.6688019,
+  "lon": 80.8940083,
+  "tags": {
+    "name": "Bhadrachalam",
+    "name:kn": "ಭದ್ರಾಚಲಂ",
+    "name:ml": "ഭദ്രാചലം",
+    "name:te": "భద్రాచలం",
+    "place": "town",
+    "population": "42650",
+    "postal_code": "507111",
+    "wikidata": "Q759204",
+    "wikipedia": "en:Bhadrachalam"
+  }
+},
+{
+  "type": "node",
+  "id": 571141734,
+  "lat": 17.4747737,
+  "lon": 78.7963608,
+  "tags": {
+    "name": "Bibinagar",
+    "name:hi": "बीबीनगर",
+    "name:kn": "ಬೀಬೀನಗರ್",
+    "name:ml": "ബീബീനഗർ",
+    "name:te": "బీబీనగర్",
+    "name:ur": "بی بی نگر",
+    "place": "town",
+    "postal_code": "508126",
+    "wikidata": "Q59072363",
+    "wikipedia": "en:Bibinagar"
+  }
+},
+{
+  "type": "node",
+  "id": 571352396,
+  "lat": 17.6155151,
+  "lon": 78.0817225,
+  "tags": {
+    "name": "Sangareddy",
+    "name:kn": "ಸಂಗರೆಡ್ಡಿ",
+    "name:ml": "സംഗറെഡ്ഡി",
+    "name:te": "సంగారెడ్డి",
+    "place": "town",
+    "population": "5000",
+    "postal_code": "502001",
+    "wikidata": "Q2341381",
+    "wikipedia": "en:Sangareddy"
+  }
+},
+{
+  "type": "node",
+  "id": 571352398,
+  "lat": 17.6211902,
+  "lon": 77.9503264,
+  "tags": {
+    "name": "Sadasivpet",
+    "name:kn": "ಸದಾಶಿವಪೆಟೆ",
+    "name:ml": "സദാശിവപേട്ട",
+    "name:ta": "சதாசிவப்பேட்டை",
+    "name:te": "సదాశివపేట్",
+    "name:ur": "سداسیوپیٹ",
+    "place": "town",
+    "population": "80000",
+    "postal_code": "502291",
+    "wikidata": "Q2229196",
+    "wikipedia": "en:Sadasivpet"
+  }
+},
+{
+  "type": "node",
+  "id": 571398145,
+  "lat": 17.0671702,
+  "lon": 78.2045948,
+  "tags": {
+    "AND_a_nosr_p": "10006215",
+    "name": "Shadnagar",
+    "name:kn": "ಶಾದ್ ನಗರ್",
+    "name:ml": "ഷാദ്‌നഗർ",
+    "name:te": "షాద్ నగర్",
+    "place": "town",
+    "population": "45000",
+    "source": "AND",
+    "wikidata": "Q7460412",
+    "wikipedia": "en:Shadnagar"
+  }
+},
+{
+  "type": "node",
+  "id": 603465594,
+  "lat": 16.2347032,
+  "lon": 77.7946371,
+  "tags": {
+    "name": "Gadwal",
+    "name:kn": "ಗದ್ವಾಲ",
+    "name:ml": "ഗദ്വാൽ",
+    "name:ru": "Гадвал",
+    "name:te": "గద్వాల",
+    "name:uk": "Ґадвал",
+    "place": "town",
+    "population": "50000",
+    "postal_code": "509100",
+    "wikidata": "Q1525224",
+    "wikipedia": "en:Gadwal"
+  }
+},
+{
+  "type": "node",
+  "id": 660559722,
+  "lat": 17.4510837,
+  "lon": 78.6843022,
+  "tags": {
+    "name": "Ghatkesar",
+    "name:kn": "ಘಟಕೇಸರ್",
+    "name:ml": "ഘടകേസർ",
+    "name:te": "ఘటకేసర్",
+    "place": "town",
+    "source": "Wikipedia",
+    "wikidata": "Q16891632",
+    "wikimedia_commons": "Category:Ghatkesar",
+    "wikipedia": "en:Ghatkesar"
+  }
+},
+{
+  "type": "node",
+  "id": 660695854,
+  "lat": 17.5172789,
+  "lon": 78.8863383,
+  "tags": {
+    "alt_name": "Bhuvanagiri",
+    "name": "Bhongir",
+    "name:ar": "بهونجير",
+    "name:bpy": "ভঙ্গির",
+    "name:hi": "भुवनगिरि",
+    "name:kn": "ಭುವನಗಿರಿ",
+    "name:ml": "ഭുവനഗിരി",
+    "name:new": "भोम्गीर",
+    "name:ta": "புவனகிரி",
+    "name:te": "భువనగిరి",
+    "name:ur": "بھونگیر",
+    "name:zh": "邦格伊尔",
+    "place": "town",
+    "population": "50000",
+    "postal_code": "508100",
+    "source": "AND, Bing, Wikipedia",
+    "wikidata": "Q797132",
+    "wikipedia": "en:Bhongir"
+  }
+},
+{
+  "type": "node",
+  "id": 660695924,
+  "lat": 17.7243771,
+  "lon": 79.1570824,
+  "tags": {
+    "name": "Jangaon",
+    "name:kn": "ಜನಗಾಂ",
+    "name:ml": "ജങ്കാവ്",
+    "name:ta": "ஜங்கன்",
+    "name:te": "జనగాం",
+    "place": "town",
+    "population": "90000",
+    "postal_code": "506167",
+    "wikidata": "Q2483796"
+  }
+},
+{
+  "type": "node",
+  "id": 660700229,
+  "lat": 17.1647574,
+  "lon": 79.4274007,
+  "tags": {
+    "name": "Nakrekal",
+    "name:kn": "ನಕಿರೇಕಲ್",
+    "name:ml": "നകിരേക്കൽ",
+    "name:te": "నకిరేకల్",
+    "place": "town",
+    "wikidata": "Q3418811",
+    "wikipedia": "en:Nakrekal"
+  }
+},
+{
+  "type": "node",
+  "id": 678483925,
+  "lat": 16.9003733,
+  "lon": 79.8745838,
+  "tags": {
+    "addr:district": "Suryapet",
+    "addr:state": "Telanagana",
+    "name": "Huzurnagar",
+    "name:kn": "ಹುಜೂರ್‌ನಗರ್",
+    "name:ml": "ഹുസൂർനഗർ",
+    "name:te": "హుజూర్‌నగర్",
+    "name:ur": "حضور نگر",
+    "place": "town",
+    "population": "5000",
+    "postal_code": "508204",
+    "source": "AND",
+    "wikidata": "Q3422582",
+    "wikipedia": "en:Huzurnagar"
+  }
+},
+{
+  "type": "node",
+  "id": 742671750,
+  "lat": 17.5090731,
+  "lon": 80.2720007,
+  "tags": {
+    "name": "Karepally",
+    "name:kn": "ಕಾರೇಪಲ್ಲಿ",
+    "name:te": "కారేపల్లి",
+    "place": "town",
+    "population": "5404",
+    "wikidata": "Q5285655",
+    "wikipedia": "en:Karepalli"
+  }
+},
+{
+  "type": "node",
+  "id": 773210448,
+  "lat": 17.6898839,
+  "lon": 80.8690762,
+  "tags": {
+    "name": "Sarapaka",
+    "name:kn": "ಸರ್ಪಕ",
+    "name:te": "సారపాక",
+    "place": "town",
+    "population": "17222",
+    "wikidata": "Q2734077",
+    "wikipedia": "en:Sarapaka"
+  }
+},
+{
+  "type": "node",
+  "id": 774646132,
+  "lat": 18.7615156,
+  "lon": 79.4787848,
+  "tags": {
+    "alt_name:hi": "रामागुंडम",
+    "alt_name:pa": "ਰਾਮਾਗੁੰਡਮ",
+    "name": "Ramagundam",
+    "name:ar": "راماغندام",
+    "name:en": "Ramagundam",
+    "name:fa": "راماگندم",
+    "name:hi": "रामगुंडम",
+    "name:kn": "ರಾಮಗುಂಡಂ",
+    "name:ml": "രാമഗുണ്ടം",
+    "name:pa": "ਰਾਮਗੁੰਡਮ",
+    "name:ru": "Рамагундам",
+    "name:sr": "Рамагундам",
+    "name:te": "రామగుండం",
+    "place": "city",
+    "wikidata": "Q1780338",
+    "wikipedia": "en:Ramagundam"
+  }
+},
+{
+  "type": "node",
+  "id": 1339869392,
+  "lat": 18.0068629,
+  "lon": 79.5578719,
+  "tags": {
+    "alt_name": "Hanumakonda",
+    "name": "Hanamkonda",
+    "name:hi": "हनुमाकोंडा",
+    "name:kn": "ಹನ್ಮಕೊಂಡ",
+    "name:ml": "ഹനംകൊണ്ട",
+    "name:ta": "ஹனம்கொண்டா",
+    "name:te": "హన్మకొండ",
+    "place": "town",
+    "wikidata": "Q3361894"
+  }
+},
+{
+  "type": "node",
+  "id": 1339869400,
+  "lat": 17.9807175,
+  "lon": 79.5131833,
+  "tags": {
+    "name": "Kazipet",
+    "name:hi": "काजीपेट",
+    "name:kn": "ಕಾಜಿಪೇಟೆ",
+    "name:ml": "കാസിപ്പേട്ട",
+    "name:ta": "காசிப்பேட்டை",
+    "name:te": "కాజిపేట్",
+    "place": "town",
+    "wikidata": "Q6381323"
+  }
+},
+{
+  "type": "node",
+  "id": 1422336791,
+  "lat": 18.8761795,
+  "lon": 79.4449696,
+  "tags": {
+    "name": "Mancherial",
+    "name:ja": "マンチェリアル",
+    "name:kn": "ಮಂಚಿರ್ಯಾಲ",
+    "name:ml": "മഞ്ചിരിയാൽ",
+    "name:ru": "Манчериал",
+    "name:te": "మంచిర్యాల",
+    "place": "town",
+    "postal_code": "504200",
+    "source": "AND",
+    "wikidata": "Q720842",
+    "wikipedia": "en:Mancherial"
+  }
+},
+{
+  "type": "node",
+  "id": 1492152129,
+  "lat": 17.9383442,
+  "lon": 80.8179917,
+  "tags": {
+    "name": "Manuguru",
+    "name:kn": "ಮಣಗೂರು",
+    "name:te": "మణుగూరు",
+    "place": "town",
+    "wikidata": "Q2483781",
+    "wikipedia": "en:Manuguru"
+  }
+},
+{
+  "type": "node",
+  "id": 2066931408,
+  "lat": 19.4286536,
+  "lon": 78.4528573,
+  "tags": {
+    "name": "Ichoda",
+    "name:kn": "ಇಚ್ಚೋಡ",
+    "name:ml": "ഇച്ചോഡ",
+    "name:te": "ఇచ్చోడ",
+    "name:ur": "اچھوڈا",
+    "place": "town",
+    "postal_code": "504307",
+    "source": "AND",
+    "wikidata": "Q3411652",
+    "wikipedia": "en:Ichoda"
+  }
+},
+{
+  "type": "node",
+  "id": 2070578539,
+  "lat": 18.9492756,
+  "lon": 79.0954665,
+  "tags": {
+    "name": "Dharmapuri",
+    "name:kn": "ಧರ್ಮಪುರಿ",
+    "name:te": "ధర్మపురి",
+    "place": "town",
+    "wikidata": "Q1224758"
+  }
+},
+{
+  "type": "node",
+  "id": 2138820649,
+  "lat": 17.5957490,
+  "lon": 79.9999224,
+  "tags": {
+    "name": "Mahabubabad",
+    "name:ar": "محبوب اباد",
+    "name:fa": "محبوب‌آباد",
+    "name:hi": "महबुबाबाद",
+    "name:kn": "ಮಹಬೂಬಾಬಾದ್",
+    "name:ml": "മഹബൂബാബാദ്",
+    "name:ru": "Махбубабад",
+    "name:ta": "மகபூபாபாத்",
+    "name:te": "మహబూబాబాద్",
+    "name:ur": "محبوب آباد",
+    "place": "town",
+    "postal_code": "506100",
+    "wikidata": "Q6732721",
+    "wikipedia": "en:Mahabubabad"
+  }
+},
+{
+  "type": "node",
+  "id": 2158944275,
+  "lat": 17.5915639,
+  "lon": 80.3216885,
+  "tags": {
+    "name": "Yellandu",
+    "name:kn": "ಇಲ್ಲಂದು",
+    "name:ml": "ഇല്ലന്ദു",
+    "name:te": "ఇల్లందు",
+    "place": "town",
+    "population": "42421",
+    "postal_code": "507123",
+    "source": "AND",
+    "wikidata": "Q721480",
+    "wikipedia": "en:Yellandu"
+  }
+},
+{
+  "type": "node",
+  "id": 2162135201,
+  "lat": 18.8555246,
+  "lon": 79.7904908,
+  "tags": {
+    "AND_a_nosr_p": "10012749",
+    "name": "Chennur",
+    "name:kn": "ಚೆನ್ನೂರು",
+    "name:te": "చెన్నూరు",
+    "place": "town",
+    "population": "10000",
+    "postal_code": "504201",
+    "source": "AND",
+    "wikidata": "Q24949735"
+  }
+},
+{
+  "type": "node",
+  "id": 2211379671,
+  "lat": 18.8257369,
+  "lon": 78.7115693,
+  "tags": {
+    "name": "Korutla",
+    "name:kn": "ಕೋರುಟ್ಲ",
+    "name:te": "కోరుట్ల",
+    "place": "town",
+    "population": "5000",
+    "postal_code": "505326",
+    "wikidata": "Q2235879"
+  }
+},
+{
+  "type": "node",
+  "id": 2228900287,
+  "lat": 17.5829960,
+  "lon": 79.6589492,
+  "tags": {
+    "name": "Thorrur",
+    "name:kn": "ತೊರೂರು",
+    "name:ml": "തൊറൂർ",
+    "name:te": "తొర్రూరు",
+    "place": "town",
+    "wikidata": "Q7796732",
+    "wikipedia": "en:Thorrur, Mahabubabad"
+  }
+},
+{
+  "type": "node",
+  "id": 2242382035,
+  "lat": 18.3222091,
+  "lon": 78.3387118,
+  "tags": {
+    "name": "Kamareddy",
+    "name:en": "Kamareddy",
+    "name:kn": "ಕಾಮಾರೆಡ್ಡಿ",
+    "name:ml": "കാമറെഡ്ഡി",
+    "name:te": "కామారెడ్డి",
+    "place": "town",
+    "population": "5000",
+    "postal_code": "503100",
+    "source": "AND",
+    "wikidata": "Q2564921",
+    "wikipedia": "en:Kamareddy"
+  }
+},
+{
+  "type": "node",
+  "id": 2272755613,
+  "lat": 18.7904482,
+  "lon": 78.2907202,
+  "tags": {
+    "name": "Armoor",
+    "name:kn": "ಆರ್ಮೂರು",
+    "name:ml": "ആർമൂർ",
+    "name:te": "ఆర్మూరు",
+    "place": "town",
+    "population": "5000",
+    "postal_code": "503200",
+    "source": "AND",
+    "wikidata": "Q3429927",
+    "wikipedia": "en:Armoor"
+  }
+},
+{
+  "type": "node",
+  "id": 2410580447,
+  "lat": 16.9794401,
+  "lon": 79.0584117,
+  "tags": {
+    "name": "Chandur",
+    "name:kn": "ಚಂಡೂರು",
+    "name:ml": "ചണ്ടൂർ",
+    "name:te": "చండూరు",
+    "name:zh": "钱杜尔 (安得拉邦)",
+    "place": "town",
+    "population": "10762",
+    "wikidata": "Q721388",
+    "wikipedia": "en:Chandur, Telangana"
+  }
+},
+{
+  "type": "node",
+  "id": 2460862103,
+  "lat": 17.4337246,
+  "lon": 78.5006827,
+  "tags": {
+    "int_name": "Sikandarabad",
+    "name": "Secunderabad",
+    "name:ar": "سكندرأباد",
+    "name:bn": "সিকন্দারাবাদ",
+    "name:ceb": "Sikandrābād",
+    "name:eo": "Sikandrabado",
+    "name:fa": "سکندرآباد",
+    "name:hi": "सिकंदराबाद",
+    "name:hi-Latn": "Sikandrābād",
+    "name:kn": "ಸಿಕಂದರಾಬಾದ್",
+    "name:ml": "സെക്കന്ദ്രാബാദ്",
+    "name:pa": "ਸਿਕੰਦਰਾਬਾਦ",
+    "name:ru": "Секандерабад",
+    "name:ta": "சிக்கந்தராபாத்",
+    "name:te": "సికింద్రాబాద్",
+    "name:tl": "Sikandrābād",
+    "name:ur": "سکندر آباد",
+    "name:ur-Latn": "Sikandrābād",
+    "place": "city",
+    "population": "213698",
+    "postal_code": "500003",
+    "wikidata": "Q1003502",
+    "wikipedia": "en:Secunderabad"
+  }
+},
+{
+  "type": "node",
+  "id": 2489778466,
+  "lat": 18.2897332,
+  "lon": 79.4739441,
+  "tags": {
+    "is_in": "Karimnagar, Andhra Pradesh",
+    "name": "Jammikunta",
+    "name:kn": "ಜಮ್ಮಿಕುಂಟ",
+    "name:ml": "ജമ്മികുണ്ട",
+    "name:te": "జమ్మికుంట",
+    "place": "town",
+    "population": "50000",
+    "wikidata": "Q6147957",
+    "wikipedia": "en:Jammikunta"
+  }
+},
+{
+  "type": "node",
+  "id": 2495410959,
+  "lat": 18.4543213,
+  "lon": 79.4472776,
+  "tags": {
+    "name": "Odela",
+    "name:kn": "ಓದೆಲ",
+    "name:te": "ఓదెల",
+    "place": "town",
+    "wikidata": "Q3430117",
+    "wikipedia": "en:Odela"
+  }
+},
+{
+  "type": "node",
+  "id": 2578067144,
+  "lat": 17.2575144,
+  "lon": 77.5874075,
+  "tags": {
+    "name": "Tanduru",
+    "name:hi": "ताण्डूर",
+    "name:kn": "ತಾಂಡೂರು",
+    "name:ml": "താണ്ടൂർ",
+    "name:te": "తాండూరు",
+    "place": "town",
+    "population": "55000",
+    "postal_code": "501141",
+    "wikidata": "Q720922",
+    "wikipedia": "en:Tandur"
+  }
+},
+{
+  "type": "node",
+  "id": 2713241478,
+  "lat": 17.5249309,
+  "lon": 78.6665345,
+  "tags": {
+    "name": "Keesara",
+    "name:kn": "ಕೀಸರ",
+    "name:ml": "കീസര",
+    "name:te": "కీసర",
+    "place": "town",
+    "wikidata": "Q3416810",
+    "wikipedia": "en:Keesara"
+  }
+},
+{
+  "type": "node",
+  "id": 2718745518,
+  "lat": 16.8497797,
+  "lon": 78.5325679,
+  "tags": {
+    "name": "Amangal",
+    "name:kn": "ಅಮಂಗಲ್",
+    "name:ml": "അമംഗൽ",
+    "name:te": "అమంగల్",
+    "place": "town"
+  }
+},
+{
+  "type": "node",
+  "id": 2719186484,
+  "lat": 16.9847566,
+  "lon": 78.4997445,
+  "tags": {
+    "name": "Kadthal",
+    "name:kn": "ಕಡ್ತಾಲ್",
+    "name:ml": "കഡ്താൽ",
+    "name:te": "కడ్తాల్",
+    "place": "town",
+    "wikidata": "Q6345715"
+  }
+},
+{
+  "type": "node",
+  "id": 2720724698,
+  "lat": 16.7447458,
+  "lon": 78.5400720,
+  "tags": {
+    "place": "town"
+  }
+},
+{
+  "type": "node",
+  "id": 2721209506,
+  "lat": 16.5738327,
+  "lon": 78.0509278,
+  "tags": {
+    "name": "Khilla Ghanpur",
+    "name:ml": "ഘനപുരം ഖില്ല",
+    "name:te": "ఘనపురం ఖిల్లా",
+    "place": "town",
+    "wikidata": "Q22936298",
+    "wikipedia": "en:Khilla Ghanpur"
+  }
+},
+{
+  "type": "node",
+  "id": 2721209570,
+  "lat": 16.7699159,
+  "lon": 78.1377227,
+  "tags": {
+    "name": "Jadcherla",
+    "name:kn": "ಜಡ್ಚರ್ಲ",
+    "name:ml": "ജഡ്‌ചെർല",
+    "name:te": "జడ్చర్ల",
+    "name:ur": "جڈچرلہ",
+    "place": "town",
+    "wikidata": "Q3416192",
+    "wikipedia": "en:Jadcherla"
+  }
+},
+{
+  "type": "node",
+  "id": 2721234390,
+  "lat": 16.5052021,
+  "lon": 78.2311043,
+  "tags": {
+    "place": "town"
+  }
+},
+{
+  "type": "node",
+  "id": 2721900279,
+  "lat": 16.3999846,
+  "lon": 78.6379866,
+  "tags": {
+    "name": "Achampet",
+    "name:kn": "ಅಚಂಪೇಟೆ",
+    "name:ml": "അച്ചംപേട്ട്",
+    "name:te": "అచంపేట",
+    "place": "town",
+    "postal_code": "509375",
+    "wikidata": "Q4673455"
+  }
+},
+{
+  "type": "node",
+  "id": 2721900280,
+  "lat": 16.4870296,
+  "lon": 78.3169003,
+  "tags": {
+    "name": "Nagarkurnool",
+    "name:ja": "ナガーカーヌール",
+    "name:kn": "ನಾಗರ್ ಕರ್ನೂಲ್",
+    "name:ml": "നാഗർകർനൂൽ",
+    "name:ta": "நகர்குர்நூல்",
+    "name:te": "నాగర్ కర్నూల్",
+    "place": "town",
+    "population": "1000",
+    "postal_code": "509209",
+    "source": "AND"
+  }
+},
+{
+  "type": "node",
+  "id": 2722043701,
+  "lat": 16.5194567,
+  "lon": 78.3608653,
+  "tags": {
+    "name": "Tadoor",
+    "name:kn": "ತಾಡೂರು",
+    "name:te": "తాడూరు",
+    "place": "town"
+  }
+},
+{
+  "type": "node",
+  "id": 2722044478,
+  "lat": 16.6721316,
+  "lon": 78.4880729,
+  "tags": {
+    "name": "Kalwakurthy",
+    "name:kn": "ಕಲ್ವಕುರ್ತಿ",
+    "name:ml": "കൽവകുർത്തി",
+    "name:te": "కల్వకుర్తి",
+    "place": "town",
+    "wikidata": "Q6354782",
+    "wikipedia": "en:Kalwakurthy"
+  }
+},
+{
+  "type": "node",
+  "id": 2808010724,
+  "lat": 17.2114310,
+  "lon": 80.8344943,
+  "tags": {
+    "name": "Sathupally",
+    "name:kn": "ಸಾಥುಪಲ್ಲಿ",
+    "name:ml": "സത്തുപ്പള്ളി",
+    "name:te": "సత్తుపల్లి",
+    "place": "town",
+    "wikidata": "Q59081805",
+    "wikipedia": "en:Sathupalli"
+  }
+},
+{
+  "type": "node",
+  "id": 2885001471,
+  "lat": 18.4348122,
+  "lon": 79.1328042,
+  "tags": {
+    "name": "Karimnagar",
+    "name:ar": "كاريم ناغار",
+    "name:bn": "করীমনগর",
+    "name:en": "Karimnagar",
+    "name:fa": "کریم نگر",
+    "name:he": "קרימנגר",
+    "name:hi": "करीमनगर",
+    "name:ja": "カリームナガル",
+    "name:kn": "ಕರೀಂನಗರ್",
+    "name:ml": "കരീംനഗർ",
+    "name:pa": "ਕਰੀਮਨਗਰ",
+    "name:ru": "Каримнагар",
+    "name:sr": "Каримнагар",
+    "name:ta": "கரீம்நகர்",
+    "name:te": "కరీంనగర్",
+    "name:ur": "کریم نگر",
+    "place": "city",
+    "wikidata": "Q25563078",
+    "wikipedia": "en:Karimnagar"
+  }
+},
+{
+  "type": "node",
+  "id": 2885001475,
+  "lat": 17.9820644,
+  "lon": 79.5970954,
+  "tags": {
+    "alt_name:ar": "ورنجل",
+    "alt_name:de": "Varangal",
+    "alt_name:ur": "وارنگل",
+    "name": "Warangal",
+    "name:ar": "ورنجل",
+    "name:en": "Warangal",
+    "name:fa": "وارانگل",
+    "name:he": "וורנגל",
+    "name:hi": "वारंगल",
+    "name:ja": "ワランガル",
+    "name:kn": "ವರಂಗಲ್",
+    "name:ml": "വാറങ്കൽ",
+    "name:mr": "वारंगळ",
+    "name:or": "ୱାରଙ୍ଗଲ",
+    "name:pa": "ਵਾਰੰਗਲ",
+    "name:ps": "وارانگل",
+    "name:ru": "Варангал",
+    "name:ta": "வாரங்கல்",
+    "name:te": "వరంగల్",
+    "name:uk": "Варангал",
+    "name:ur": "ورنگل",
+    "place": "city",
+    "population": "811844",
+    "population:date": "2011",
+    "wikidata": "Q25563103",
+    "wikipedia": "en:Warangal",
+    "wikipedia:ur": "ورنگل"
+  }
+},
+{
+  "type": "node",
+  "id": 2929579785,
+  "lat": 17.4511764,
+  "lon": 78.5368997,
+  "tags": {
+    "name": "Malkajgiri",
+    "name:ar": "مالكاجغيري",
+    "name:fa": "ملکاجگیری",
+    "name:ml": "മൽകാജ്ഗിരി",
+    "name:te": "మల్కాజిగిరి",
+    "place": "town",
+    "wikidata": "Q640210",
+    "wikimedia_commons": "Category:Malkajgiri",
+    "wikipedia": "en:Malkajgiri"
+  }
+},
+{
+  "type": "node",
+  "id": 2948417483,
+  "lat": 19.0924602,
+  "lon": 78.3486041,
+  "tags": {
+    "name": "Nirmal",
+    "name:hi": "निर्मल",
+    "name:ja": "ニルマル",
+    "name:kn": "ನಿರ್ಮಲ್",
+    "name:ml": "നിർമൽ",
+    "name:te": "నిర్మల్",
+    "place": "town",
+    "population": "5000",
+    "postal_code": "504106",
+    "source": "AND",
+    "wikidata": "Q2087729",
+    "wikipedia": "en:Nirmal"
+  }
+},
+{
+  "type": "node",
+  "id": 3010511896,
+  "lat": 15.8799583,
+  "lon": 78.1350753,
+  "tags": {
+    "name": "Alampur",
+    "name:kn": "ಅಲಂಪುರ್",
+    "name:ta": "அலம்பூர்",
+    "name:te": "అలంపూర్",
+    "place": "town",
+    "population": "1000",
+    "postal_code": "509152",
+    "source": "AND",
+    "wikidata": "Q14201843",
+    "wikipedia": "en:Alampuram (Hemalapuram)"
+  }
+},
+{
+  "type": "node",
+  "id": 3033567415,
+  "lat": 16.1061268,
+  "lon": 78.3194833,
+  "tags": {
+    "name": "Kollapur",
+    "name:kn": "ಕೊಲ್ಲಾಪುರ",
+    "name:te": "కొల్లాపూర్",
+    "place": "town",
+    "population": "1000",
+    "postal_code": "509102",
+    "source": "AND",
+    "wikidata": "Q3413618",
+    "wikipedia": "en:Kollapur"
+  }
+},
+{
+  "type": "node",
+  "id": 3035311747,
+  "lat": 16.3617799,
+  "lon": 78.0610836,
+  "tags": {
+    "name": "Wanaparthy",
+    "name:kn": "ವನಪರ್ತಿ",
+    "name:ml": "വനപർത്തി",
+    "name:te": "వనపర్తి",
+    "place": "town",
+    "population": "5000",
+    "postal_code": "509103",
+    "source": "AND",
+    "wikidata": "Q2563513",
+    "wikipedia": "en:Wanaparthy"
+  }
+},
+{
+  "type": "node",
+  "id": 3039822414,
+  "lat": 18.7016214,
+  "lon": 78.4480669,
+  "tags": {
+    "name": "Bheemgal",
+    "name:ml": "ഭീംഗൽ",
+    "name:te": "భీమ్‌గల్",
+    "place": "town",
+    "wikidata": "Q4901642",
+    "wikipedia": "en:Bheemgal"
+  }
+},
+{
+  "type": "node",
+  "id": 3048087367,
+  "lat": 18.3832094,
+  "lon": 78.6325459,
+  "tags": {
+    "place": "town"
+  }
+},
+{
+  "type": "node",
+  "id": 3051097388,
+  "lat": 18.8701361,
+  "lon": 78.6994320,
+  "tags": {
+    "place": "town"
+  }
+},
+{
+  "type": "node",
+  "id": 3051098586,
+  "lat": 18.9047907,
+  "lon": 78.8080213,
+  "tags": {
+    "name": "Raikal",
+    "place": "town",
+    "wikidata": "Q11102023"
+  }
+},
+{
+  "type": "node",
+  "id": 3051099387,
+  "lat": 18.9222631,
+  "lon": 78.6588798,
+  "tags": {
+    "place": "town"
+  }
+},
+{
+  "type": "node",
+  "id": 3051101150,
+  "lat": 18.9672182,
+  "lon": 78.6533702,
+  "tags": {
+    "name": "Mogilipet",
+    "name:te": "మొగిలిపేట",
+    "place": "town"
+  }
+},
+{
+  "type": "node",
+  "id": 3534826513,
+  "lat": 18.9700102,
+  "lon": 78.7053522,
+  "tags": {
+    "alt_name": "Mallāpuram",
+    "name": "Mallapur",
+    "name:kn": "ಮಲ್ಲಪುರ್",
+    "name:te": "మల్లాపూర్",
+    "place": "town",
+    "wikidata": "Q6744067",
+    "wikipedia": "en:Mallapur, Karimnagar"
+  }
+},
+{
+  "type": "node",
+  "id": 3534951793,
+  "lat": 19.1105251,
+  "lon": 77.9578457,
+  "tags": {
+    "name": "Mirjapur",
+    "place": "city"
+  }
+},
+{
+  "type": "node",
+  "id": 3535515176,
+  "lat": 18.4674786,
+  "lon": 78.8699000,
+  "tags": {
+    "name": "Vemulawada",
+    "name:kn": "ವೇಮುಲವಾಡ",
+    "name:ml": "വേമുലവാഡ",
+    "name:te": "వేములవాడ",
+    "place": "town",
+    "postal_code": "505302",
+    "wikidata": "Q59066208"
+  }
+},
+{
+  "type": "node",
+  "id": 3535556652,
+  "lat": 18.9846195,
+  "lon": 79.4784230,
+  "tags": {
+    "name": "Mandamari",
+    "name:hi": "मंदमरि",
+    "name:kn": "ಮಂದಮರ್ರಿ",
+    "name:ml": "മന്ദമരി",
+    "name:te": "మందమర్రి",
+    "place": "town",
+    "wikidata": "Q2483821",
+    "wikipedia": "en:Mandamarri"
+  }
+},
+{
+  "type": "node",
+  "id": 3689982881,
+  "lat": 19.3551634,
+  "lon": 79.4877003,
+  "tags": {
+    "AND_a_nosr_p": "10012868",
+    "name": "Kaghaznagar",
+    "name:hi": "कागजनगर",
+    "name:kn": "ಕಾಗಜ್ನಗರ",
+    "name:ml": "കാഗസ്നഗർ",
+    "name:ru": "Кагазнагар",
+    "name:te": "కాగజ్నగర్‌",
+    "place": "town",
+    "population": "1000",
+    "postal_code": "504296",
+    "source": "AND",
+    "wikidata": "Q2290801",
+    "wikipedia": "en:Kaghaznagar"
+  }
+},
+{
+  "type": "node",
+  "id": 3690828636,
+  "lat": 19.5261678,
+  "lon": 79.7246925,
+  "tags": {
+    "name": "Kouthala",
+    "name:kn": "ಕೌತಾಲ",
+    "name:te": "కౌతాల",
+    "place": "town",
+    "wikidata": "Q6434774",
+    "wikipedia": "en:Kouthala"
+  }
+},
+{
+  "type": "node",
+  "id": 3735940253,
+  "lat": 19.6759452,
+  "lon": 78.5339895,
+  "tags": {
+    "capital": "5",
+    "name": "Adilabad",
+    "name:ar": "عادل اباد",
+    "name:bn": "আদিলাবাদ",
+    "name:en": "Adilabad",
+    "name:fa": "عادل آباد",
+    "name:hi": "आदिलाबाद",
+    "name:kn": "ಅದಿಲಾಬಾದ್",
+    "name:ml": "അദിലാബാദ്",
+    "name:mr": "आदिलाबाद",
+    "name:ru": "Адилабад",
+    "name:te": "ఆదిలాబాద్",
+    "place": "city",
+    "population": "117200",
+    "postal_code": "504001",
+    "wikidata": "Q494281",
+    "wikipedia": "en:Adilabad"
+  }
+},
+{
+  "type": "node",
+  "id": 3786264278,
+  "lat": 18.1017739,
+  "lon": 78.8520128,
+  "tags": {
+    "name": "Siddipet",
+    "name:ar": "سيديبيت",
+    "name:en": "Siddipet",
+    "name:hi": "सिद्दिपेट",
+    "name:ja": "シディペット",
+    "name:kn": "ಸಿದ್ಧಿಪೇಟ್",
+    "name:ml": "സിദ്ധിപേട്ട",
+    "name:ru": "Сиддипет",
+    "name:te": "సిద్ధిపేట",
+    "name:ur": "سدی پیٹ",
+    "place": "city",
+    "population": "10000",
+    "postal_code": "502 103",
+    "wikidata": "Q260547",
+    "wikipedia": "en:Siddipet"
+  }
+},
+{
+  "type": "node",
+  "id": 3803815389,
+  "lat": 18.0458792,
+  "lon": 78.2651993,
+  "tags": {
+    "name": "Medak",
+    "name:kn": "ಮೆದಕ್",
+    "name:ml": "മേദക്ക്",
+    "name:or": "ମେଦାକ୍",
+    "name:ta": "மேதக்",
+    "name:te": "మెదక్",
+    "place": "town",
+    "population": "46000",
+    "wikidata": "Q2330577"
+  }
+},
+{
+  "type": "node",
+  "id": 3836817959,
+  "lat": 17.1685198,
+  "lon": 77.8797905,
+  "tags": {
+    "name": "Pargi",
+    "name:kn": "ಪರಗಿ",
+    "name:ml": "പരഗി",
+    "name:te": "పరగి",
+    "place": "town",
+    "postal_code": "501500",
+    "wikidata": "Q13001717"
+  }
+},
+{
+  "type": "node",
+  "id": 3882427809,
+  "lat": 18.5773287,
+  "lon": 79.1675524,
+  "tags": {
+    "name": "Choppadandi",
+    "name:kn": "ಚೊಪ್ಪದಂಡಿ",
+    "name:te": "చొప్పదండి",
+    "place": "town",
+    "wikidata": "Q3430089",
+    "wikipedia": "en:Choppadandi"
+  }
+},
+{
+  "type": "node",
+  "id": 3893887659,
+  "lat": 17.9305758,
+  "lon": 79.8936390,
+  "tags": {
+    "name": "Narsampet",
+    "name:kn": "ನರ್ಸಂಪೇಟ್",
+    "name:ml": "നർസംപേട്ട്",
+    "name:te": "నర్సంపేట",
+    "place": "town",
+    "wikidata": "Q6966360",
+    "wikipedia": "en:Narsampet"
+  }
+},
+{
+  "type": "node",
+  "id": 3937918147,
+  "lat": 17.5840567,
+  "lon": 78.9467282,
+  "tags": {
+    "alt_name": "Yadadri",
+    "name": "Yadagirigutta",
+    "name:kn": "ಯಾದಗಿರಿಗುಡ್ಡ",
+    "name:ml": "യാദഗിരിഗുട്ട",
+    "name:te": "యాదగిరిగుట్ట",
+    "place": "town",
+    "wikidata": "Q8046501",
+    "wikipedia": "en:Yadagirigutta"
+  }
+},
+{
+  "type": "node",
+  "id": 3954691378,
+  "lat": 17.6460304,
+  "lon": 79.0474956,
+  "tags": {
+    "name": "Aleru",
+    "name:kn": "ಆಲೇರು",
+    "name:ml": "ആലേർ",
+    "name:te": "ఆలేరు",
+    "place": "town",
+    "wikidata": "Q3428143",
+    "wikipedia": "en:Aler, Yadadri district"
+  }
+},
+{
+  "type": "node",
+  "id": 4112053943,
+  "lat": 18.0660882,
+  "lon": 79.5241325,
+  "tags": {
+    "is_in": "Warangal, Andhra Pradesh",
+    "name": "Hasanparthy",
+    "name:kn": "ಹಸಂಪರ್ತಿ",
+    "name:ml": "ഹസൻപർത്തി",
+    "name:te": "హసంపర్తి",
+    "place": "town",
+    "population": "30000",
+    "postal_code": "506371",
+    "wikidata": "Q11008571",
+    "wikipedia": "en:Hasanparthy"
+  }
+},
+{
+  "type": "node",
+  "id": 4314050598,
+  "lat": 18.1163712,
+  "lon": 78.4307212,
+  "tags": {
+    "name": "Ramayampet",
+    "name:en": "Ramayampet",
+    "name:kn": "ರಾಯಂಪೇಟ್",
+    "name:ml": "രാമയംപേട്ട",
+    "name:te": "రామాయంపేట",
+    "place": "town",
+    "wikidata": "Q11105215",
+    "wikipedia": "en:Ramayampet"
+  }
+},
+{
+  "type": "node",
+  "id": 4421622808,
+  "lat": 17.7687104,
+  "lon": 78.8082776,
+  "tags": {
+    "name": "Jagdevpur",
+    "name:kn": "ಜಗ್ದೇವ್‌ಪೂರ್",
+    "name:ml": "ജഗ്ദേവ്പൂർ",
+    "name:te": "జగ్దేవ్‌పూర్",
+    "place": "town",
+    "source:category": "Wikipedia",
+    "wikidata": "Q3445631",
+    "wikipedia": "en:Jagadevpur, Medak district"
+  }
+},
+{
+  "type": "node",
+  "id": 4456260987,
+  "lat": 17.2526027,
+  "lon": 78.8964038,
+  "tags": {
+    "name": "Choutuppal",
+    "name:kn": "ಚೌಟುಪ್ಪಲ್",
+    "name:ml": "ചൗട്ടുപ്പൽ",
+    "name:te": "చౌటుప్పల్",
+    "place": "town",
+    "wikidata": "Q1190631",
+    "wikipedia": "en:Choutuppal"
+  }
+},
+{
+  "type": "node",
+  "id": 4462255390,
+  "lat": 18.5823602,
+  "lon": 77.8782745,
+  "tags": {
+    "name": "Rudrur",
+    "name:kn": "ರುದ್ರೂರು",
+    "name:te": "రుద్రూరు",
+    "place": "town"
+  }
+},
+{
+  "type": "node",
+  "id": 4462255409,
+  "lat": 18.5729602,
+  "lon": 77.8236852,
+  "tags": {
+    "name": "Kotagiri",
+    "name:kn": "ಕೊಟಗಿರಿ",
+    "name:ta": "கோத்தகிரி",
+    "name:te": "కోటగిరి",
+    "place": "town"
+  }
+},
+{
+  "type": "node",
+  "id": 4776570644,
+  "lat": 19.4782361,
+  "lon": 79.5720001,
+  "tags": {
+    "name": "Sirpur",
+    "name:hi": "सिरपुर",
+    "name:ml": "സിർപൂർ",
+    "name:ru": "Сирпур",
+    "name:te": "సిర్పూర్‌",
+    "place": "town",
+    "wikidata": "Q7530597",
+    "wikipedia": "en:Sirpur (T)"
+  }
+},
+{
+  "type": "node",
+  "id": 4789050058,
+  "lat": 18.3821084,
+  "lon": 77.8763494,
+  "tags": {
+    "name": "Banswada",
+    "name:en": "Banswada",
+    "name:kn": "ಬಾನ್ಸುವಾಡ",
+    "name:te": "బాన్సువాడ",
+    "place": "town",
+    "wikidata": "Q3428196",
+    "wikipedia": "en:Banswada"
+  }
+},
+{
+  "type": "node",
+  "id": 5220052283,
+  "lat": 18.4381466,
+  "lon": 79.8684969,
+  "tags": {
+    "name": "Bhupalpally",
+    "name:kn": "ಭೂಪಾಲಪಲ್ಲಿ",
+    "name:ml": "ഭൂപാലപ്പള്ളി",
+    "name:te": "భూపాలపల్లి",
+    "place": "town",
+    "wikidata": "Q4902167",
+    "wikipedia": "en:Bhupalpalle"
+  }
+},
+{
+  "type": "node",
+  "id": 5222684344,
+  "lat": 17.6583198,
+  "lon": 78.6384067,
+  "tags": {
+    "name": "Kolthur",
+    "name:kn": "ಕೊಲ್ತೂರು",
+    "name:ml": "കൊൽത്തൂർ",
+    "name:te": "కొల్తూరు",
+    "place": "town"
+  }
+},
+{
+  "type": "node",
+  "id": 5283439844,
+  "lat": 18.0347921,
+  "lon": 77.7772967,
+  "tags": {
+    "name": "Narayankhed",
+    "name:kn": "ನಾರಾಯಣ್ ಖೇಡ್",
+    "name:te": "నారాయణ్ ఖేడ్",
+    "place": "town",
+    "wikidata": "Q10962828"
+  }
+},
+{
+  "type": "node",
+  "id": 5299046863,
+  "lat": 17.7959905,
+  "lon": 79.8019946,
+  "tags": {
+    "name": "Nekkonda",
+    "name:kn": "ನೆಕ್ಕೊಂಡ",
+    "name:ml": "നെക്കൊണ്ട",
+    "name:te": "నెక్కొండ",
+    "place": "town"
+  }
+},
+{
+  "type": "node",
+  "id": 5300874999,
+  "lat": 17.9023427,
+  "lon": 78.6437630,
+  "tags": {
+    "name": "Lingareddipalle",
+    "name:ml": "ലിംഗറെഡ്ഡിപ്പള്ളി",
+    "name:te": "లింగారెడ్డిపల్లి",
+    "place": "town"
+  }
+},
+{
+  "type": "node",
+  "id": 5302861512,
+  "lat": 18.1737336,
+  "lon": 78.6657035,
+  "tags": {
+    "name": "Dubbak",
+    "name:kn": "ದುಬ್ಬಾಕ",
+    "name:te": "దుబ్బాక",
+    "place": "town",
+    "wikidata": "Q3428254"
+  }
+},
+{
+  "type": "node",
+  "id": 5340659177,
+  "lat": 16.2052789,
+  "lon": 77.9941964,
+  "tags": {
+    "name": "Pebbair",
+    "name:kn": "ಪೆಬ್ಬೈರ್",
+    "name:ml": "പെബ്ബൈർ",
+    "name:te": "పెబ్బైర్",
+    "place": "town",
+    "wikidata": "Q3420553",
+    "wikipedia": "en:Pebbair"
+  }
+},
+{
+  "type": "node",
+  "id": 5395632979,
+  "lat": 18.3098774,
+  "lon": 79.8726224,
+  "tags": {
+    "name": "Ghanpur",
+    "name:ta": "ఘంపూర్",
+    "place": "town",
+    "wikidata": "Q16246736"
+  }
+},
+{
+  "type": "node",
+  "id": 5397385021,
+  "lat": 16.3806119,
+  "lon": 77.9398656,
+  "tags": {
+    "name": "Kothakota",
+    "name:ar": "كُوتَاكُوتَا",
+    "name:kn": "ಕೊತ್ತಕೋಟ",
+    "name:ml": "കൊത്തകോട്ട",
+    "name:te": "కొత్తకోట",
+    "place": "town",
+    "wikidata": "Q3424142",
+    "wikipedia": "en:Kothakota"
+  }
+},
+{
+  "type": "node",
+  "id": 5406728045,
+  "lat": 17.5587940,
+  "lon": 80.1444912,
+  "tags": {
+    "name": "Kothapeta",
+    "name:te": "కొత్తపేట",
+    "place": "town"
+  }
+},
+{
+  "type": "node",
+  "id": 5515818537,
+  "lat": 17.3485543,
+  "lon": 78.8208604,
+  "tags": {
+    "name": "Bhoodan Pochampally",
+    "name:hi": "भूदान पोचमपल्ली",
+    "name:kn": "ಭೂದಾನ ಪೋಚಂಪಲ್ಲಿ",
+    "name:ml": "ഭൂദാൻ പോച്ചംപള്ളി",
+    "name:te": "భూదాన్ పోచంపల్లి",
+    "place": "town",
+    "wikidata": "Q3415080",
+    "wikipedia": "en:Bhoodan Pochampally"
+  }
+},
+{
+  "type": "node",
+  "id": 5554706474,
+  "lat": 19.1070850,
+  "lon": 77.9635656,
+  "tags": {
+    "name": "Bhainsa",
+    "name:kn": "ಭೈಂಸಾ",
+    "name:ml": "ഭൈൻസ",
+    "name:te": "భైంసా",
+    "place": "town",
+    "postal_code": "504103",
+    "wikidata": "Q759999"
+  }
+},
+{
+  "type": "node",
+  "id": 5608980149,
+  "lat": 18.5279573,
+  "lon": 79.3192023,
+  "tags": {
+    "name": "Sultanabad",
+    "name:ml": "സുൽത്താനബാദ്",
+    "name:te": "సుల్తానాబాద్",
+    "place": "town",
+    "wikidata": "Q7636780",
+    "wikipedia": "en:Sultanabad, Peddapalli district"
+  }
+},
+{
+  "type": "node",
+  "id": 5825573977,
+  "lat": 18.3404826,
+  "lon": 80.4294839,
+  "tags": {
+    "name": "Eturnagaram",
+    "name:ml": "ഏട്ടൂർനാഗാരം",
+    "name:te": "ఏటూరునాగారం",
+    "place": "town",
+    "postal_code": "506165",
+    "source": "AND",
+    "wikidata": "Q5405089",
+    "wikipedia": "en:Eturnagaram"
+  }
+},
+{
+  "type": "node",
+  "id": 5890602185,
+  "lat": 17.3379216,
+  "lon": 77.9039857,
+  "tags": {
+    "addr:district": "Vikarabad",
+    "addr:state": "Telangana",
+    "name": "Vikarabad",
+    "name:kn": "ವಿಕಾರಾಬಾದ್",
+    "name:ml": "വികാരാബാദ്",
+    "name:ta": "விகாரபட்",
+    "name:te": "వికారాబాద్",
+    "name:ur": "وقار آباد",
+    "place": "town",
+    "wikidata": "Q568778"
+  }
+},
+{
+  "type": "node",
+  "id": 6085778768,
+  "lat": 17.6794030,
+  "lon": 77.6153076,
+  "tags": {
+    "name": "Zaheerabad",
+    "name:ar": "ظهیر آباد",
+    "name:fa": "ظهیرآباد",
+    "name:kn": "ಜಹೀರಾಬಾದ್",
+    "name:ml": "സഹീറാബാദ്",
+    "name:te": "జహీరాబాద్",
+    "name:ur": "ظہیر آباد",
+    "place": "town",
+    "wikidata": "Q2577644"
+  }
+},
+{
+  "type": "node",
+  "id": 6417153360,
+  "lat": 18.1932372,
+  "lon": 79.9413676,
+  "tags": {
+    "name": "Mulugu",
+    "name:kn": "ಮುಲುಗು",
+    "name:ml": "മുലുഗു",
+    "name:te": "ములుగు",
+    "place": "town"
+  }
+},
+{
+  "type": "node",
+  "id": 6542416079,
+  "lat": 16.6931795,
+  "lon": 78.9147252,
+  "tags": {
+    "name": "Devarakonda",
+    "name:kn": "ದೇವರಕೊಂಡ",
+    "name:ml": "ദേവരക്കൊണ്ട",
+    "name:te": "దేవరకొండ",
+    "place": "town",
+    "postal_code": "508248",
+    "wikidata": "Q1254798",
+    "wikipedia": "en:Devarakonda"
+  }
+},
+{
+  "type": "node",
+  "id": 6621135585,
+  "lat": 17.1936232,
+  "lon": 80.3594327,
+  "tags": {
+    "name": "Wyra",
+    "name:kn": "ವೈರ",
+    "name:ml": "വൈറ",
+    "name:te": "వైర",
+    "place": "town",
+    "wikidata": "Q3430056",
+    "wikipedia": "en:Wyra"
+  }
+},
+{
+  "type": "node",
+  "id": 7622996938,
+  "lat": 17.2040466,
+  "lon": 79.1963137,
+  "tags": {
+    "name": "Narkatpalli",
+    "name:kn": "ನಾರ್ಕೆಟ್ ಪಲ್ಲಿ",
+    "name:ml": "നാർക്കട്ട്പള്ളി",
+    "name:te": "నార్కెట్ పల్లి",
+    "place": "town",
+    "postal_code": "508254",
+    "wikidata": "Q3415135"
+  }
+},
+{
+  "type": "node",
+  "id": 11377458577,
+  "lat": 17.6691050,
+  "lon": 80.8932738,
+  "tags": {
+    "name": "Bhadrachalam",
+    "name:kn": "ಭದ್ರಾಚಲಂ",
+    "place": "town"
+  }
+},
+{
+  "type": "node",
+  "id": 11939030832,
+  "lat": 17.3080016,
+  "lon": 78.5023619,
+  "tags": {
+    "place": "town"
+  }
+},
+{
+  "type": "node",
+  "id": 11939046282,
+  "lat": 17.4072058,
+  "lon": 78.5969098,
+  "tags": {
+    "place": "town"
+  }
+},
+{
+  "type": "node",
+  "id": 12229490965,
+  "lat": 16.9234629,
+  "lon": 80.3629315,
+  "tags": {
+    "name": "Madhira",
+    "name:kn": "ಮಧಿರ",
+    "name:ml": "മധിര",
+    "name:te": "మధిర",
+    "place": "town",
+    "postal_code": "507203",
+    "wikidata": "Q61634427",
+    "wikipedia": "en:Madhira"
+  }
+},
+{
+  "type": "node",
+  "id": 12996145192,
+  "lat": 17.5477152,
+  "lon": 80.6137392,
+  "tags": {
+    "name": "Kothagudem",
+    "place": "town"
+  }
+},
+{
+  "type": "node",
+  "id": 13305698994,
+  "lat": 17.0765127,
+  "lon": 79.2886346,
+  "tags": {
+    "name": "Panagal",
+    "place": "town"
+  }
+},
+{
+  "type": "node",
+  "id": 13351832095,
+  "lat": 18.3624474,
+  "lon": 79.5391510,
+  "tags": {
+    "name": "Rachapalli",
+    "place": "town"
+  }
+},
+{
+  "type": "node",
+  "id": 13947325323,
+  "lat": 19.7971321,
+  "lon": 78.5605081,
+  "tags": {
+    "name": "Town House",
+    "place": "town"
+  }
+}
+
+  ]
+}
