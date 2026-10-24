@@ -119,15 +119,25 @@ h2 { margin: 0; font-size: 13px; font-weight: 600; letter-spacing: .02em; color:
 }
 .fab { position: fixed; top: 16px; left: 16px; width: 40px; height: 40px; background: var(--panel); backdrop-filter: blur(12px); box-shadow: var(--shadow); z-index: 5; }
 
-/* ---------- floating view & filters (top right) ---------- */
-.filters {
-  position: fixed; top: 16px; right: 16px; z-index: 4; width: 300px; max-height: calc(100vh - 32px);
-  display: flex; flex-direction: column; gap: 14px; padding: 14px 16px 14px; overflow-y: auto; scrollbar-width: thin;
+/* ---------- right-hand stack: view & filters card above the cropland card ---------- */
+.right-stack {
+  position: fixed; top: 16px; right: 16px; bottom: 16px; z-index: 4; width: 300px;
+  display: flex; flex-direction: column; gap: 12px; pointer-events: none;
+}
+.right-stack > * { pointer-events: auto; }
+.filters, .crop-card {
+  display: flex; flex-direction: column; min-height: 0;
   background: var(--panel); backdrop-filter: blur(18px) saturate(1.4); -webkit-backdrop-filter: blur(18px) saturate(1.4);
   border: 1px solid var(--border); border-radius: 16px; box-shadow: var(--shadow);
-  transition: transform .35s cubic-bezier(.2,.8,.2,1), opacity .3s;
 }
-.filters.hidden { transform: translateX(calc(100% + 24px)); opacity: 0; pointer-events: none; }
+.filters { flex: 1 1 380px; gap: 14px; padding: 14px 16px 14px; overflow-y: auto; scrollbar-width: thin; }
+body.crop-off .filters { flex: 0 1 auto; }           /* alone, the filters card takes only what it needs */
+.filters.hidden { display: none; }
+.crop-card { flex: 1 1 460px; min-height: 280px; padding: 14px 16px 10px; gap: 10px; }
+body.crop-off .crop-card { display: none; }
+.crop-card .filters-head h2 { margin-bottom: 2px; }
+.crop-body { flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: thin; display: flex; flex-direction: column; gap: 10px; padding-right: 2px; }
+.crop-body .section-head .hint { flex: 1; }
 .filters-head { display: flex; justify-content: space-between; align-items: center; }
 .filters-head h2 { font-size: 13px; }
 .fgroup { display: flex; flex-direction: column; gap: 8px; padding-top: 12px; border-top: 1px solid var(--hair); }
@@ -215,7 +225,6 @@ section { display: flex; flex-direction: column; gap: 8px; }
 #flow-profile .hit { fill: transparent; cursor: crosshair; }
 
 /* cropland */
-.crop { padding-top: 14px; border-top: 1px solid var(--hair); }
 .crop-legend { display: flex; flex-direction: column; gap: 6px; }
 .crop-legend .bar { height: 10px; border-radius: 999px; border: 1px solid var(--border); }
 .crop-legend .ticks { display: flex; justify-content: space-between; font-family: var(--mono); font-size: 10.5px; color: var(--muted); }
@@ -224,14 +233,26 @@ section { display: flex; flex-direction: column; gap: 8px; }
 .official td { padding: 3px 0; border-bottom: 1px solid var(--hair); vertical-align: top; }
 .official td + td { font-family: var(--mono); font-size: 11px; color: var(--ink-2); padding-left: 6px; }
 .official a { color: inherit; text-decoration: none; border-bottom: 1px dotted var(--muted); }
-.district-flow .row.crop { grid-template-columns: 104px 1fr 92px; }
-.district-flow .pair { position: relative; height: 12px; }
-.district-flow .pair i { position: absolute; left: 0; top: 0; height: 100%; border-radius: 0 4px 4px 0; }
-.district-flow .pair .b { background: var(--muted); opacity: .45; }
-.district-flow .pair .a { background: #2f8a4a; height: 6px; top: 3px; }
-.district-flow .val .d { color: var(--muted); font-size: 10.5px; margin-left: 4px; }
-.district-flow .val .d.up { color: #2b6cb0; }
-.district-flow .val .d.down { color: #c43c39; }
+.dl { flex: none; font-family: var(--mono); font-size: 11px; color: var(--ink-2); text-decoration: none; padding: 3px 8px; border: 1px solid var(--border); border-radius: 999px; background: var(--chip); }
+.dl:hover { background: var(--accent-soft); color: var(--ink); }
+.crop-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.crop-table th { text-align: right; font-weight: 500; color: var(--muted); padding: 3px 4px; border-bottom: 1px solid var(--hair); vertical-align: bottom; line-height: 1.2; }
+.crop-table th:first-child { text-align: left; padding-left: 6px; }
+.crop-table th small { font-size: 9.5px; font-weight: 400; }
+.crop-table td { padding: 3px 4px; border-bottom: 1px solid var(--hair); text-align: right; font-family: var(--mono); font-size: 11.5px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.crop-table td:first-child { text-align: left; font-family: var(--font); font-weight: 500; padding-left: 6px; overflow: hidden; text-overflow: ellipsis; max-width: 108px; }
+.crop-table tbody tr { cursor: pointer; }
+.crop-table tbody tr:hover, .crop-table tbody tr.active { background: var(--accent-soft); }
+.crop-table tr.total td { font-weight: 600; color: var(--ink); border-bottom: 2px solid var(--hair); cursor: default; }
+.crop-table tr.total:hover { background: transparent; }
+.crop-table .up { color: #2b6cb0; }
+.crop-table .down { color: #c43c39; }
+:root[data-theme="dark"] .crop-table .up { color: #7fb3ff; }
+:root[data-theme="dark"] .crop-table .down { color: #f08a87; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .crop-table .up { color: #7fb3ff; }
+  :root:not([data-theme="light"]) .crop-table .down { color: #f08a87; }
+}
 
 /* Kaleshwaram links */
 .links { padding-top: 14px; border-top: 1px solid var(--hair); }
@@ -430,8 +451,10 @@ body.labels-off .mk-city .lbl, body.labels-off .mk-district { display: none; }
 .toast.gone { opacity: 0; transform: translate(-50%, 12px); pointer-events: none; }
 
 @media (max-width: 760px) {
-  .filters { top: 10px; right: 10px; width: min(300px, calc(100vw - 20px)); max-height: 40vh; padding: 10px 12px; gap: 10px; }
+  .right-stack { top: 10px; right: 10px; bottom: auto; width: min(300px, calc(100vw - 20px)); max-height: 42vh; }
+  .filters { padding: 10px 12px; gap: 10px; }
   .filters .hint { display: none; }
+  .crop-card { flex-basis: 200px; min-height: 160px; }
   .fab-right { top: 10px; bottom: auto; left: auto; right: 10px; }
   .panel { top: auto; left: 10px; right: 10px; bottom: 10px; width: auto; max-height: 56vh; padding: 14px 16px; gap: 14px; border-radius: 16px; }
   .panel.hidden { transform: translateY(calc(100% + 20px)); }

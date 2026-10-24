@@ -753,9 +753,12 @@ function setCropMode(mode) {
   for (const button of document.querySelectorAll('[data-crop]')) button.setAttribute('aria-pressed', String(button.dataset.crop === mode));
   for (const m of ['before', 'after', 'change']) if (map.getLayer(`crop-${m}`)) map.setLayoutProperty(`crop-${m}`, 'visibility', m === mode ? 'visible' : 'none');
   $('crop-mode-label').textContent = CROP_MODE_LABEL[mode];
+  document.body.classList.toggle('crop-off', mode === 'off');   // the Cropland card shows only with a layer
   renderCropLegend();
 }
 for (const button of document.querySelectorAll('[data-crop]')) button.addEventListener('click', () => setCropMode(button.dataset.crop));
+$('crop-close').addEventListener('click', () => setCropMode('off'));
+document.body.classList.add('crop-off');
 
 const rgb = (c) => `rgb(${c[0]},${c[1]},${c[2]})`;
 function renderCropLegend() {
@@ -794,28 +797,45 @@ function renderCropland(data) {
     const a = document.createElement('td'); a.textContent = row.after;
     tr.append(label, b, a); tbody.appendChild(tr);
   }
-  const list = $('crop-list');
-  list.textContent = '';
-  for (const row of data.districts) {
-    const item = document.createElement('li');
-    const button = document.createElement('button'); button.type = 'button'; button.className = 'row crop';
-    const pair = textEl('span', 'pair', '');
-    const beforeBar = document.createElement('i'); beforeBar.className = 'b'; beforeBar.style.width = `${row.pct_before}%`;
-    const afterBar = document.createElement('i'); afterBar.className = 'a'; afterBar.style.width = `${row.pct_after}%`;
-    pair.append(beforeBar, afterBar);
-    const value = textEl('span', 'val', `${row.pct_after} %`);
-    const delta = textEl('span', `d ${row.change_pp > 0 ? 'up' : row.change_pp < 0 ? 'down' : ''}`, `${row.change_pp > 0 ? '+' : ''}${row.change_pp}`);
-    value.appendChild(delta);
-    button.append(textEl('span', 'name', row.district), pair, value);
-    button.title = `${row.district}: ${row.pct_before} % (${data.before.epoch}) → ${row.pct_after} % (${data.after.epoch}); about ${row.km2_before.toLocaleString('en-IN')} → ${row.km2_after.toLocaleString('en-IN')} km² of cropland`;
-    button.addEventListener('click', () => {
-      for (const other of document.querySelectorAll('#crop-list .row')) other.classList.toggle('active', other === button);
+  renderCropTable(data);
+  renderCropLegend();
+}
+
+// Cultivated area table: cropland km² from GLAD converted to acres (1 km² = 247.105 acres).
+const ACRES_PER_KM2 = 247.105;
+const lakhAcres = (km2) => (km2 * ACRES_PER_KM2 / 1e5).toFixed(2);
+const acres = (km2) => Math.round(km2 * ACRES_PER_KM2);
+const signed = (value) => `${value > 0 ? '+' : value < 0 ? '−' : ''}${Math.abs(value).toLocaleString('en-IN')}`;
+
+function renderCropTable(data) {
+  const before = data.state[String(data.before.year)], after = data.state[String(data.after.year)];
+  const rows = [...data.districts].sort((a, b) => (b.km2_after - b.km2_before) - (a.km2_after - a.km2_before));
+  const tbody = $('crop-table').tBodies[0];
+  tbody.textContent = '';
+  const addRow = (cells, className, onClick) => {
+    const tr = document.createElement('tr');
+    if (className) tr.className = className;
+    for (const [text, cls] of cells) { const td = document.createElement('td'); if (cls) td.className = cls; td.textContent = text; tr.appendChild(td); }
+    if (onClick) tr.addEventListener('click', onClick);
+    tbody.appendChild(tr);
+    return tr;
+  };
+  const stateDelta = after.km2 - before.km2;
+  addRow([['Telangana', ''], [lakhAcres(before.km2), ''], [lakhAcres(after.km2), ''], [signed(acres(stateDelta)), stateDelta > 0 ? 'up' : 'down']], 'total', null);
+  for (const row of rows) {
+    const delta = row.km2_after - row.km2_before;
+    const tr = addRow([[row.district, ''], [lakhAcres(row.km2_before), ''], [lakhAcres(row.km2_after), ''], [signed(acres(delta)), delta > 0 ? 'up' : delta < 0 ? 'down' : '']], '', () => {
+      for (const other of tbody.querySelectorAll('tr')) other.classList.toggle('active', other === tr);
       if (cropMode === 'off') setCropMode('change');
       map.flyTo({ center: [row.lon, row.lat], zoom: 9.3, pitch: 45, bearing: -15, duration: 2000, essential: true });
     });
-    item.appendChild(button); list.appendChild(item);
+    tr.title = `${row.district}: ${row.pct_before} % of the district under crops in ${data.before.epoch}, ${row.pct_after} % in ${data.after.epoch} (${row.km2_before.toLocaleString('en-IN')} → ${row.km2_after.toLocaleString('en-IN')} km²)`;
   }
-  renderCropLegend();
+  const header = ['District', `Cropland ${data.before.epoch} (acres)`, `Cropland ${data.after.epoch} (acres)`, 'Change (acres)', `Cover ${data.before.epoch} (%)`, `Cover ${data.after.epoch} (%)`, 'Change (percentage points)'];
+  const csv = [header, ['Telangana', acres(before.km2), acres(after.km2), acres(stateDelta), before.pct, after.pct, (after.pct - before.pct).toFixed(1)],
+    ...rows.map((r) => [r.district, acres(r.km2_before), acres(r.km2_after), acres(r.km2_after - r.km2_before), r.pct_before, r.pct_after, r.change_pp])]
+    .map((cells) => cells.map((c) => (typeof c === 'string' && /[",]/.test(c) ? `"${c.replace(/"/g, '""')}"` : c)).join(',')).join('\r\n');
+  $('crop-csv').href = URL.createObjectURL(new Blob(['﻿' + csv + '\r\n// Source: GLAD global cropland extent (Potapov et al. 2021), 3 km cells, mean cover per district x district area; schematic, not survey data.'], { type: 'text/csv;charset=utf-8' }));
 }
 
 // ---------- link popup ----------

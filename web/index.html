@@ -68,19 +68,6 @@
     <ol id="link-list" class="link-list"></ol>
   </section>
 
-  <section class="crop" id="crop-section">
-    <div class="section-head">
-      <h2>Cropland</h2>
-      <span class="legend-inline" id="crop-mode-label">layer off</span>
-    </div>
-    <p class="summary" id="crop-summary">Loading…</p>
-    <div class="crop-legend" id="crop-legend"></div>
-    <p class="hint">Water projects are one reason; groundwater recovery, rainfall and the Mission Kakatiya tank restoration also contributed, so the map shows change, not cause.</p>
-    <table class="official" id="crop-official"><thead><tr><th>Official figure</th><th>Before</th><th>After</th></tr></thead><tbody></tbody></table>
-    <p class="hint">Cropland cover by district, 2008–2011 → 2016–2019 (GLAD). Click a row to fly there.</p>
-    <ol id="crop-list" class="district-flow"></ol>
-  </section>
-
   <section class="rivers">
     <div class="section-head">
       <h2>River profiles</h2>
@@ -117,6 +104,7 @@
   <footer class="credits">Copernicus DEM (ESA) · HydroRIVERS (HydroSHEDS, Lehner &amp; Grill 2013) · GLAD cropland (Potapov et al. 2021) · geoBoundaries · Natural Earth · © OpenStreetMap contributors</footer>
 </aside>
 
+<div class="right-stack">
 <aside class="filters" id="filters" aria-label="View and filters">
   <header class="filters-head">
     <h2>View &amp; filters</h2>
@@ -157,7 +145,7 @@
       <button type="button" data-crop="after" aria-pressed="false">After 2014</button>
       <button type="button" data-crop="change" aria-pressed="false">Change</button>
     </div>
-    <p class="hint" id="crop-hint">Share of each 3 km cell under crops (GLAD, Potapov et al. 2021): 2008–2011 vs 2016–2019</p>
+    <p class="hint" id="crop-hint">Share of each 3 km cell under crops (GLAD, Potapov et al. 2021): 2008–2011 vs 2016–2019. Opens the Cropland panel with the acreage table.</p>
   </section>
 
   <section class="fgroup">
@@ -186,6 +174,33 @@
     <p class="hint">Right-drag or Ctrl-drag always rotates and tilts · scroll zooms · two fingers rotate on touch</p>
   </section>
 </aside>
+
+<aside class="crop-card" id="crop-card" aria-label="Cropland statistics">
+  <header class="filters-head">
+    <div>
+      <h2>Cropland</h2>
+      <span class="legend-inline" id="crop-mode-label">layer off</span>
+    </div>
+    <button id="crop-close" class="icon-btn" type="button" aria-label="Hide cropland panel and layer" title="Hide">
+      <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    </button>
+  </header>
+  <div class="crop-body">
+    <p class="summary" id="crop-summary">Loading…</p>
+    <div class="crop-legend" id="crop-legend"></div>
+    <p class="hint">Water projects are one reason; groundwater recovery, rainfall and the Mission Kakatiya tank restoration also contributed, so the map shows change, not cause.</p>
+    <table class="official" id="crop-official"><thead><tr><th>Official figure</th><th>Before</th><th>After</th></tr></thead><tbody></tbody></table>
+    <div class="section-head">
+      <p class="hint">Cultivated area by district (GLAD): before = 2008–2011, after = 2016–2019. Click a row to fly there.</p>
+      <a id="crop-csv" class="dl" href="#" download="telangana_cropland_before_after_2014.csv">CSV ↓</a>
+    </div>
+    <table class="crop-table" id="crop-table">
+      <thead><tr><th>District</th><th>Before<br><small>lakh acres</small></th><th>After<br><small>lakh acres</small></th><th>Change<br><small>acres</small></th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</aside>
+</div>
 <button id="filters-expand" class="icon-btn fab fab-right" type="button" aria-label="Show filters" hidden>
   <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M4 6h16M7 12h10M10 18h4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
 </button>
