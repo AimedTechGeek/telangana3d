@@ -15,6 +15,7 @@
   --canal: #c2187f;
   --tank: #3b95dc;
   --tank-edge: #1b5a93;
+  --gw: #2166ac;
   --chip: rgba(11, 11, 11, 0.05);
   --chip-on: #0b0b0b;
   --chip-on-ink: #fcfcfb;
@@ -41,6 +42,7 @@
     --canal: #ff6fd0;
     --tank: #4fb3ff;
     --tank-edge: #bfe3ff;
+    --gw: #7cc4ff;
     --chip: rgba(255, 255, 255, 0.07);
     --chip-on: #f0efec;
     --chip-on-ink: #0e0f12;
@@ -65,6 +67,7 @@
   --canal: #ff6fd0;
   --tank: #4fb3ff;
   --tank-edge: #bfe3ff;
+  --gw: #7cc4ff;
   --chip: rgba(255, 255, 255, 0.07);
   --chip-on: #f0efec;
   --chip-on-ink: #0e0f12;
@@ -260,6 +263,19 @@ section { display: flex; flex-direction: column; gap: 8px; }
 .key.canal.main { border-top: 3px solid var(--canal); }
 .key.tank { display: inline-block; width: 11px; height: 11px; border-radius: 50%; background: var(--tank); border: 1px solid var(--tank-edge); vertical-align: middle; margin-right: 2px; }
 .dam-popup .kind.tank { color: var(--tank-edge); }
+.key.gw { display: inline-block; width: 11px; height: 11px; border-radius: 50%; border: 1px solid rgba(0,0,0,.2); vertical-align: middle; margin-right: 2px; }
+.key.gw.shallow { background: #4f9bd8; }
+.key.gw.deep { background: #7a2e0d; }
+.key.gw.rose { background: #2166ac; }
+.key.gw.fell { background: #b2182b; }
+.dam-popup .kind.gw { color: var(--gw); }
+.gw-svg { display: block; width: 100%; height: auto; }
+.dam-popup .gw-svg { margin: 6px 0 4px; }
+.gw-svg .depth { fill: none; stroke: var(--gw); stroke-width: 1.6; stroke-linejoin: round; }
+.gw-svg .dot { fill: var(--gw); }
+.gw-svg .era { stroke: var(--muted); stroke-dasharray: 3 3; }
+.gw-svg .grid { stroke: var(--hair); }
+.gw-svg text { font-family: var(--mono); font-size: 9px; fill: var(--muted); }
 .tank-table td:first-child { max-width: 128px; }
 .tank-table td.na { color: var(--muted); font-family: var(--font); font-size: 10.5px; }
 .official.network td.num { text-align: right; }

@@ -13,6 +13,7 @@ data/raw/*
 !data/raw/osm_reservoirs.json
 !data/raw/osm_construction.json
 !data/raw/osm_water.json
+!data/raw/gw_levels.csv.gz
 !data/raw/wikipedia_dams.json
 !data/raw/wikidata_dams.csv
 

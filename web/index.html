@@ -143,6 +143,27 @@
     </div>
   </details>
 
+  <details class="card" open id="gw-card">
+    <summary class="card-head"><span class="card-title">Groundwater</span><span class="legend-inline" id="gw-count"></span><svg class="chev" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></summary>
+    <div class="card-body">
+      <section class="groundwater">
+        <p class="summary" id="gw-summary">Loading…</p>
+        <div class="crop-legend gw-legend" id="gw-legend"></div>
+        <div class="section-head">
+          <h2>Depth to water, May</h2>
+          <span class="legend-inline">state mean · m below ground</span>
+        </div>
+        <div class="gw-chart" id="gw-chart"></div>
+        <p class="hint" id="gw-chart-hint"></p>
+        <p class="hint">Levels follow the monsoon: 2015–18 were drought years, 2020–22 very wet. The state's 2023 resource assessment reports a rise of “more than 4 metres” between 2013 and 2023 against this network's deepest point in 2016 and 2019; the public well data stop in May 2023. Click a district row to fly there.</p>
+        <table class="crop-table gw-table" id="gw-table">
+          <thead><tr><th>District</th><th>Wells</th><th>Before<br><small id="gw-before-years"></small></th><th>After<br><small id="gw-after-years"></small></th><th>Change<br><small>m</small></th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </section>
+    </div>
+  </details>
+
   <details class="card" open>
     <summary class="card-head"><span class="card-title">Cities</span><span class="legend-inline"><i class="key city"></i>city<i class="key river"></i>lowest river bed</span><svg class="chev" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></summary>
     <div class="card-body">
@@ -150,7 +171,7 @@
     </div>
   </details>
 
-  <footer class="credits">Copernicus DEM (ESA) · HydroRIVERS (HydroSHEDS, Lehner &amp; Grill 2013) · GLAD cropland (Potapov et al. 2021) · geoBoundaries · Natural Earth · © OpenStreetMap contributors</footer>
+  <footer class="credits">Copernicus DEM (ESA) · HydroRIVERS (HydroSHEDS, Lehner &amp; Grill 2013) · GLAD cropland (Potapov et al. 2021) · geoBoundaries · Natural Earth · India-WRIS groundwater levels (CGWB, Telangana GWD) · © OpenStreetMap contributors</footer>
 </aside>
 
 <div class="right-stack">
@@ -206,6 +227,16 @@
           <button type="button" data-tank="kakatiya" aria-pressed="false">Restored 2015–18</button>
         </div>
         <p class="hint"><span class="key tank"></span> village tanks, lakes and reservoirs mapped in OpenStreetMap: dots sized by water spread, the real outlines when zoomed in. “Restored 2015–18” shades each district by the tanks taken up under Mission Kakatiya. No source publishes which tanks were restored with their locations, so the before / after 2014 view is per district, not per tank.</p>
+      </div>
+      <div class="fgroup">
+        <p class="eyebrow">Groundwater · depth to water in May (India-WRIS)</p>
+        <div class="tabs" role="group" aria-label="Groundwater layer">
+          <button type="button" data-gw="off" aria-pressed="true">Off</button>
+          <button type="button" data-gw="before" aria-pressed="false">Before 2014</button>
+          <button type="button" data-gw="after" aria-pressed="false">After 2014</button>
+          <button type="button" data-gw="change" aria-pressed="false">Change</button>
+        </div>
+        <p class="hint">Monitoring wells of the Central Ground Water Board and the state Ground Water Department, each averaged over its May readings of 2010–14 and of 2015–23; districts take the mean of their wells. Depth: <span class="key gw shallow"></span> near the surface · <span class="key gw deep"></span> 40 m down. Change: <span class="key gw rose"></span> water table rose · <span class="key gw fell"></span> fell. Click a well for its year-by-year readings.</p>
       </div>
       <div class="fgroup">
         <p class="eyebrow">Cropland cover</p>

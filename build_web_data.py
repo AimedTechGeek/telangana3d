@@ -33,6 +33,7 @@ from pathlib import Path
 import contourpy
 import geopandas as gpd
 import numpy as np
+import pandas as pd
 import rasterio
 from PIL import Image
 from pyproj import Transformer
@@ -1093,6 +1094,98 @@ def build_tanks(state: gpd.GeoDataFrame, districts: gpd.GeoDataFrame) -> tuple[d
     return json.loads(polygons.to_json(drop_id=True)), json.loads(points.to_json(drop_id=True)), summary
 
 
+# --- groundwater (India-WRIS monitoring wells) -------------------------------
+
+GW_BEFORE = (2010, 2014)                          # pre-monsoon (May) seasons up to the last one before the state formed
+GW_AFTER = (2015, 2023)                           # the public export ends in 2019 for the state network and 2023 for CGWB
+GW_MIN_SEASONS = 2                                # May readings a window mean needs (the state network left two thirds blank before 2015)
+GW_MAX_DEPTH_M = 100.0                            # two readings above this are typos; the deepest CGWB level is 97 m
+GW_CHART_MIN_SEASONS = 10                         # wells that carry the year-by-year state curve
+GW_CHART_MIN_WELLS = 50                           # a year needs this many of them to be plotted
+GW_CHART_FROM = 2005
+GW_AGENCY = {"CGWB": "CGWB", "Telangana GW": "Telangana GWD"}
+GW_SOURCE = {"name": "India-WRIS, Groundwater Level Collected Manually (India Data Portal mirror of the May 2025 export)",
+             "url": "https://ckandev.indiadataportal.com/dataset/groundwater-level/resource/06d6e79c-61ac-46bb-9e03-c7138911c619",
+             "wris_url": "https://indiawris.gov.in/wris/#/groundWater"}
+
+
+def build_groundwater(districts: gpd.GeoDataFrame) -> tuple[dict, dict]:
+    """Monitoring wells with their mean May depth to water before and after 2014, plus district and state summaries."""
+    readings = pd.read_csv(RAW / "gw_levels.csv.gz", parse_dates=["date"])
+    # The state network's export writes 0 for a missing reading (two thirds of its rows before 2015); the few
+    # negative values are flowing wells. Depth is metres below ground, so smaller means more water.
+    readings = readings[(readings["data_value"] > 0) & (readings["data_value"] < GW_MAX_DEPTH_M)].copy()
+    readings["year"] = readings["date"].dt.year
+    may = readings[readings["date"].dt.month == 5]
+    by_year = may.groupby(["station_code", "year"])["data_value"].mean().unstack("year")     # one value per well and season
+    stations = readings.groupby("station_code").agg(
+        name=("station_name", "first"), agency=("agency_name", "first"), well=("well_type", "first"),
+        well_depth=("well_depth", "first"), lat=("latitude", "first"), lon=("longitude", "first"), last=("year", "max"))
+    points = gpd.GeoDataFrame(stations, geometry=gpd.points_from_xy(stations["lon"], stations["lat"]), crs=WGS84)
+    inside = gpd.sjoin(points, districts.to_crs(WGS84)[["shapeName", "geometry"]], how="inner", predicate="within")
+    inside = inside[~inside.index.duplicated()]
+    stations = stations.loc[inside.index].copy()
+    stations["district"] = inside["shapeName"]
+    by_year = by_year.reindex(stations.index)
+
+    def window_mean(first: int, last: int) -> tuple[pd.Series, pd.Series]:
+        block = by_year.loc[:, [year for year in by_year.columns if first <= year <= last]]
+        count = block.notna().sum(axis=1)
+        return block.mean(axis=1).where(count >= GW_MIN_SEASONS), count
+
+    stations["before"], stations["n_before"] = window_mean(*GW_BEFORE)
+    stations["after"], stations["n_after"] = window_mean(*GW_AFTER)
+    stations["change"] = stations["before"] - stations["after"]          # positive: the water table rose (is shallower)
+    stations["latest_year"] = by_year.apply(lambda row: row.last_valid_index(), axis=1)
+    stations["latest"] = [by_year.at[code, year] if pd.notna(year) else np.nan for code, year in stations["latest_year"].items()]
+    stations["well_depth"] = stations["well_depth"].where(stations["well_depth"].between(2, 1000))   # 1 m is the export's blank
+    stations = stations[(stations["n_before"] >= GW_MIN_SEASONS) | (stations["n_after"] >= GW_MIN_SEASONS)]
+
+    def number(value, digits=2):
+        return None if pd.isna(value) else round(float(value), digits)
+
+    features = []
+    for code, s in stations.iterrows():
+        series = [[int(year), round(float(value), 2)] for year, value in by_year.loc[code].dropna().items() if year >= GW_CHART_FROM]
+        props = {"code": code, "name": s["name"], "agency": GW_AGENCY.get(s["agency"], s["agency"]),
+                 "well": s["well"] if isinstance(s["well"], str) else None, "well_depth": number(s["well_depth"], 1),
+                 "district": s["district"], "before": number(s["before"]), "n_before": int(s["n_before"]),
+                 "after": number(s["after"]), "n_after": int(s["n_after"]), "change": number(s["change"]),
+                 "latest_year": None if pd.isna(s["latest_year"]) else int(s["latest_year"]), "latest": number(s["latest"]), "series": series}
+        features.append({"type": "Feature", "geometry": {"type": "Point", "coordinates": [round(float(s["lon"]), 5), round(float(s["lat"]), 5)]},
+                         "properties": {k: v for k, v in props.items() if v is not None}})     # a missing window is a missing key
+
+    both = stations.dropna(subset=["change"])
+
+    def summarise(subset: pd.DataFrame, paired: pd.DataFrame) -> dict:
+        return {"wells": int(len(subset)), "wells_both": int(len(paired)), "cgwb": int((subset["agency"] == "CGWB").sum()),
+                "before": number(paired["before"].mean()), "after": number(paired["after"].mean()),
+                "change": number(paired["change"].median()), "rising": int((paired["change"] > 0).sum())}
+
+    per_district = [{"district": name, **summarise(stations[stations["district"] == name], both[both["district"] == name])}
+                    for name in sorted(districts["shapeName"])]
+    # Year-by-year state curve: each long-running well measured against its own mean, so the growth of the
+    # network (about 500 CGWB wells in 2010, 1,000 from 2014) does not masquerade as a change in level.
+    chart_wells = by_year.loc[by_year.notna().sum(axis=1) >= GW_CHART_MIN_SEASONS]
+    anomalies = chart_wells.sub(chart_wells.mean(axis=1), axis=0)
+    grand_mean = float(chart_wells.mean(axis=1).mean())
+    chart = [{"year": int(year), "depth": round(grand_mean + float(anomalies[year].mean()), 2), "wells": int(anomalies[year].notna().sum())}
+             for year in anomalies.columns if year >= GW_CHART_FROM and anomalies[year].notna().sum() >= GW_CHART_MIN_WELLS]
+    summary = {
+        "source": GW_SOURCE, "before": {"years": list(GW_BEFORE)}, "after": {"years": list(GW_AFTER)}, "min_seasons": GW_MIN_SEASONS,
+        "state": summarise(stations, both) | {
+            "tgwd_last_year": int(stations.loc[stations["agency"] == "Telangana GW", "last"].max()),
+            "cgwb_last_year": int(stations.loc[stations["agency"] == "CGWB", "last"].max())},
+        "chart": chart, "chart_wells": int(len(chart_wells)), "chart_min_seasons": GW_CHART_MIN_SEASONS,
+        "districts": per_district,
+    }
+    state = summary["state"]
+    print(f"groundwater: {state['wells']} wells inside the state ({state['cgwb']} CGWB), {state['wells_both']} with May readings in both "
+          f"windows: {state['before']} m -> {state['after']} m below ground, median change {state['change']:+} m, {state['rising']} rose; "
+          f"curve from {summary['chart_wells']} wells over {len(chart)} years")
+    return {"type": "FeatureCollection", "features": features}, summary
+
+
 # --- cropland (GLAD) --------------------------------------------------------
 
 CROPLAND_DIR = RAW / "cropland"
@@ -1276,6 +1369,14 @@ def main() -> None:
               f"tank_points.geojson {(WEB_DATA / 'tank_points.geojson').stat().st_size / 1e6:.1f} MB")
     else:
         print("  warning: data/raw/osm_water.json missing (fetch_data.py); tanks not built")
+    if (RAW / "gw_levels.csv.gz").exists():
+        gw_points, gw_summary = build_groundwater(districts)
+        (WEB_DATA / "groundwater.geojson").write_text(json.dumps(gw_points), encoding="utf-8")
+        (WEB_DATA / "groundwater_summary.json").write_text(json.dumps(gw_summary, indent=1, ensure_ascii=False), encoding="utf-8")
+        for row in sorted(gw_summary["districts"], key=lambda r: r["change"] or 0, reverse=True)[:4] + [gw_summary["districts"][-1]]:
+            print(f"  {row['district']:22} {row['wells_both']:3} wells  {row['before']} -> {row['after']} m  ({row['change']:+} m)")
+    else:
+        print("  warning: data/raw/gw_levels.csv.gz missing (fetch_data.py); groundwater not built")
     cropland = build_cropland(state, districts)
     (WEB_DATA / "cropland.json").write_text(json.dumps(cropland, indent=1, ensure_ascii=False), encoding="utf-8")
     print("cropland (GLAD, % of area): " + ", ".join(f"{v['epoch']} {v['pct']}%" for v in cropland["state"].values()))

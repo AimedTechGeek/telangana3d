@@ -30,6 +30,8 @@ const MAP_THEMES = {
     contour: '#5a4634', flowGlow: '#ffffff', flowDash: '#eef7ff', link: '#c2410c', linkDash: '#fff4e8', cropOpacity: 0.82,
     canal: '#c2187f', canalOld: '#8a6f84', canalDash: '#fff0fa', canalCasing: '#ffffff',
     tank: '#3b95dc', tankEdge: '#1b5a93', tankRamp: ['#e6eef5', '#1d5f99'],
+    gwDepth: [[0, '#0b5fa5'], [2, '#4f9bd8'], [5, '#a9d4ef'], [10, '#f2e2b8'], [20, '#d98b3c'], [40, '#7a2e0d']],   // metres below ground
+    gwChange: [[-6, '#b2182b'], [-2, '#ef8a62'], [0, '#f4f1ea'], [2, '#67a9cf'], [6, '#2166ac']], gwStroke: '#ffffff',       // fell … rose
     flow: ['#86d9e3', '#36aee6', '#2566d8', '#1a3aa6', '#5f2aa8'],   // FLOW_CLASSES: cyan -> blue -> navy -> purple
     shadow: '#2b2016', highlight: '#fff4e2', accent: '#4e3d2e',
     sky: { 'sky-color': '#cfe3f6', 'horizon-color': '#eef3f8', 'fog-color': '#e9e6df' },
@@ -40,6 +42,8 @@ const MAP_THEMES = {
     contour: '#d8d4cc', flowGlow: '#0b1a33', flowDash: '#ffffff', link: '#fb923c', linkDash: '#fff7ed', cropOpacity: 0.9,
     canal: '#ff6fd0', canalOld: '#d2b4c8', canalDash: '#fff0fa', canalCasing: '#2a0d20',
     tank: '#4fb3ff', tankEdge: '#bfe3ff', tankRamp: ['#161c26', '#3f8fd0'],
+    gwDepth: [[0, '#9fd8ff'], [2, '#5eb0ea'], [5, '#2f6f9f'], [10, '#4a4238'], [20, '#b86b2a'], [40, '#ff9d5c']],
+    gwChange: [[-6, '#ff6b6b'], [-2, '#c97a6a'], [0, '#2a2f38'], [2, '#5f9bd0'], [6, '#8fd0ff']], gwStroke: '#0b1a33',
     flow: ['#2f96a8', '#3cbbea', '#6a9cff', '#a9bdff', '#dcaaff'],   // FLOW_CLASSES: teal -> sky -> blue -> lilac on the dark surface
     shadow: '#000000', highlight: '#b9a68c', accent: '#000000',
     sky: { 'sky-color': '#0b1020', 'horizon-color': '#1b2233', 'fog-color': '#0e0f12' },
@@ -62,7 +66,7 @@ function currentTheme() {
 function setTheme(theme) {
   document.documentElement.dataset.theme = theme;
   try { localStorage.setItem('theme', theme); } catch (_) { /* storage unavailable */ }
-  if (map && map.getLayer('background')) { applyMapTheme(); renderFlowLegend(); syncArrowImage(); }
+  if (map && map.getLayer('background')) { applyMapTheme(); renderFlowLegend(); renderGwLegend(); syncArrowImage(); }
 }
 try { const saved = localStorage.getItem('theme'); if (saved) document.documentElement.dataset.theme = saved; } catch (_) { /* ignore */ }
 
@@ -264,6 +268,58 @@ function setTankMode(mode) {
 }
 for (const button of document.querySelectorAll('[data-tank]')) button.addEventListener('click', () => setTankMode(button.dataset.tank));
 
+// Groundwater: India-WRIS monitoring wells, depth to water in May before and after 2014.
+let gwMode = 'off';                        // off | before | after | change
+let gwLoaded = false;
+let gwData = null;                         // groundwater_summary.json
+const gwVisibility = () => (gwMode !== 'off' && statusMode !== 'pending' ? 'visible' : 'none');
+const gwField = () => (gwMode === 'off' ? 'change' : gwMode);               // the field a hidden layer is styled for
+const gwRamp = (t, field) => (field === 'change' ? t.gwChange : t.gwDepth);
+/** Colour of a value on a ramp of [stop, colour] pairs, clamped at the ends. */
+function rampColour(ramp, value) {
+  if (value <= ramp[0][0]) return ramp[0][1];
+  for (let i = 1; i < ramp.length; i++) {
+    if (value <= ramp[i][0]) return mixColour(ramp[i - 1][1], ramp[i][1], (value - ramp[i - 1][0]) / (ramp[i][0] - ramp[i - 1][0]));
+  }
+  return ramp[ramp.length - 1][1];
+}
+function gwWellColour(t, field) { return ['interpolate', ['linear'], ['get', field], ...gwRamp(t, field).flat()]; }
+/** District fill from the summary: mean depth before or after, or the median change of its wells. */
+function gwDistrictFill(t, field) {
+  const expression = ['match', ['get', 'shapeName']];
+  for (const d of (gwData ? gwData.districts : [])) if (d[field] !== null) expression.push(d.district, rampColour(gwRamp(t, field), d[field]));
+  return expression.length > 2 ? [...expression, 'rgba(0,0,0,0)'] : 'rgba(0,0,0,0)';
+}
+function gwLayers(t) {
+  if (!gwLoaded) return [];
+  const field = gwField();
+  return [
+    { id: 'gw-districts', type: 'fill', source: 'districts', layout: { visibility: gwVisibility() },
+      paint: { 'fill-color': gwDistrictFill(t, field), 'fill-opacity': 0.55 } },
+    { id: 'gw-wells', type: 'circle', source: 'groundwater', filter: ['has', field], layout: { visibility: gwVisibility() },
+      paint: { 'circle-radius': ['interpolate', ['linear'], ['zoom'], 6, 2.6, 9, 5, 12, 9], 'circle-color': gwWellColour(t, field),
+               'circle-opacity': 0.92, 'circle-stroke-color': t.gwStroke, 'circle-stroke-width': 0.6 } },
+  ];
+}
+function applyGwMode() {
+  if (!gwLoaded) return;
+  const t = MAP_THEMES[currentTheme()];
+  const field = gwField();
+  map.setLayoutProperty('gw-districts', 'visibility', gwVisibility());
+  map.setLayoutProperty('gw-wells', 'visibility', gwVisibility());
+  map.setPaintProperty('gw-districts', 'fill-color', gwDistrictFill(t, field));
+  map.setFilter('gw-wells', ['has', field]);
+  map.setPaintProperty('gw-wells', 'circle-color', gwWellColour(t, field));
+}
+function setGwMode(mode) {
+  gwMode = mode;
+  for (const button of document.querySelectorAll('[data-gw]')) button.setAttribute('aria-pressed', String(button.dataset.gw === mode));
+  applyGwMode();
+  renderGwLegend();
+  if (mode === 'off') gwPopup.remove();
+}
+for (const button of document.querySelectorAll('[data-gw]')) button.addEventListener('click', () => setGwMode(button.dataset.gw));
+
 function chipOn(name) {
   const chip = document.querySelector(`.chip[data-toggle="${name}"]`);
   return chip.getAttribute('aria-pressed') === 'true' ? 'visible' : 'none';
@@ -288,6 +344,7 @@ function buildStyle(theme) {
       ...cropSources(),
       ...(canalsLoaded ? { canals: { type: 'geojson', data: 'data/canals.geojson' } } : {}),
       ...(tanksLoaded ? { tanks: { type: 'geojson', data: 'data/tanks.geojson' }, 'tank-points': { type: 'geojson', data: 'data/tank_points.geojson' } } : {}),
+      ...(gwLoaded ? { groundwater: { type: 'geojson', data: 'data/groundwater.geojson' } } : {}),
     },
     layers: [
       { id: 'background', type: 'background', paint: { 'background-color': t.background } },
@@ -301,6 +358,7 @@ function buildStyle(theme) {
           'line-color': t.contour, 'line-opacity': 0.55,
           'line-width': ['case', ['==', ['%', ['get', 'elev'], 500], 0], 1.4, 0.6] } },
       ...tankLayers(t),                      // tanks and the Mission Kakatiya shading sit under the district lines
+      ...gwLayers(t),                        // groundwater wells and district shading, same slot
       { id: 'districts', type: 'line', source: 'districts', layout: { visibility: chipOn('districts'), 'line-join': 'round' }, paint: {
           'line-color': t.district, 'line-opacity': t.districtOpacity,
           'line-width': ['interpolate', ['linear'], ['zoom'], 6, 0.5, 10, 1.2] } },
@@ -867,6 +925,7 @@ function setStatusMode(mode) {
   for (const id of ['links-casing', 'links-line', 'links-hit']) if (map.getLayer(id)) map.setFilter(id, linkStatusFilter());
   if (map.getLayer('links-arrows')) map.setFilter('links-arrows', ['all', ['!=', ['get', 'status'], 'operational'], linkStatusFilter()]);
   applyTankVisibility();
+  applyGwMode();
   applyCanalFilters();
   if (mode !== 'all') { damPopup.remove(); linkPopup.remove(); canalPopup.remove(); }
 }
@@ -1152,6 +1211,155 @@ function renderTanks(data) {
     const total = kakatiyaTotal(d);
     label.querySelector('.cnt').textContent = d.mk_counted_in ? `in ${d.mk_counted_in}` : total ? `${indian(total)} tanks` : '';
   }
+}
+
+// ---------- groundwater: well and district popups, legend, year curve and the Groundwater card ----------
+const gwPopup = new maplibregl.Popup({ closeButton: true, closeOnClick: true, offset: 8, className: 'dam-popup gw-popup', maxWidth: '320px' });
+const metres = (value) => `${Number(value).toFixed(1)} m`;
+const signedMetres = (value) => `${value > 0 ? '+' : value < 0 ? '−' : ''}${Math.abs(value).toFixed(1)} m`;
+const gwYears = (window) => `${window.years[0]}–${String(window.years[1]).slice(2)}`;
+const changeWords = (value) => (value > 0 ? `rose ${metres(value)}` : value < 0 ? `fell ${metres(-value)}` : 'unchanged');
+function svgEl(tag, attributes) {
+  const node = document.createElementNS(SVG_NS, tag);
+  for (const [key, value] of Object.entries(attributes)) node.setAttribute(key, value);
+  return node;
+}
+/** Depth-to-water curve with the ground at the top, so a falling line is a falling water table. Breaks at missing years. */
+function depthChart(points, width, height, axes) {
+  const svg = svgEl('svg', { viewBox: `0 0 ${width} ${height}`, class: 'gw-svg', role: 'img' });
+  const pad = axes ? { l: 30, r: 18, t: 6, b: 16 } : { l: 3, r: 3, t: 3, b: 3 };
+  const years = points.map((p) => p[0]);
+  const [y0, y1] = [Math.min(...years), Math.max(...years)];
+  const deepest = Math.max(...points.map((p) => p[1]), 1) * 1.08;
+  const x = (year) => pad.l + ((year - y0) / Math.max(1, y1 - y0)) * (width - pad.l - pad.r);
+  const y = (depth) => pad.t + (depth / deepest) * (height - pad.t - pad.b);
+  if (axes) {
+    for (const depth of [0, deepest / 2, deepest]) {
+      svg.append(svgEl('line', { x1: pad.l, x2: width - pad.r, y1: y(depth), y2: y(depth), class: 'grid' }));
+      const label = svgEl('text', { x: pad.l - 4, y: y(depth) + 3, 'text-anchor': 'end' });
+      label.textContent = `${Math.round(depth)} m`;
+      svg.append(label);
+    }
+    for (const year of [y0, 2014, y1]) {
+      const label = svgEl('text', { x: x(year), y: height - 4, 'text-anchor': 'middle' });
+      label.textContent = String(year);
+      svg.append(label);
+    }
+  }
+  if (y0 <= 2014 && y1 > 2014) svg.append(svgEl('line', { x1: x(2014.5), x2: x(2014.5), y1: pad.t, y2: height - pad.b, class: 'era' }));
+  let d = '';
+  let previous = null;
+  for (const [year, depth] of points) {
+    d += `${previous !== null && year - previous <= 1 ? 'L' : 'M'}${x(year).toFixed(1)} ${y(depth).toFixed(1)} `;
+    previous = year;
+  }
+  svg.append(svgEl('path', { d: d.trim(), class: 'depth' }));
+  for (const [year, depth] of points) svg.append(svgEl('circle', { cx: x(year).toFixed(1), cy: y(depth).toFixed(1), r: axes ? 2.2 : 1.6, class: 'dot' }));
+  return svg;
+}
+function gwSourceLink() {
+  const link = document.createElement('a');
+  link.href = gwData.source.url; link.target = '_blank'; link.rel = 'noopener'; link.textContent = 'Source: India-WRIS via India Data Portal ↗';
+  return link;
+}
+function openGwPopup(p, lngLat) {
+  const content = document.createElement('div');
+  const head = textEl('div', 'head', '');
+  head.append(textEl('span', 'kind gw', `${p.well || 'monitoring well'} · ${p.agency}`), textEl('strong', '', p.name));
+  const dl = document.createElement('dl');
+  const row = (label, value) => dl.append(textEl('dt', '', label), textEl('dd', '', value));
+  if (p.before !== undefined) row(`May ${gwYears(gwData.before)}`, `${metres(p.before)} below ground · ${p.n_before} seasons`);
+  if (p.after !== undefined) row(`May ${gwYears(gwData.after)}`, `${metres(p.after)} below ground · ${p.n_after} seasons`);
+  if (p.change !== undefined) row('Change', `water table ${changeWords(p.change)}`);
+  if (p.latest !== undefined) row(`Latest · May ${p.latest_year}`, metres(p.latest));
+  if (p.well_depth) row('Well depth', metres(p.well_depth));
+  row('District', p.district);
+  content.append(head, dl);
+  const series = typeof p.series === 'string' ? JSON.parse(p.series) : p.series;   // MapLibre hands nested properties over as JSON text
+  if (series && series.length > 1) {
+    content.append(depthChart(series, 272, 64, false),
+                   textEl('p', 'fine', `Depth to water each May, ${series[0][0]}–${series[series.length - 1][0]}; the dashed line is 2014. Ground is at the top, so a falling line is a falling water table.`));
+  }
+  content.appendChild(gwSourceLink());
+  gwPopup.setLngLat(lngLat).setDOMContent(content).addTo(map);
+}
+function openGwDistrictPopup(d, lngLat) {
+  const content = document.createElement('div');
+  const head = textEl('div', 'head', '');
+  head.append(textEl('span', 'kind gw', 'district · India-WRIS wells'), textEl('strong', '', d.district));
+  const dl = document.createElement('dl');
+  const row = (label, value) => dl.append(textEl('dt', '', label), textEl('dd', '', value));
+  row('Wells', `${indian(d.wells)} with May readings, ${indian(d.wells_both)} measured in both windows`);
+  row(`May ${gwYears(gwData.before)}`, `${metres(d.before)} below ground, mean of those wells`);
+  row(`May ${gwYears(gwData.after)}`, `${metres(d.after)} below ground`);
+  row('Median change', `water table ${changeWords(d.change)} · rose in ${d.rising} of ${d.wells_both} wells`);
+  content.append(head, dl, textEl('p', 'fine', 'Click a well for its own readings.'), gwSourceLink());
+  gwPopup.setLngLat(lngLat).setDOMContent(content).addTo(map);
+}
+map.on('click', 'gw-wells', (event) => { event.originalEvent.stopPropagation(); openGwPopup(event.features[0].properties, event.lngLat); });
+map.on('mouseenter', 'gw-wells', () => { map.getCanvas().style.cursor = 'pointer'; });
+map.on('mouseleave', 'gw-wells', () => { map.getCanvas().style.cursor = ''; });
+map.on('click', 'gw-districts', (event) => {
+  const above = ['gw-wells', 'tanks-fill', 'tanks-dots'].filter((id) => map.getLayer(id));
+  if (map.queryRenderedFeatures(event.point, { layers: above }).length) return;           // the well or tank popup takes the click
+  const d = gwData && gwData.districts.find((row) => row.district === event.features[0].properties.shapeName);
+  if (!d || d.change === null) return;
+  event.originalEvent.stopPropagation();
+  openGwDistrictPopup(d, event.lngLat);
+});
+function renderGwLegend() {
+  const legend = $('gw-legend');
+  legend.textContent = '';
+  if (!gwData) return;
+  const field = gwField();
+  const ramp = gwRamp(MAP_THEMES[currentTheme()], field);
+  const [low, high] = [ramp[0][0], ramp[ramp.length - 1][0]];
+  const bar = textEl('div', 'bar', '');
+  bar.style.background = `linear-gradient(90deg, ${ramp.map(([v, c]) => `${c} ${Math.round(((v - low) / (high - low)) * 100)}%`).join(', ')})`;
+  const ticks = textEl('div', 'ticks', '');
+  const labels = field === 'change' ? [`fell ${Math.abs(low)} m or more`, 'no change', `rose ${high} m or more`] : ['at the surface', `${(low + high) / 2} m`, `${high} m or deeper`];
+  for (const text of labels) ticks.appendChild(textEl('span', '', text));
+  const title = gwMode === 'off' ? 'Layer off: choose Before 2014, After 2014 or Change under Layers.'
+    : field === 'change' ? `Change in depth to water, May ${gwYears(gwData.before)} to May ${gwYears(gwData.after)}; blue wells and districts gained water.`
+      : `Depth to water in May ${gwYears(gwData[field])}, metres below ground; blue is shallow.`;
+  legend.append(textEl('p', 'hint', title), bar, ticks);
+}
+function renderGroundwater(data) {
+  gwData = data;
+  const s = data.state;
+  $('gw-count').textContent = `${indian(s.wells)} wells`;
+  $('gw-before-years').textContent = `m, ${gwYears(data.before)}`;
+  $('gw-after-years').textContent = `m, ${gwYears(data.after)}`;
+  const summary = $('gw-summary');
+  summary.textContent = '';
+  summary.append('India-WRIS publishes May readings from ', bold(indian(s.wells)), ` monitoring wells inside Telangana (${indian(s.cgwb)} CGWB, ${indian(s.wells - s.cgwb)} state department). In the `,
+                 bold(indian(s.wells_both)), ` wells measured in both windows the water table stood `, bold(metres(s.before)), ` below ground in May ${gwYears(data.before)} and `,
+                 bold(metres(s.after)), ` in May ${gwYears(data.after)}: a median change of `, bold(signedMetres(s.change)), ` (it rose in ${Math.round((100 * s.rising) / s.wells_both)} % of wells).`);
+  const chart = $('gw-chart');
+  chart.textContent = '';
+  chart.appendChild(depthChart(data.chart.map((c) => [c.year, c.depth]), 320, 120, true));
+  const last = data.chart[data.chart.length - 1];
+  $('gw-chart-hint').textContent = `Mean of ${indian(data.chart_wells)} wells with at least ${data.chart_min_seasons} May readings, each measured against its own long-run mean so the growing network does not fake a trend. No statewide May survey in 2020–21; ${last.wells} wells reported in ${last.year}.`;
+  const tbody = $('gw-table').tBodies[0];
+  tbody.textContent = '';
+  const rows = data.districts.filter((d) => d.change !== null).sort((a, b) => b.change - a.change || a.district.localeCompare(b.district));
+  for (const d of [...rows, { ...s, district: 'Telangana', total: true }]) {
+    const tr = document.createElement('tr');
+    if (d.total) tr.className = 'total';
+    tr.append(textEl('td', '', d.district), textEl('td', '', indian(d.wells_both)), textEl('td', '', d.before.toFixed(1)), textEl('td', '', d.after.toFixed(1)),
+              textEl('td', d.change > 0 ? 'up' : d.change < 0 ? 'down' : '', signedMetres(d.change)));
+    tr.title = `${d.district}: ${d.wells_both} wells with May readings in both windows; the water table rose in ${d.rising} of them`;
+    if (!d.total) {
+      tr.addEventListener('click', () => {
+        if (gwMode === 'off') setGwMode('change');
+        const centre = districtCentres.get(d.district);
+        if (centre) map.flyTo({ center: centre, zoom: 9, duration: 1200 });
+        for (const other of tbody.rows) other.classList.toggle('active', other === tr);
+      });
+    }
+    tbody.appendChild(tr);
+  }
+  renderGwLegend();
 }
 
 // ---------- link popup ----------
@@ -1608,6 +1816,18 @@ map.on('load', async () => {
     } else {
       document.querySelector('[data-tank]').closest('.fgroup').hidden = true;
       $('tank-card').hidden = true;
+    }
+    const groundwater = await loadJson('data/groundwater_summary.json').catch(() => null);   // absent until fetch_data.py gets the WRIS export
+    if (groundwater) {
+      gwLoaded = true;
+      gwData = groundwater;
+      map.addSource('groundwater', { type: 'geojson', data: 'data/groundwater.geojson' });
+      for (const layer of gwLayers(MAP_THEMES[currentTheme()])) map.addLayer(layer, 'districts');
+      renderGroundwater(groundwater);
+      debug.notes.groundwater = groundwater.state.wells;
+    } else {
+      document.querySelector('[data-gw]').closest('.fgroup').hidden = true;
+      $('gw-card').hidden = true;
     }
     renderCities(cities, profiles);
     renderProfile();

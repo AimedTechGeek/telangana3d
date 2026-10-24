@@ -12,9 +12,13 @@ Sources (all public, no auth):
 - GLAD global cropland extent, 3 km percent-cropland summaries for 2003-2019
 - OpenStreetMap canals (waterway=canal) in Telangana with geometry
 - OpenStreetMap water bodies (tanks, lakes, reservoirs) in a box around the state, as polygons
+- India-WRIS groundwater level readings of the CGWB and Telangana Ground Water Department
+  monitoring wells (manual network), via the India Data Portal datastore mirror
 """
 from __future__ import annotations
 
+import csv
+import gzip
 import json
 import re
 import time
@@ -181,6 +185,52 @@ def fetch_osm_water() -> None:
     print(f"fetched {target.name} ({target.stat().st_size / 1e6:.1f} MB)")
 
 
+# India-WRIS groundwater levels (metres below ground level) of the manual monitoring network. The WRIS
+# portal only serves a browser app, so the readings come from the India Data Portal's CKAN mirror of the
+# WRIS export (data to mid-2023 for the state department, 2024 for CGWB), which has an SQL datastore.
+IDP_SQL_URL = "https://ckandev.indiadataportal.com/api/3/action/datastore_search_sql"
+IDP_GW_MANUAL = "06d6e79c-61ac-46bb-9e03-c7138911c619"       # resource "Groundwater Level Collected Manually"
+GW_BBOX = (15.8, 19.95, 77.2, 81.4)                           # south, north, west, east: the state with a margin
+GW_AGENCIES = ("CGWB", "Telangana GW")                        # the box also clips Andhra Pradesh and Chhattisgarh wells
+GW_COLUMNS = ("station_code", "station_name", "agency_name", "well_type", "well_aquifer_type",
+              "latitude", "longitude", "well_depth", "date", "data_value")
+GW_PAGE = 30000                                               # the datastore returns at most 32,000 rows per query
+
+
+def fetch_groundwater_levels() -> None:
+    """Every reading of the CGWB and Telangana GW wells in the box, as a gzipped CSV (~190,000 rows)."""
+    target = RAW / "gw_levels.csv.gz"
+    if target.exists():
+        print(f"cached  {target.name}")
+        return
+    south, north, west, east = GW_BBOX
+    where = (f"latitude BETWEEN {south} AND {north} AND longitude BETWEEN {west} AND {east} "
+             f"AND agency_name IN ({', '.join(repr(a) for a in GW_AGENCIES)})")
+    rows: list[dict] = []
+    last_id = 0
+    while True:                                               # keyset pagination on the row id
+        sql = (f'SELECT _id, {", ".join(GW_COLUMNS)} FROM "{IDP_GW_MANUAL}" WHERE {where} AND _id > {last_id} '
+               f"ORDER BY _id LIMIT {GW_PAGE}")
+        for attempt in range(5):
+            response = requests.get(IDP_SQL_URL, params={"sql": sql}, timeout=300)
+            if response.ok and response.json().get("success"):
+                break
+            print(f"  datastore {response.status_code} ({response.text[:80]!r}), retrying")
+            time.sleep(20 * (attempt + 1))
+        response.raise_for_status()
+        records = response.json()["result"]["records"]
+        rows += records
+        print(f"  {len(rows):,} readings so far")
+        if len(records) < GW_PAGE:
+            break
+        last_id = records[-1]["_id"]
+    with gzip.open(target, "wt", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=GW_COLUMNS, extrasaction="ignore")
+        writer.writeheader()
+        writer.writerows(rows)
+    print(f"fetched {target.name} ({target.stat().st_size / 1e6:.1f} MB, {len(rows):,} readings)")
+
+
 # Potapov et al. 2021: percent cropland per 3 km cell, one layer per four-year epoch (named by its last year).
 GLAD_CROPLAND_URL = "https://glad.umd.edu/users/Potapov/Global_Crop/Data/Global_cropland_3km_{year}.tif"
 GLAD_CROPLAND_YEARS = (2003, 2007, 2011, 2015, 2019)
@@ -231,4 +281,5 @@ if __name__ == "__main__":
     fetch_wikidata_dams()
     fetch_osm_reservoirs()
     fetch_osm_water()
+    fetch_groundwater_levels()
     fetch_cropland()

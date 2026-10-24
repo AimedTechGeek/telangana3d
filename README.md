@@ -69,14 +69,15 @@ uv run python serve.py      # http://127.0.0.1:8765/ opens in your browser
   district next to what OSM has mapped, and the "Restored 2015–18" view
   shades each district by tanks taken up, since no source publishes which
   tanks were restored with their locations
+- **Groundwater** (India-WRIS): 1,605 CGWB and state-department monitoring wells with their mean depth to water in May before 2014 (2010–14) and after (2015–23), the change per well and per district, a year-by-year state curve, and popups with each well's readings. Depth is below ground, so the drought years 2015–18 show as a fall and the wet 2020–22 monsoons as a recovery.
 - 27 cities and towns ranked by elevation, with the lowest river beds for
   comparison; click one to fly to it
 - Both side columns are stacks of small collapsible cards, one per category.
   Left: Elevation (live readout and colour scale), Rivers (flow and
-  profiles), Water works (links, Kaleshwaram network, still to be built) and
-  Cities. Right: Terrain (exaggeration, hillshade, contours), Layers
+  profiles), Water works (links, Kaleshwaram network, still to be built), Tanks,
+  Groundwater and Cities. Right: Terrain (exaggeration, hillshade, contours), Layers
   (districts, place labels, flow animation, dams, water links, canals,
-  cropland), Filters (works status, dams' opening year) and Navigation (drag
+  tanks, groundwater, cropland), Filters (works status, dams' opening year) and Navigation (drag
   mode, orbit, reset); the Cropland card opens beneath them. Click a card's
   title to fold it away. Light/dark theme follows the OS setting; the toggle
   in the left panel overrides it
