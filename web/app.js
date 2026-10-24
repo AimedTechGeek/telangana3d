@@ -27,7 +27,7 @@ const MAP_THEMES = {
   light: {
     background: '#e9e6df', mask: '#efece5', maskOpacity: 0.5,
     district: '#3b3a36', districtOpacity: 0.55, state: '#161616', stateCasing: '#ffffff',
-    contour: '#5a4634', flowGlow: '#ffffff', flowDash: '#eef7ff', link: '#c2410c', linkDash: '#fff4e8',
+    contour: '#5a4634', flowGlow: '#ffffff', flowDash: '#eef7ff', link: '#c2410c', linkDash: '#fff4e8', cropOpacity: 0.82,
     flow: ['#86d9e3', '#36aee6', '#2566d8', '#1a3aa6', '#5f2aa8'],   // FLOW_CLASSES: cyan -> blue -> navy -> purple
     shadow: '#2b2016', highlight: '#fff4e2', accent: '#4e3d2e',
     sky: { 'sky-color': '#cfe3f6', 'horizon-color': '#eef3f8', 'fog-color': '#e9e6df' },
@@ -35,7 +35,7 @@ const MAP_THEMES = {
   dark: {
     background: '#0e0f12', mask: '#0e0f12', maskOpacity: 0.58,
     district: '#d8d4cc', districtOpacity: 0.38, state: '#f0efec', stateCasing: '#000000',
-    contour: '#d8d4cc', flowGlow: '#0b1a33', flowDash: '#ffffff', link: '#fb923c', linkDash: '#fff7ed',
+    contour: '#d8d4cc', flowGlow: '#0b1a33', flowDash: '#ffffff', link: '#fb923c', linkDash: '#fff7ed', cropOpacity: 0.9,
     flow: ['#2f96a8', '#3cbbea', '#6a9cff', '#a9bdff', '#dcaaff'],   // FLOW_CLASSES: teal -> sky -> blue -> lilac on the dark surface
     shadow: '#000000', highlight: '#b9a68c', accent: '#000000',
     sky: { 'sky-color': '#0b1020', 'horizon-color': '#1b2233', 'fog-color': '#0e0f12' },
@@ -107,6 +107,27 @@ function dashPatternAt(step) {
   return [round(FLOW_DASH.length - shift), FLOW_DASH.gap, shift, 0];
 }
 
+// Cropland rasters (GLAD): one PNG per period plus the change map, all on the same Mercator extent.
+let cropMode = 'off';                      // off | before | after | change
+let cropBounds = null;                     // [west, south, east, north] from cropland.json
+function cropCoords() {
+  const [w, s, e, n] = cropBounds;
+  return [[w, n], [e, n], [e, s], [w, s]];
+}
+function cropLayers(t) {
+  if (!cropBounds) return [];
+  return ['before', 'after', 'change'].map((mode) => ({
+    id: `crop-${mode}`, type: 'raster', source: `crop-${mode}`,
+    layout: { visibility: cropMode === mode ? 'visible' : 'none' },
+    paint: { 'raster-opacity': t.cropOpacity, 'raster-resampling': 'linear', 'raster-fade-duration': 0 },
+  }));
+}
+function cropSources() {
+  if (!cropBounds) return {};
+  return Object.fromEntries(['before', 'after', 'change'].map((mode) => [
+    `crop-${mode}`, { type: 'image', url: `data/cropland_${mode}.png`, coordinates: cropCoords() }]));
+}
+
 function chipOn(name) {
   const chip = document.querySelector(`.chip[data-toggle="${name}"]`);
   return chip.getAttribute('aria-pressed') === 'true' ? 'visible' : 'none';
@@ -128,6 +149,7 @@ function buildStyle(theme) {
       flow: { type: 'geojson', data: 'data/flow.geojson' },
       contours: { type: 'geojson', data: 'data/contours.geojson' },
       links: { type: 'geojson', data: 'data/links.geojson' },
+      ...cropSources(),
     },
     layers: [
       { id: 'background', type: 'background', paint: { 'background-color': t.background } },
@@ -135,6 +157,7 @@ function buildStyle(theme) {
       { id: 'hillshade', type: 'hillshade', source: 'shade', layout: { visibility: chipOn('hillshade') }, paint: {
           'hillshade-method': 'standard', 'hillshade-illumination-direction': 315, 'hillshade-exaggeration': 0.75,
           'hillshade-shadow-color': t.shadow, 'hillshade-highlight-color': t.highlight, 'hillshade-accent-color': t.accent } },
+      ...cropLayers(t),                      // under the mask so land outside the state stays dimmed
       { id: 'mask', type: 'fill', source: 'mask', paint: { 'fill-color': t.mask, 'fill-opacity': t.maskOpacity } },
       { id: 'contours', type: 'line', source: 'contours', layout: { visibility: chipOn('contours'), 'line-join': 'round' }, paint: {
           'line-color': t.contour, 'line-opacity': 0.55,
@@ -721,6 +744,80 @@ function addPumpMarker(house) {
   new maplibregl.Marker({ element: node, anchor: 'left', offset: [-10, 0] }).setLngLat([house.lon, house.lat]).addTo(map);
 }
 
+// ---------- cropland panel and mode ----------
+const CROP_MODE_LABEL = { off: 'layer off', before: 'showing 2008–2011', after: 'showing 2016–2019', change: 'showing change' };
+let cropData = null;
+
+function setCropMode(mode) {
+  cropMode = mode;
+  for (const button of document.querySelectorAll('[data-crop]')) button.setAttribute('aria-pressed', String(button.dataset.crop === mode));
+  for (const m of ['before', 'after', 'change']) if (map.getLayer(`crop-${m}`)) map.setLayoutProperty(`crop-${m}`, 'visibility', m === mode ? 'visible' : 'none');
+  $('crop-mode-label').textContent = CROP_MODE_LABEL[mode];
+  renderCropLegend();
+}
+for (const button of document.querySelectorAll('[data-crop]')) button.addEventListener('click', () => setCropMode(button.dataset.crop));
+
+const rgb = (c) => `rgb(${c[0]},${c[1]},${c[2]})`;
+function renderCropLegend() {
+  const legend = $('crop-legend');
+  legend.textContent = '';
+  if (!cropData || cropMode === 'off') return;
+  const bar = document.createElement('div'); bar.className = 'bar';
+  const ticks = document.createElement('div'); ticks.className = 'ticks';
+  if (cropMode === 'change') {
+    const { loss, gain, change_full } = cropData.legend;
+    bar.style.background = `linear-gradient(90deg, ${rgb(loss)}, rgba(${loss.join(',')},0.15) 45%, transparent 50%, rgba(${gain.join(',')},0.15) 55%, ${rgb(gain)})`;
+    for (const text of [`−${change_full} pp · less cropland`, 'no change', `more cropland · +${change_full} pp`]) ticks.appendChild(textEl('span', '', text));
+  } else {
+    bar.style.background = `linear-gradient(90deg, ${cropData.legend.ramp.map(([v, c]) => `rgba(${c.join(',')},${0.25 + 0.65 * v / 100}) ${v}%`).join(', ')})`;
+    for (const text of ['0 %', '25', '50', '75', '100 % of cell under crops']) ticks.appendChild(textEl('span', '', text));
+  }
+  legend.append(bar, ticks);
+}
+
+function renderCropland(data) {
+  cropData = data;
+  const before = data.state[String(data.before.year)], after = data.state[String(data.after.year)];
+  const summary = $('crop-summary');
+  summary.textContent = '';
+  summary.append('Cropland covered ', bold(`${before.pct} %`), ` of Telangana in ${before.epoch} and `, bold(`${after.pct} %`), ` in ${after.epoch}: about `,
+                 bold(`${(after.km2 - before.km2).toLocaleString('en-IN')} km²`), ' more, on the GLAD 3 km grid. The whole 2000–2019 run: ',
+                 Object.values(data.state).map((row) => `${row.pct} %`).join(' → '), '.');
+  const tbody = $('crop-official').tBodies[0];
+  tbody.textContent = '';
+  for (const row of data.official) {
+    const tr = document.createElement('tr');
+    const label = document.createElement('td');
+    const link = document.createElement('a'); link.href = row.source; link.target = '_blank'; link.rel = 'noopener'; link.textContent = row.label;
+    label.appendChild(link);
+    const b = document.createElement('td'); b.textContent = row.before;
+    const a = document.createElement('td'); a.textContent = row.after;
+    tr.append(label, b, a); tbody.appendChild(tr);
+  }
+  const list = $('crop-list');
+  list.textContent = '';
+  for (const row of data.districts) {
+    const item = document.createElement('li');
+    const button = document.createElement('button'); button.type = 'button'; button.className = 'row crop';
+    const pair = textEl('span', 'pair', '');
+    const beforeBar = document.createElement('i'); beforeBar.className = 'b'; beforeBar.style.width = `${row.pct_before}%`;
+    const afterBar = document.createElement('i'); afterBar.className = 'a'; afterBar.style.width = `${row.pct_after}%`;
+    pair.append(beforeBar, afterBar);
+    const value = textEl('span', 'val', `${row.pct_after} %`);
+    const delta = textEl('span', `d ${row.change_pp > 0 ? 'up' : row.change_pp < 0 ? 'down' : ''}`, `${row.change_pp > 0 ? '+' : ''}${row.change_pp}`);
+    value.appendChild(delta);
+    button.append(textEl('span', 'name', row.district), pair, value);
+    button.title = `${row.district}: ${row.pct_before} % (${data.before.epoch}) → ${row.pct_after} % (${data.after.epoch}); about ${row.km2_before.toLocaleString('en-IN')} → ${row.km2_after.toLocaleString('en-IN')} km² of cropland`;
+    button.addEventListener('click', () => {
+      for (const other of document.querySelectorAll('#crop-list .row')) other.classList.toggle('active', other === button);
+      if (cropMode === 'off') setCropMode('change');
+      map.flyTo({ center: [row.lon, row.lat], zoom: 9.3, pitch: 45, bearing: -15, duration: 2000, essential: true });
+    });
+    item.appendChild(button); list.appendChild(item);
+  }
+  renderCropLegend();
+}
+
 // ---------- link popup ----------
 const linkPopup = new maplibregl.Popup({ closeButton: true, closeOnClick: true, offset: 10, className: 'dam-popup link-popup', maxWidth: '340px' });
 linkPopup.on('close', () => map.setFilter('links-highlight', ['==', ['get', 'link'], '']));
@@ -1059,10 +1156,15 @@ async function loadJson(url) { const response = await fetch(url); if (!response.
 map.on('load', async () => {
   debug.phase = 'style-loaded'; writeDebug();
   try {
-    const [cities, profiles, districtPoints, flowSummary, flowReaches, dams, links, pumphouses] = await Promise.all([
+    const [cities, profiles, districtPoints, flowSummary, flowReaches, dams, links, pumphouses, cropland] = await Promise.all([
       loadJson('data/cities.json'), loadJson('data/rivers.json'), loadJson('data/district_points.geojson'),
       loadJson('data/flow_summary.json'), loadJson('data/flow.geojson'), loadJson('data/dams.json'),
-      loadJson('data/links.geojson'), loadJson('data/pumphouses.json')]);
+      loadJson('data/links.geojson'), loadJson('data/pumphouses.json'), loadJson('data/cropland.json')]);
+    cropBounds = cropland.bounds;
+    for (const [id, source] of Object.entries(cropSources())) map.addSource(id, source);
+    for (const layer of cropLayers(MAP_THEMES[currentTheme()])) map.addLayer(layer, 'mask');
+    renderCropland(cropland);
+    debug.notes.cropDistricts = cropland.districts.length;
     prepareBubbles(flowReaches);
     dams.forEach(addDamMarker);
     renderEraCounts(dams);

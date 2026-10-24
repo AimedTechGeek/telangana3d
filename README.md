@@ -27,6 +27,11 @@ uv run python serve.py      # http://127.0.0.1:8765/ opens in your browser
   status, years (planned, construction, first water, complete), terrain
   heights at both ends, straight-line distance and source. Lines are
   schematic, not real canal alignments
+- **Cropland cover** (GLAD, Potapov et al. 2021): the Agriculture control
+  switches a raster of the share of land under crops for 2008–2011 ("Before
+  2014"), 2016–2019 ("After 2014") or the change between them; the panel
+  gives the state and per-district figures and the official irrigated-area
+  statistics. The data show the change, not its cause
 - Godavari and Krishna river-bed and flow profiles through the state; hover or
   drag the slider to follow the river on the map, click to fly there
 - Dams (arch icon) and barrages (gated-deck icon), including the Kaleshwaram

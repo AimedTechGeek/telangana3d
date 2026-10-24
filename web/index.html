@@ -68,6 +68,19 @@
     <ol id="link-list" class="link-list"></ol>
   </section>
 
+  <section class="crop" id="crop-section">
+    <div class="section-head">
+      <h2>Cropland</h2>
+      <span class="legend-inline" id="crop-mode-label">layer off</span>
+    </div>
+    <p class="summary" id="crop-summary">Loading…</p>
+    <div class="crop-legend" id="crop-legend"></div>
+    <p class="hint">Water projects are one reason; groundwater recovery, rainfall and the Mission Kakatiya tank restoration also contributed, so the map shows change, not cause.</p>
+    <table class="official" id="crop-official"><thead><tr><th>Official figure</th><th>Before</th><th>After</th></tr></thead><tbody></tbody></table>
+    <p class="hint">Cropland cover by district, 2008–2011 → 2016–2019 (GLAD). Click a row to fly there.</p>
+    <ol id="crop-list" class="district-flow"></ol>
+  </section>
+
   <section class="rivers">
     <div class="section-head">
       <h2>River profiles</h2>
@@ -101,7 +114,7 @@
     <ol id="city-list"></ol>
   </section>
 
-  <footer class="credits">Copernicus DEM (ESA) · HydroRIVERS (HydroSHEDS, Lehner &amp; Grill 2013) · geoBoundaries · Natural Earth · © OpenStreetMap contributors</footer>
+  <footer class="credits">Copernicus DEM (ESA) · HydroRIVERS (HydroSHEDS, Lehner &amp; Grill 2013) · GLAD cropland (Potapov et al. 2021) · geoBoundaries · Natural Earth · © OpenStreetMap contributors</footer>
 </aside>
 
 <aside class="filters" id="filters" aria-label="View and filters">
@@ -134,6 +147,17 @@
       <button class="chip" type="button" data-toggle="dams" aria-pressed="true">Dams &amp; reservoirs</button>
       <button class="chip" type="button" data-toggle="links" aria-pressed="true">Water links</button>
     </div>
+  </section>
+
+  <section class="fgroup">
+    <p class="eyebrow">Agriculture · cropland cover</p>
+    <div class="tabs" role="group" aria-label="Cropland layer">
+      <button type="button" data-crop="off" aria-pressed="true">Off</button>
+      <button type="button" data-crop="before" aria-pressed="false">Before 2014</button>
+      <button type="button" data-crop="after" aria-pressed="false">After 2014</button>
+      <button type="button" data-crop="change" aria-pressed="false">Change</button>
+    </div>
+    <p class="hint" id="crop-hint">Share of each 3 km cell under crops (GLAD, Potapov et al. 2021): 2008–2011 vs 2016–2019</p>
   </section>
 
   <section class="fgroup">

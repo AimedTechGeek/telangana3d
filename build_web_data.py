@@ -15,6 +15,8 @@ Outputs:
 - web/data/dams.json          dams and barrages from Wikipedia infoboxes (height, river)
 - web/data/links.geojson      schematic Kaleshwaram water links between those structures
 - web/data/pumphouses.json    Kaleshwaram pump houses from OpenStreetMap
+- web/data/cropland_*.png     GLAD percent-cropland rasters (before/after 2014) and their change
+- web/data/cropland.json      state and district cropland statistics plus official irrigation figures
 """
 from __future__ import annotations
 
@@ -32,10 +34,11 @@ import numpy as np
 import rasterio
 from PIL import Image
 from pyproj import Transformer
+from rasterio.features import geometry_mask
 from rasterio.io import MemoryFile
 from rasterio.merge import merge
 from rasterio.transform import from_bounds
-from rasterio.warp import Resampling, reproject
+from rasterio.warp import Resampling, calculate_default_transform, reproject
 from scipy.ndimage import gaussian_filter, median_filter
 from shapely.geometry import LineString, MultiLineString, Point, box, mapping
 from shapely.ops import linemerge, unary_union
@@ -699,6 +702,106 @@ def osm_reservoir_dams() -> list[dict]:
     return dams
 
 
+# --- cropland (GLAD) --------------------------------------------------------
+
+CROPLAND_DIR = RAW / "cropland"
+CROPLAND_EPOCHS = {2003: "2000–2003", 2007: "2004–2007", 2011: "2008–2011", 2015: "2012–2015", 2019: "2016–2019"}
+CROPLAND_BEFORE, CROPLAND_AFTER = 2011, 2019      # last epoch fully before 2014; first fully after it
+CROPLAND_BBOX = (77.0, 15.0, 82.0, 20.0)          # the map's DEM extent
+CROPLAND_PIXEL_M = 1000.0                         # Web Mercator grid the PNGs are drawn on (source cells are ~3 km)
+CROPLAND_MIN_SHOWN = 5                            # percent below which a cell stays transparent
+CHANGE_MIN_SHOWN = 5                              # percentage points below which change stays transparent
+CHANGE_FULL = 40                                  # percentage points at full colour
+CROPLAND_RAMP = [(0, (236, 245, 210)), (50, (104, 174, 92)), (100, (18, 94, 46))]   # one green hue, light -> dark
+CHANGE_LOSS, CHANGE_GAIN = (196, 60, 57), (43, 108, 176)                             # red <-> blue, neutral transparent
+# Official figures quoted in the panel (Telangana Socio Economic Outlook 2023 and a 2023 government
+# presentation, as reported by NITI Aayog and The News Minute; see DATA_SOURCES.md).
+OFFICIAL_IRRIGATION = [
+    {"label": "Gross irrigated area", "before": "62.5 lakh acres (2014-15)", "after": "135 lakh acres (2021-22)",
+     "source": "https://www.nitiforstates.gov.in/public-assets/Policy/policy_files/RSSNAM000500.pdf"},
+    {"label": "Paddy sown, kharif", "before": "22.7 lakh acres (2014)", "after": "65.0 lakh acres (2022)",
+     "source": "https://thenewsminute.com/telangana/telanganas-irrigated-area-has-increased-what-role-have-irrigation-projects-played"},
+    {"label": "Gross cropped area", "before": "129 lakh acres (2014-15)", "after": "233 lakh acres (2022-23)",
+     "source": "https://thenewsminute.com/telangana/telanganas-irrigated-area-has-increased-what-role-have-irrigation-projects-played"},
+]
+
+
+def cropland_grid() -> tuple[rasterio.Affine, int, int]:
+    """Web Mercator grid covering CROPLAND_BBOX at CROPLAND_PIXEL_M."""
+    with rasterio.open(CROPLAND_DIR / f"Global_cropland_3km_{CROPLAND_AFTER}.tif") as src:
+        window = rasterio.windows.from_bounds(*CROPLAND_BBOX, src.transform)
+        transform, width, height = calculate_default_transform(
+            src.crs, MERCATOR, int(window.width), int(window.height), *CROPLAND_BBOX, resolution=CROPLAND_PIXEL_M)
+    return transform, width, height
+
+
+def cropland_epoch(year: int, transform: rasterio.Affine, width: int, height: int) -> np.ndarray:
+    """Percent cropland for one epoch on the Mercator grid (float32, 0-100)."""
+    out = np.zeros((height, width), dtype=np.float32)
+    with rasterio.open(CROPLAND_DIR / f"Global_cropland_3km_{year}.tif") as src:
+        reproject(rasterio.band(src, 1), out, dst_transform=transform, dst_crs=MERCATOR,
+                  dst_nodata=0.0, resampling=Resampling.bilinear)
+    return np.clip(out, 0, 100)
+
+
+def ramp_rgba(values: np.ndarray, stops: list[tuple[float, tuple[int, int, int]]], alpha_from: float, alpha_to: float,
+              min_shown: float, full: float) -> np.ndarray:
+    xs = np.array([s[0] for s in stops], dtype=np.float32)
+    rgb = np.stack([np.interp(values, xs, [s[1][c] for s in stops]) for c in range(3)], axis=-1)
+    alpha = np.interp(values, [min_shown, full], [alpha_from, alpha_to]) * 255
+    alpha = np.where(values < min_shown, 0, alpha)
+    return np.dstack([rgb, alpha]).astype(np.uint8)
+
+
+def change_rgba(delta: np.ndarray) -> np.ndarray:
+    magnitude = np.clip(np.abs(delta), 0, CHANGE_FULL)
+    colour = np.where((delta > 0)[..., None], CHANGE_GAIN, CHANGE_LOSS).astype(np.float32)
+    alpha = np.interp(magnitude, [CHANGE_MIN_SHOWN, CHANGE_FULL], [0.35, 0.92]) * 255
+    alpha = np.where(magnitude < CHANGE_MIN_SHOWN, 0, alpha)
+    return np.dstack([colour, alpha]).astype(np.uint8)
+
+
+def zonal_mean(values: np.ndarray, geometry, transform: rasterio.Affine) -> tuple[float, int]:
+    inside = ~geometry_mask([geometry], out_shape=values.shape, transform=transform)
+    return float(values[inside].mean()) if inside.any() else float("nan"), int(inside.sum())
+
+
+def build_cropland(state: gpd.GeoDataFrame, districts: gpd.GeoDataFrame) -> dict:
+    transform, width, height = cropland_grid()
+    epochs = {year: cropland_epoch(year, transform, width, height) for year in CROPLAND_EPOCHS}
+    before, after = epochs[CROPLAND_BEFORE], epochs[CROPLAND_AFTER]
+    Image.fromarray(ramp_rgba(before, CROPLAND_RAMP, 0.25, 0.9, CROPLAND_MIN_SHOWN, 100), "RGBA").save(WEB_DATA / "cropland_before.png")
+    Image.fromarray(ramp_rgba(after, CROPLAND_RAMP, 0.25, 0.9, CROPLAND_MIN_SHOWN, 100), "RGBA").save(WEB_DATA / "cropland_after.png")
+    Image.fromarray(change_rgba(after - before), "RGBA").save(WEB_DATA / "cropland_change.png")
+
+    to_wgs = Transformer.from_crs(MERCATOR, WGS84, always_xy=True)
+    west, north = to_wgs.transform(transform.c, transform.f)
+    east, south = to_wgs.transform(transform.c + width * transform.a, transform.f + height * transform.e)
+    pixel_km2 = (CROPLAND_PIXEL_M / 1000) ** 2    # Mercator pixels; true area differs by <6 % across 15-20 °N
+
+    state_m = state.to_crs(MERCATOR).geometry.iloc[0]
+    state_rows = {}
+    for year, values in epochs.items():
+        mean, cells = zonal_mean(values, state_m, transform)
+        state_rows[str(year)] = {"epoch": CROPLAND_EPOCHS[year], "pct": round(mean, 1), "km2": round(mean / 100 * cells * pixel_km2)}
+
+    rows = []
+    for _, district in districts.to_crs(MERCATOR).iterrows():
+        pct_before, cells = zonal_mean(before, district.geometry, transform)
+        pct_after, _ = zonal_mean(after, district.geometry, transform)
+        point = district.geometry.representative_point()
+        lon, lat = to_wgs.transform(point.x, point.y)
+        rows.append({"district": district["shapeName"], "pct_before": round(pct_before, 1), "pct_after": round(pct_after, 1),
+                     "change_pp": round(pct_after - pct_before, 1), "km2_before": round(pct_before / 100 * cells * pixel_km2),
+                     "km2_after": round(pct_after / 100 * cells * pixel_km2), "lon": round(lon, 4), "lat": round(lat, 4)})
+    rows.sort(key=lambda r: -r["change_pp"])
+    return {"bounds": [round(west, 5), round(south, 5), round(east, 5), round(north, 5)],
+            "before": {"year": CROPLAND_BEFORE, "epoch": CROPLAND_EPOCHS[CROPLAND_BEFORE]},
+            "after": {"year": CROPLAND_AFTER, "epoch": CROPLAND_EPOCHS[CROPLAND_AFTER]},
+            "state": state_rows, "districts": rows, "official": OFFICIAL_IRRIGATION,
+            "legend": {"ramp": CROPLAND_RAMP, "loss": CHANGE_LOSS, "gain": CHANGE_GAIN, "change_full": CHANGE_FULL}}
+
+
 # --- contours ---------------------------------------------------------------
 
 def build_contours() -> gpd.GeoDataFrame:
@@ -761,6 +864,11 @@ def main() -> None:
     (WEB_DATA / "pumphouses.json").write_text(json.dumps(pumphouses, indent=1, ensure_ascii=False), encoding="utf-8")
     links = build_links({node["name"]: node for node in dams} | {node["osm_name"]: node for node in pumphouses})
     (WEB_DATA / "links.geojson").write_text(json.dumps(links), encoding="utf-8")
+    cropland = build_cropland(state, districts)
+    (WEB_DATA / "cropland.json").write_text(json.dumps(cropland, indent=1, ensure_ascii=False), encoding="utf-8")
+    print("cropland (GLAD, % of area): " + ", ".join(f"{v['epoch']} {v['pct']}%" for v in cropland["state"].values()))
+    for row in cropland["districts"][:5] + cropland["districts"][-3:]:
+        print(f"  {row['district']:18} {row['pct_before']:5}% -> {row['pct_after']:5}%  ({row['change_pp']:+.1f} pp)")
     print(f"links: {len(pumphouses)} pump houses/intakes, {len(links['features'])} links")
     for f in links["features"]:
         p = f["properties"]

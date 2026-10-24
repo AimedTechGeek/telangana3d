@@ -9,6 +9,7 @@ Sources (all public, no auth):
 - Wikipedia wikitext of "List of dams and reservoirs in Telangana" and every
   page it links to (dam infoboxes carry height and coordinates)
 - OpenStreetMap dams of the Kaleshwaram reservoirs that have no Wikipedia page
+- GLAD global cropland extent, 3 km percent-cropland summaries for 2003-2019
 """
 from __future__ import annotations
 
@@ -122,6 +123,9 @@ def fetch_osm_reservoirs() -> None:
     download(OVERPASS_URL, RAW / "osm_pumphouses.json", params={"data": OVERPASS_PUMPHOUSES_QUERY}, headers=OVERPASS_HEADERS)
 
 
+# Potapov et al. 2021: percent cropland per 3 km cell, one layer per four-year epoch (named by its last year).
+GLAD_CROPLAND_URL = "https://glad.umd.edu/users/Potapov/Global_Crop/Data/Global_cropland_3km_{year}.tif"
+GLAD_CROPLAND_YEARS = (2003, 2007, 2011, 2015, 2019)
 WIKIDATA_SPARQL = "https://query.wikidata.org/sparql"
 WIKIDATA_DAMS_QUERY = """SELECT ?item ?itemLabel ?typeLabel ?coord ?height ?riverLabel ?inception WHERE {
   SERVICE wikibase:box { ?item wdt:P625 ?coord .
@@ -137,6 +141,12 @@ def fetch_wikidata_dams() -> None:
     """Dams around Telangana from Wikidata (CSV); supplies reservoirs with no Wikipedia page."""
     download(WIKIDATA_SPARQL, RAW / "wikidata_dams.csv", params={"query": WIKIDATA_DAMS_QUERY},
              headers={**WIKIPEDIA_HEADERS, "Accept": "text/csv"})
+
+
+def fetch_cropland() -> None:
+    (RAW / "cropland").mkdir(exist_ok=True)
+    for year in GLAD_CROPLAND_YEARS:
+        download(GLAD_CROPLAND_URL.format(year=year), RAW / "cropland" / f"Global_cropland_3km_{year}.tif")
 
 
 def fetch_wikipedia_dams() -> None:
@@ -162,3 +172,4 @@ if __name__ == "__main__":
     fetch_wikipedia_dams()
     fetch_wikidata_dams()
     fetch_osm_reservoirs()
+    fetch_cropland()

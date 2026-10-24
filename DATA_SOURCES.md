@@ -217,6 +217,47 @@ public and were downloaded by `fetch_data.py` into `data/raw/` (not committed);
   15.4–20.0 °N with coordinates, cached as `wikidata_dams.csv`; used for the
   Singotam reservoir.
 
+## 6d. Cropland cover (GLAD global cropland extent)
+
+- **What:** percent of each 3 km (0.025°) cell under crops, one layer per
+  four-year epoch (2000–03, 2004–07, 2008–11, 2012–15, 2016–19), summarised by
+  the University of Maryland GLAD lab from their 30 m Landsat cropland maps.
+  Cropland here means land used for annual and perennial herbaceous crops
+  (not plantations, pasture or fallow for more than four years).
+- **Files:** `Global_cropland_3km_{2003,2007,2011,2015,2019}.tif` from
+  `https://glad.umd.edu/users/Potapov/Global_Crop/Data/` (≈7 MB each), cached
+  in `data/raw/cropland/`.
+- **Pages:** https://glad.umd.edu/dataset/croplands
+- **Terms:** Creative Commons Attribution 4.0. Cite: Potapov P. et al. (2021)
+  *Global maps of cropland extent and change show accelerated cropland
+  expansion in the twenty-first century.* Nature Food 3, 19–28.
+  https://doi.org/10.1038/s43016-021-00429-z
+- **Used for:** the "Before 2014" (2008–2011 epoch), "After 2014"
+  (2016–2019 epoch) and "Change" rasters, the state and per-district
+  statistics in the Cropland panel.
+- **Processing:** each epoch is resampled (bilinear) onto a 1 km Web Mercator
+  grid over the map extent and drawn as a PNG image source; district and
+  state values are the mean cell percentage inside each polygon, and the km²
+  figures multiply that by the polygon's Mercator pixel area (true areas are
+  within ~6 % at these latitudes). Cells below 5 % and changes below 5
+  percentage points are left transparent.
+- **Caveats:** the 2012–2015 epoch straddles the 2014 state formation, so the
+  comparison uses the epochs either side of it. Cropland extent is not the
+  same as irrigated area, and the increase has several causes (irrigation
+  projects, groundwater recovery, rainfall, tank restoration), which the data
+  cannot separate.
+
+## 6e. Official irrigation and cropping figures (Cropland panel table)
+
+- Gross irrigated area 62.48 lakh acres (2014-15) → 135 lakh acres (2021-22):
+  Telangana Socio Economic Outlook 2023, as hosted by NITI Aayog,
+  https://www.nitiforstates.gov.in/public-assets/Policy/policy_files/RSSNAM000500.pdf
+- Paddy sown in kharif 22.74 lakh acres (2014) → 64.99 lakh acres (2022), and
+  gross cropped area 129.04 → 232.58 lakh acres (2014-15 → 2022-23): Telangana
+  government presentation reported by The News Minute,
+  https://thenewsminute.com/telangana/telanganas-irrigated-area-has-increased-what-role-have-irrigation-projects-played
+- These are state statistics quoted as published; they were not re-derived.
+
 ## 7. Landmark heights (elevation comparison)
 
 Hard-coded in `web/app.js` (`LANDMARKS`), checked on 2026-10-22:
