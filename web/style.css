@@ -298,8 +298,9 @@ body.proposal-off #proposal-card, body.proposal-off .mk-new { display: none; }
 .mk-new .lbl { padding: 2px 7px; border-radius: 7px; white-space: nowrap; font-size: 11px; font-weight: 600; background: var(--panel); backdrop-filter: blur(6px); border: 1px dashed var(--mk); box-shadow: 0 2px 8px rgba(0,0,0,.18); }
 .mk-new .lbl .e { font-family: var(--mono); font-weight: 500; color: var(--ink-2); margin-left: 4px; }
 .mk-new .lbl .st { margin-left: 5px; padding: 0 4px; border-radius: 4px; font-size: 9px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--panel-solid); background: var(--mk); }
-.mk-new.pump .lbl, .mk-new.canal .lbl, .mk-new.tunnel .lbl { font-size: 10.5px; font-weight: 500; }
-body.z-far .mk-new.pump, body.z-far .mk-new.canal, body.z-far .mk-new.tunnel { display: none; }
+.mk-new.pump .lbl, .mk-new.canal .lbl, .mk-new.tunnel .lbl, .mk-new.main .lbl { font-size: 10.5px; font-weight: 500; }
+.mk-new.main { --mk: var(--prop); }
+body.z-far .mk-new.pump, body.z-far .mk-new.canal, body.z-far .mk-new.tunnel, body.z-far .mk-new.main { display: none; }
 body.labels-off .mk-new { display: none; }
 .key-ic { display: inline-grid; place-items: center; width: 15px; height: 15px; border-radius: 50%; border: 1px dashed var(--prop); color: var(--prop); vertical-align: middle; margin: 0 1px; }
 .key-ic svg { width: 10px; height: 10px; }
