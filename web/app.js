@@ -29,6 +29,7 @@ const MAP_THEMES = {
     district: '#3b3a36', districtOpacity: 0.55, state: '#161616', stateCasing: '#ffffff',
     contour: '#5a4634', flowGlow: '#ffffff', flowDash: '#eef7ff', link: '#c2410c', linkDash: '#fff4e8', cropOpacity: 0.82,
     canal: '#c2187f', canalOld: '#8a6f84', canalDash: '#fff0fa', canalCasing: '#ffffff',
+    tank: '#3b95dc', tankEdge: '#1b5a93', tankRamp: ['#e6eef5', '#1d5f99'],
     flow: ['#86d9e3', '#36aee6', '#2566d8', '#1a3aa6', '#5f2aa8'],   // FLOW_CLASSES: cyan -> blue -> navy -> purple
     shadow: '#2b2016', highlight: '#fff4e2', accent: '#4e3d2e',
     sky: { 'sky-color': '#cfe3f6', 'horizon-color': '#eef3f8', 'fog-color': '#e9e6df' },
@@ -38,6 +39,7 @@ const MAP_THEMES = {
     district: '#d8d4cc', districtOpacity: 0.38, state: '#f0efec', stateCasing: '#000000',
     contour: '#d8d4cc', flowGlow: '#0b1a33', flowDash: '#ffffff', link: '#fb923c', linkDash: '#fff7ed', cropOpacity: 0.9,
     canal: '#ff6fd0', canalOld: '#d2b4c8', canalDash: '#fff0fa', canalCasing: '#2a0d20',
+    tank: '#4fb3ff', tankEdge: '#bfe3ff', tankRamp: ['#161c26', '#3f8fd0'],
     flow: ['#2f96a8', '#3cbbea', '#6a9cff', '#a9bdff', '#dcaaff'],   // FLOW_CLASSES: teal -> sky -> blue -> lilac on the dark surface
     shadow: '#000000', highlight: '#b9a68c', accent: '#000000',
     sky: { 'sky-color': '#0b1020', 'horizon-color': '#1b2233', 'fog-color': '#0e0f12' },
@@ -200,6 +202,68 @@ function setCanalMode(mode) {
 }
 for (const button of document.querySelectorAll('[data-canal]')) button.addEventListener('click', () => setCanalMode(button.dataset.canal));
 
+// Tanks (OpenStreetMap water bodies) and the Mission Kakatiya restoration counts by district.
+let tankMode = 'tanks';                    // off | tanks | kakatiya
+let tanksLoaded = false;
+let tankSummary = null;
+const TANK_POLYGON_ZOOM = 9;               // real outlines from here up, centroid dots below
+const districtLabels = new Map();          // district -> label element (carries the Mission Kakatiya count)
+const districtCentres = new Map();         // district -> [lon, lat]
+const tankVisibility = () => (tankMode !== 'off' && statusMode !== 'pending' ? 'visible' : 'none');   // tanks all exist today
+function tankLayers(t) {
+  if (!tanksLoaded) return [];
+  const vis = tankVisibility();
+  // Dot radius grows with the square root of the water spread; one zoom interpolation per expression.
+  const radius = ['interpolate', ['linear'], ['zoom'],
+    6, ['min', 4, ['+', 0.8, ['*', 0.05, ['sqrt', ['get', 'area_ha']]]]],
+    9, ['min', 16, ['+', 1.6, ['*', 0.25, ['sqrt', ['get', 'area_ha']]]]]];
+  return [
+    { id: 'tanks-kakatiya', type: 'fill', source: 'districts', layout: { visibility: tankMode === 'kakatiya' ? 'visible' : 'none' },
+      paint: { 'fill-color': kakatiyaFill(t), 'fill-opacity': 0.7 } },
+    { id: 'tanks-fill', type: 'fill', source: 'tanks', minzoom: TANK_POLYGON_ZOOM, layout: { visibility: vis },
+      paint: { 'fill-color': t.tank, 'fill-opacity': 0.72 } },
+    { id: 'tanks-outline', type: 'line', source: 'tanks', minzoom: TANK_POLYGON_ZOOM, layout: { visibility: vis, 'line-join': 'round' },
+      paint: { 'line-color': t.tankEdge, 'line-width': 0.8, 'line-opacity': 0.8 } },
+    { id: 'tanks-dots', type: 'circle', source: 'tank-points', maxzoom: TANK_POLYGON_ZOOM, layout: { visibility: vis },
+      paint: { 'circle-radius': radius, 'circle-color': t.tank, 'circle-opacity': 0.85, 'circle-stroke-color': t.tankEdge, 'circle-stroke-width': 0.5 } },
+  ];
+}
+/** District fill shaded by tanks taken up under Mission Kakatiya (square-root scale, darkest = most). */
+function kakatiyaFill(t) {
+  if (!tankSummary) return 'rgba(0,0,0,0)';
+  const max = Math.max(...tankSummary.districts.map((d) => kakatiyaTotal(d) || 0));
+  const expression = ['match', ['get', 'shapeName']];
+  for (const d of tankSummary.districts) {
+    const total = kakatiyaTotal(d);
+    if (total) expression.push(d.district, mixColour(t.tankRamp[0], t.tankRamp[1], Math.sqrt(total / max)));
+  }
+  expression.push('rgba(0,0,0,0)');
+  return expression;
+}
+/** Mulugu and Narayanpet were carved out in 2019: their tanks sit in the parent district's 2016 count. */
+function kakatiyaTotal(d) {
+  const source = d.mk_counted_in ? tankSummary.districts.find((row) => row.district === d.mk_counted_in) : d;
+  return source ? source.mk_total : null;
+}
+function mixColour(a, b, f) {
+  const rgb = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+  const [x, y] = [rgb(a), rgb(b)];
+  return `rgb(${x.map((v, i) => Math.round(v + (y[i] - v) * f)).join(',')})`;
+}
+function applyTankVisibility() {
+  if (!tanksLoaded) return;
+  for (const id of ['tanks-fill', 'tanks-outline', 'tanks-dots']) map.setLayoutProperty(id, 'visibility', tankVisibility());
+  map.setLayoutProperty('tanks-kakatiya', 'visibility', tankMode === 'kakatiya' ? 'visible' : 'none');
+}
+function setTankMode(mode) {
+  tankMode = mode;
+  for (const button of document.querySelectorAll('[data-tank]')) button.setAttribute('aria-pressed', String(button.dataset.tank === mode));
+  document.body.classList.toggle('tank-mk', mode === 'kakatiya');
+  applyTankVisibility();
+  if (mode === 'off') tankPopup.remove();
+}
+for (const button of document.querySelectorAll('[data-tank]')) button.addEventListener('click', () => setTankMode(button.dataset.tank));
+
 function chipOn(name) {
   const chip = document.querySelector(`.chip[data-toggle="${name}"]`);
   return chip.getAttribute('aria-pressed') === 'true' ? 'visible' : 'none';
@@ -223,6 +287,7 @@ function buildStyle(theme) {
       links: { type: 'geojson', data: 'data/links.geojson' },
       ...cropSources(),
       ...(canalsLoaded ? { canals: { type: 'geojson', data: 'data/canals.geojson' } } : {}),
+      ...(tanksLoaded ? { tanks: { type: 'geojson', data: 'data/tanks.geojson' }, 'tank-points': { type: 'geojson', data: 'data/tank_points.geojson' } } : {}),
     },
     layers: [
       { id: 'background', type: 'background', paint: { 'background-color': t.background } },
@@ -235,6 +300,7 @@ function buildStyle(theme) {
       { id: 'contours', type: 'line', source: 'contours', layout: { visibility: chipOn('contours'), 'line-join': 'round' }, paint: {
           'line-color': t.contour, 'line-opacity': 0.55,
           'line-width': ['case', ['==', ['%', ['get', 'elev'], 500], 0], 1.4, 0.6] } },
+      ...tankLayers(t),                      // tanks and the Mission Kakatiya shading sit under the district lines
       { id: 'districts', type: 'line', source: 'districts', layout: { visibility: chipOn('districts'), 'line-join': 'round' }, paint: {
           'line-color': t.district, 'line-opacity': t.districtOpacity,
           'line-width': ['interpolate', ['linear'], ['zoom'], 6, 0.5, 10, 1.2] } },
@@ -759,10 +825,12 @@ function addCityMarker(city) {
 }
 function addDistrictLabels(points, cityNames) {
   for (const feature of points.features) {
-    if (cityNames.has(feature.properties.shapeName.toLowerCase())) continue;  // the city label already names it
+    const name = feature.properties.shapeName;
     const el = document.createElement('div');
-    el.className = 'mk-district';
-    el.textContent = feature.properties.shapeName;
+    el.className = 'mk-district' + (cityNames.has(name.toLowerCase()) ? ' named-by-city' : '');   // the city label already names it
+    el.append(textEl('span', 'nm', name), textEl('b', 'cnt', ''));
+    districtLabels.set(name, el);
+    districtCentres.set(name, feature.geometry.coordinates);
     new maplibregl.Marker({ element: el, anchor: 'center' }).setLngLat(feature.geometry.coordinates).addTo(map);
   }
 }
@@ -798,6 +866,7 @@ function setStatusMode(mode) {
   for (const { status, element } of wipMarkers) element.classList.toggle('status-hidden', !statusShown(status));
   for (const id of ['links-casing', 'links-line', 'links-hit']) if (map.getLayer(id)) map.setFilter(id, linkStatusFilter());
   if (map.getLayer('links-arrows')) map.setFilter('links-arrows', ['all', ['!=', ['get', 'status'], 'operational'], linkStatusFilter()]);
+  applyTankVisibility();
   applyCanalFilters();
   if (mode !== 'all') { damPopup.remove(); linkPopup.remove(); canalPopup.remove(); }
 }
@@ -1012,6 +1081,78 @@ function openCanalPopup(p, lngLat) {
 map.on('click', 'canals-hit', (event) => { event.originalEvent.stopPropagation(); openCanalPopup(event.features[0].properties, event.lngLat); });
 map.on('mouseenter', 'canals-hit', () => { map.getCanvas().style.cursor = 'pointer'; });
 map.on('mouseleave', 'canals-hit', () => { map.getCanvas().style.cursor = ''; });
+
+// ---------- tank popup and the Tanks card ----------
+const tankPopup = new maplibregl.Popup({ closeButton: true, closeOnClick: true, offset: 8, className: 'dam-popup tank-popup', maxWidth: '300px' });
+const indian = (value) => Number(value).toLocaleString('en-IN');
+function openTankPopup(p, lngLat) {
+  const content = document.createElement('div');
+  const head = textEl('div', 'head', '');
+  head.append(textEl('span', 'kind tank', `${p.water || 'water body'} · OpenStreetMap`), textEl('strong', '', p.name || 'Unnamed tank'));
+  const dl = document.createElement('dl');
+  const row = (label, value) => dl.append(textEl('dt', '', label), textEl('dd', '', value));
+  row('Water spread', `${indian(p.area_ha)} ha`);
+  row('District', p.district);
+  const district = tankSummary && tankSummary.districts.find((d) => d.district === p.district);
+  const total = district ? kakatiyaTotal(district) : null;
+  if (total) row('Mission Kakatiya', `${indian(total)} tanks taken up in ${district.mk_counted_in || p.district}, 2015–18`);
+  content.append(head, dl, textEl('p', 'fine', 'OpenStreetMap records no construction or restoration date for tanks, and the restored tanks are not published with locations, so the Mission Kakatiya figure is the district total.'));
+  const link = document.createElement('a');
+  link.href = `https://www.openstreetmap.org/${p.osm_id[0] === 'w' ? 'way' : 'relation'}/${p.osm_id.slice(1)}`;
+  link.target = '_blank'; link.rel = 'noopener'; link.textContent = 'Source: OpenStreetMap ↗';
+  content.appendChild(link);
+  tankPopup.setLngLat(lngLat).setDOMContent(content).addTo(map);
+}
+for (const id of ['tanks-fill', 'tanks-dots']) {
+  map.on('click', id, (event) => { event.originalEvent.stopPropagation(); openTankPopup(event.features[0].properties, event.lngLat); });
+  map.on('mouseenter', id, () => { map.getCanvas().style.cursor = 'pointer'; });
+  map.on('mouseleave', id, () => { map.getCanvas().style.cursor = ''; });
+}
+function renderTanks(data) {
+  const mk = data.mission_kakatiya;
+  $('tank-count').textContent = `${indian(data.osm_tanks)} mapped`;
+  const summary = $('tank-summary');
+  summary.textContent = '';
+  summary.append('OpenStreetMap has ', bold(indian(data.osm_tanks)), ` water bodies of at least ${data.osm_min_ha} ha inside Telangana (${indian(data.osm_named)} named), a water spread of `,
+                 bold(`${indian(Math.round(data.osm_area_ha / 100))} km²`), '. Most are village tanks (cheruvu, kunta) built centuries ago; OSM records no construction or restoration date.');
+  const ayacut = mk.phases.reduce((sum, p) => sum + (p.ayacut_lakh_acres || 0), 0);
+  const line = $('mk-summary');
+  line.textContent = '';
+  line.append(`Launched ${mk.launched} to restore all `, bold(indian(mk.tanks_enumerated)), ' minor irrigation tanks in five years. By ', mk.asof, ', ',
+              bold(indian(mk.taken_up)), ' had been taken up in four phases and ', bold(indian(mk.completed_by_report)), ' completed, stabilising ',
+              bold(`${ayacut.toFixed(2)} lakh acres`), ` (Government of India report). Wikipedia puts the final count at ${indian(mk.wikipedia_completed)} tanks for ₹${indian(mk.wikipedia_crore)} crore.`);
+  const phases = $('mk-phases').tBodies[0];
+  phases.textContent = '';
+  for (const p of mk.phases) {
+    const tr = document.createElement('tr');
+    tr.append(textEl('td', '', `${p.phase} (${p.years})`), textEl('td', '', indian(p.taken_up)),
+              textEl('td', '', p.completed === null ? 'sanctioned' : indian(p.completed)), textEl('td', '', p.crore === null ? '—' : indian(p.crore)));
+    phases.appendChild(tr);
+  }
+  const tbody = $('tank-table').tBodies[0];
+  tbody.textContent = '';
+  const rows = [...data.districts].sort((a, b) => (kakatiyaTotal(b) || 0) - (kakatiyaTotal(a) || 0) || a.district.localeCompare(b.district));
+  for (const d of rows) {
+    if (d.district === 'Hyderabad' && !d.osm_tanks) continue;
+    const tr = document.createElement('tr');
+    tr.append(textEl('td', '', d.district), textEl('td', '', indian(d.osm_tanks)));
+    const restored = textEl('td', d.mk_total ? '' : 'na', d.mk_total ? indian(d.mk_total) : d.mk_counted_in ? `in ${d.mk_counted_in}` : '—');
+    if (d.mk_phases) restored.title = `Phases I–IV: ${d.mk_phases.join(' · ')}`;
+    tr.appendChild(restored);
+    tr.addEventListener('click', () => {
+      const centre = districtCentres.get(d.district);
+      if (centre) flyToPoint(centre[0], centre[1], 9);
+      for (const other of tbody.querySelectorAll('tr')) other.classList.toggle('active', other === tr);
+    });
+    tbody.appendChild(tr);
+  }
+  for (const d of data.districts) {
+    const label = districtLabels.get(d.district);
+    if (!label) continue;
+    const total = kakatiyaTotal(d);
+    label.querySelector('.cnt').textContent = d.mk_counted_in ? `in ${d.mk_counted_in}` : total ? `${indian(total)} tanks` : '';
+  }
+}
 
 // ---------- link popup ----------
 const linkPopup = new maplibregl.Popup({ closeButton: true, closeOnClick: true, offset: 10, className: 'dam-popup link-popup', maxWidth: '340px' });
@@ -1455,6 +1596,19 @@ map.on('load', async () => {
     profileState.profiles = profiles;
     cities.forEach(addCityMarker);
     addDistrictLabels(districtPoints, new Set(cities.map((c) => c.name.toLowerCase())));
+    const tanks = await loadJson('data/tanks_summary.json').catch(() => null);   // absent until fetch_data.py gets OSM water bodies
+    if (tanks) {
+      tanksLoaded = true;
+      tankSummary = tanks;
+      map.addSource('tanks', { type: 'geojson', data: 'data/tanks.geojson' });
+      map.addSource('tank-points', { type: 'geojson', data: 'data/tank_points.geojson' });
+      for (const layer of tankLayers(MAP_THEMES[currentTheme()])) map.addLayer(layer, 'districts');
+      renderTanks(tanks);
+      debug.notes.tanks = tanks.osm_tanks;
+    } else {
+      document.querySelector('[data-tank]').closest('.fgroup').hidden = true;
+      $('tank-card').hidden = true;
+    }
     renderCities(cities, profiles);
     renderProfile();
     renderFlowLegend();

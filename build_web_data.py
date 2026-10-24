@@ -42,8 +42,8 @@ from rasterio.merge import merge
 from rasterio.transform import from_bounds
 from rasterio.warp import Resampling, calculate_default_transform, reproject
 from scipy.ndimage import gaussian_filter, median_filter
-from shapely.geometry import LineString, MultiLineString, Point, box, mapping
-from shapely.ops import linemerge, unary_union
+from shapely.geometry import LineString, MultiLineString, Point, Polygon, box, mapping
+from shapely.ops import linemerge, polygonize, unary_union
 
 from prepare_data import TARGET_CRS, read_zipped
 
@@ -974,6 +974,125 @@ def build_canals(links: dict) -> tuple[dict, dict]:
     return {"type": "FeatureCollection", "features": features}, summary
 
 
+# --- tanks (OSM water bodies) and Mission Kakatiya ---------------------------
+
+TANK_MIN_HA = 0.5                                 # smaller ponds are mostly farm pits and village puddles
+TANK_SIMPLIFY_DEG = 0.0001                        # ~11 m, invisible at the zooms the polygons show
+TANK_NAME_WORDS = ("cheruvu", "kunta", "tank", "sagar", "lake", "reservoir", "pond", "samudram")
+# Tanks taken up for restoration under Mission Kakatiya by district (2016 districts) and phase,
+# from the Government of India "Report on Best Practices being followed in Water Resources /
+# Irrigation - Mission Kakatiya, Telangana" (Ministry of Water Resources, PMKSY, file dated
+# 29 Aug 2018). Phase I 2015-16, II 2016-17, III 2017-18, IV sanctioned 2018-19. The report's
+# district names are mapped to geoBoundaries names; Mulugu (carved out of Jayashankar
+# Bhupalpally in 2019) and Narayanpet (out of Mahabubnagar) are inside their parents' counts.
+MISSION_KAKATIYA_URL = "https://pmksy.mowr.gov.in/aibp-mis/Manual/Mission%20Kakatiya,%20Telangana.pdf"
+MISSION_KAKATIYA = {                              # district: (phase I, II, III, IV)
+    "Sangareddy": (359, 426, 450, 496), "Siddipet": (858, 682, 338, 221), "Medak": (560, 665, 393, 182),
+    "Rangareddy": (310, 384, 217, 96), "Medchal": (88, 67, 23, 23), "Vikarabad": (243, 267, 129, 98),
+    "Mahabubnagar": (406, 523, 431, 167), "Wanaparthy": (163, 296, 249, 241), "Jogulamba": (111, 93, 99, 42),
+    "Nagarkurnool": (277, 428, 515, 255), "Nalgonda": (377, 499, 330, 165), "Yadadri Bhongiri": (195, 273, 316, 136),
+    "Suryapet": (236, 297, 220, 130), "Adilabad": (103, 70, 22, 38), "Komaram Bheem": (184, 123, 54, 66),
+    "Mancherial": (150, 155, 113, 51), "Nirmal": (121, 120, 63, 100), "Karimnagar": (223, 290, 299, 148),
+    "Peddapalli": (118, 235, 134, 174), "Jagtial": (199, 218, 162, 133), "Rajanna Sircilla": (103, 120, 69, 45),
+    "Warangal (U)": (126, 137, 70, 58), "Warangal (R)": (224, 200, 162, 159), "Jayashankar": (415, 434, 191, 90),
+    "Jangaon": (180, 159, 147, 100), "Mahabubabad": (335, 388, 188, 158), "Khammam": (292, 304, 172, 119),
+    "Bhadradri": (431, 516, 219, 164), "Nizamabad": (275, 279, 192, 95), "Kamareddy": (381, 367, 185, 158),
+}
+MISSION_KAKATIYA_PARENT = {"Mulugu": "Jayashankar", "Narayanpet": "Mahabubnagar"}   # 2019 districts, counted in the parent
+MISSION_KAKATIYA_PHASES = [                       # taken up, completed by the report date, Rs crore, lakh acres stabilised
+    {"phase": "I", "years": "2015-16", "taken_up": 8043, "completed": 8003, "crore": 1568.40, "ayacut_lakh_acres": 6.71},
+    {"phase": "II", "years": "2016-17", "taken_up": 9015, "completed": 7060, "crore": 1152.20, "ayacut_lakh_acres": 3.80},
+    {"phase": "III", "years": "2017-18", "taken_up": 6152, "completed": 1521, "crore": 224.57, "ayacut_lakh_acres": 1.1},
+    {"phase": "IV", "years": "2018-19", "taken_up": 4108, "completed": None, "crore": None, "ayacut_lakh_acres": None},
+]
+MISSION_KAKATIYA_TOTALS = {"tanks_enumerated": 46531, "target_crore": 20000, "asof": "August 2018",
+                           "launched": "12 March 2015", "wikipedia_completed": 27713, "wikipedia_crore": 8700,
+                           "wikipedia_url": "https://en.wikipedia.org/wiki/Mission_Kakatiya"}
+
+
+def osm_polygon(element: dict):
+    """Shapely polygon for an OSM way or multipolygon relation returned with `out geom`."""
+    if element["type"] == "way":
+        points = [(p["lon"], p["lat"]) for p in element.get("geometry", [])]
+        return Polygon(points) if len(points) >= 4 and points[0] == points[-1] else None
+    outers, inners = [], []
+    for member in element.get("members", []):
+        points = [(p["lon"], p["lat"]) for p in member.get("geometry", [])]
+        if len(points) >= 2:
+            (inners if member.get("role") == "inner" else outers).append(LineString(points))
+    if not outers:
+        return None
+    shape = unary_union([ring for ring in polygonize(unary_union(outers)) if ring.is_valid])
+    if inners:
+        shape = shape.difference(unary_union(list(polygonize(unary_union(inners)))))
+    return shape if not shape.is_empty else None
+
+
+def tank_kind(tags: dict, name: str) -> str | None:
+    """'tank' for ponds, lakes and reservoirs, None for river channels and the like."""
+    water = tags.get("water") or ("reservoir" if tags.get("landuse") == "reservoir" else "")
+    if water in ("river", "stream", "canal", "oxbow", "wastewater", "moat", "lock", "ditch") or tags.get("waterway") == "riverbank":
+        return None
+    if water in ("reservoir", "pond", "lake", "basin", "") or any(w in name.lower() for w in TANK_NAME_WORDS):
+        return "tank"
+    return None
+
+
+def build_tanks(state: gpd.GeoDataFrame, districts: gpd.GeoDataFrame) -> tuple[dict, dict, dict]:
+    """OSM water bodies inside the state as polygons and centroids, plus a per-district summary."""
+    elements = json.loads((RAW / "osm_water.json").read_text(encoding="utf-8"))["elements"]
+    rows = []
+    for element in elements:
+        tags = element.get("tags", {})
+        name = tags.get("name:en") or tags.get("name") or ""
+        kind = tank_kind(tags, name)
+        if kind is None:
+            continue
+        shape = osm_polygon(element)
+        if shape is None:
+            continue
+        rows.append({"osm_id": f"{element['type'][0]}{element['id']}", "name": name or None,
+                     "water": tags.get("water") or ("reservoir" if tags.get("landuse") == "reservoir" else None), "geometry": shape})
+    tanks = gpd.GeoDataFrame(rows, geometry="geometry", crs=WGS84)
+    tanks["geometry"] = tanks.geometry.buffer(0)               # heals self-touching rings
+    projected = tanks.to_crs(TARGET_CRS)
+    tanks["area_ha"] = (projected.area / 10_000).round(1)
+    tanks["centroid"] = projected.representative_point().to_crs(WGS84)
+    centroids = gpd.GeoDataFrame(tanks.drop(columns="geometry"), geometry="centroid", crs=WGS84)
+    inside = gpd.sjoin(centroids, districts.to_crs(WGS84)[["shapeName", "geometry"]], how="inner", predicate="within")
+    inside = inside[~inside.index.duplicated()]
+    tanks = tanks.loc[inside.index].copy()
+    tanks["district"] = inside["shapeName"]
+    tanks = tanks[tanks["area_ha"] >= TANK_MIN_HA].sort_values("area_ha", ascending=False)
+    tanks["lon"] = tanks["centroid"].x.round(5)
+    tanks["lat"] = tanks["centroid"].y.round(5)
+    # The same reservoir is sometimes drawn twice (a way and a relation, or natural=water over landuse=reservoir).
+    key = tanks["area_ha"].round(0).astype(str) + "|" + tanks["lon"].round(3).astype(str) + "|" + tanks["lat"].round(3).astype(str)
+    tanks = tanks[~key.duplicated()]
+    columns = ["osm_id", "name", "water", "area_ha", "district"]
+    polygons = gpd.GeoDataFrame(tanks[columns], geometry=tanks.geometry.simplify(TANK_SIMPLIFY_DEG), crs=WGS84)
+    points = gpd.GeoDataFrame(tanks[columns + ["lon", "lat"]], geometry=tanks["centroid"], crs=WGS84)
+    per_district = []
+    for name in sorted(districts["shapeName"]):
+        subset = tanks[tanks["district"] == name]
+        phases = MISSION_KAKATIYA.get(name)
+        per_district.append({"district": name, "osm_tanks": int(len(subset)), "osm_area_ha": round(float(subset["area_ha"].sum())),
+                             "osm_named": int(subset["name"].notna().sum()),
+                             "mk_phases": list(phases) if phases else None, "mk_total": sum(phases) if phases else None,
+                             "mk_counted_in": MISSION_KAKATIYA_PARENT.get(name)})
+    summary = {
+        "osm_tanks": int(len(tanks)), "osm_area_ha": round(float(tanks["area_ha"].sum())), "osm_named": int(tanks["name"].notna().sum()),
+        "osm_min_ha": TANK_MIN_HA, "osm_asof": "October 2026",
+        "mission_kakatiya": {"url": MISSION_KAKATIYA_URL, "phases": MISSION_KAKATIYA_PHASES,
+                             "taken_up": sum(p["taken_up"] for p in MISSION_KAKATIYA_PHASES),
+                             "completed_by_report": sum(p["completed"] or 0 for p in MISSION_KAKATIYA_PHASES), **MISSION_KAKATIYA_TOTALS},
+        "districts": per_district,
+    }
+    print(f"tanks: {len(tanks)} OSM water bodies >= {TANK_MIN_HA} ha inside the state ({summary['osm_named']} named, "
+          f"{summary['osm_area_ha']:,} ha); Mission Kakatiya {summary['mission_kakatiya']['taken_up']:,} tanks taken up in 4 phases")
+    return json.loads(polygons.to_json(drop_id=True)), json.loads(points.to_json(drop_id=True)), summary
+
+
 # --- cropland (GLAD) --------------------------------------------------------
 
 CROPLAND_DIR = RAW / "cropland"
@@ -1148,6 +1267,15 @@ def main() -> None:
         (WEB_DATA / "canals_summary.json").write_text(json.dumps(canal_summary, indent=1), encoding="utf-8")
     else:
         print("  warning: data/raw/osm_canals.json missing (fetch_data.py); canals.geojson not built")
+    if (RAW / "osm_water.json").exists():
+        tank_polygons, tank_points, tank_summary = build_tanks(state, districts)
+        (WEB_DATA / "tanks.geojson").write_text(json.dumps(tank_polygons), encoding="utf-8")
+        (WEB_DATA / "tank_points.geojson").write_text(json.dumps(tank_points), encoding="utf-8")
+        (WEB_DATA / "tanks_summary.json").write_text(json.dumps(tank_summary, indent=1, ensure_ascii=False), encoding="utf-8")
+        print(f"  tanks.geojson {(WEB_DATA / 'tanks.geojson').stat().st_size / 1e6:.1f} MB, "
+              f"tank_points.geojson {(WEB_DATA / 'tank_points.geojson').stat().st_size / 1e6:.1f} MB")
+    else:
+        print("  warning: data/raw/osm_water.json missing (fetch_data.py); tanks not built")
     cropland = build_cropland(state, districts)
     (WEB_DATA / "cropland.json").write_text(json.dumps(cropland, indent=1, ensure_ascii=False), encoding="utf-8")
     print("cropland (GLAD, % of area): " + ", ".join(f"{v['epoch']} {v['pct']}%" for v in cropland["state"].values()))

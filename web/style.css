@@ -13,6 +13,8 @@
   --river: #2a78d6;
   --link: #c2410c;
   --canal: #c2187f;
+  --tank: #3b95dc;
+  --tank-edge: #1b5a93;
   --chip: rgba(11, 11, 11, 0.05);
   --chip-on: #0b0b0b;
   --chip-on-ink: #fcfcfb;
@@ -37,6 +39,8 @@
     --river: #3987e5;
     --link: #fb923c;
     --canal: #ff6fd0;
+    --tank: #4fb3ff;
+    --tank-edge: #bfe3ff;
     --chip: rgba(255, 255, 255, 0.07);
     --chip-on: #f0efec;
     --chip-on-ink: #0e0f12;
@@ -59,6 +63,8 @@
   --river: #3987e5;
   --link: #fb923c;
   --canal: #ff6fd0;
+  --tank: #4fb3ff;
+  --tank-edge: #bfe3ff;
   --chip: rgba(255, 255, 255, 0.07);
   --chip-on: #f0efec;
   --chip-on-ink: #0e0f12;
@@ -252,6 +258,10 @@ section { display: flex; flex-direction: column; gap: 8px; }
 .key.canal.old { border-top: 1px dashed var(--muted); }
 .key.canal.tunnel { border-top: 4px dotted var(--canal); }
 .key.canal.main { border-top: 3px solid var(--canal); }
+.key.tank { display: inline-block; width: 11px; height: 11px; border-radius: 50%; background: var(--tank); border: 1px solid var(--tank-edge); vertical-align: middle; margin-right: 2px; }
+.dam-popup .kind.tank { color: var(--tank-edge); }
+.tank-table td:first-child { max-width: 128px; }
+.tank-table td.na { color: var(--muted); font-family: var(--font); font-size: 10.5px; }
 .official.network td.num { text-align: right; }
 .official.network td.note { color: var(--muted); font-family: var(--font); font-size: 10.5px; }
 .official.network th:nth-child(2), .official.network th:nth-child(3) { text-align: right; }
@@ -489,8 +499,12 @@ details.table td { padding: 2px 0; border-bottom: 1px solid var(--hair); }
 .mk-city.town .lbl { font-size: 10.5px; font-weight: 500; }
 .mk-city.active .dot { background: var(--accent); }
 .mk-district { font-size: 10px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-2); opacity: .75; pointer-events: none; text-shadow: 0 0 4px var(--bg), 0 0 8px var(--bg); white-space: nowrap; }
+.mk-district .cnt, .mk-district.named-by-city { display: none; }     /* the city label already names the district */
 body.z-far .mk-city.town, body.z-far .mk-district { display: none; }
-body.labels-off .mk-city .lbl, body.labels-off .mk-district { display: none; }
+/* Mission Kakatiya mode: every district shows its name and the tanks taken up, at any zoom. */
+body.tank-mk .mk-district, body.tank-mk.z-far .mk-district, body.tank-mk .mk-district.named-by-city { display: flex; flex-direction: column; align-items: center; gap: 1px; opacity: .95; }
+body.tank-mk .mk-district .cnt { display: block; font-family: var(--mono); font-size: 11px; font-weight: 600; letter-spacing: 0; text-transform: none; color: var(--ink); }
+body.labels-off .mk-city .lbl, body.labels-off .mk-district, body.labels-off.tank-mk .mk-district { display: none; }
 .mk-scrub { width: 14px; height: 14px; border-radius: 50%; background: var(--river); border: 3px solid #fff; box-shadow: 0 0 0 3px rgba(42,120,214,.35), 0 2px 6px rgba(0,0,0,.4); }
 
 /* ---------- maplibre chrome ---------- */

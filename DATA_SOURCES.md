@@ -429,6 +429,66 @@ announced, not a forecast.
   https://thenewsminute.com/telangana/telanganas-irrigated-area-has-increased-what-role-have-irrigation-projects-played
 - These are state statistics quoted as published; they were not re-derived.
 
+## 6i. Tanks (OpenStreetMap) and Mission Kakatiya (Tanks card, "Tanks" control)
+
+- **Tanks on the map:** every `natural=water` way or multipolygon relation and
+  every `landuse=reservoir` way in the box 15.8–19.95 N, 77.2–81.4 E, with
+  geometry, downloaded 2026-10-24 through Overpass in four bbox tiles (an
+  area query for the whole state timed out all day; 17,423 elements,
+  `osm_water.json`, kept in the repo because the public servers were at
+  capacity for most of the day). Terms as in source 4 (ODbL). River
+  channels (`water=river|stream|canal|oxbow|…`, `waterway=riverbank`) are
+  dropped; what remains are ponds, lakes, reservoirs and untagged water
+  bodies — in Telangana overwhelmingly village tanks (cheruvu, kunta).
+  Only those whose representative point lies in a district and whose water
+  spread is at least 0.5 ha are kept (about 6,800 bodies lie inside the
+  state, some 2,000 of them under 0.5 ha: farm pits, village puddles,
+  mapping noise), leaving 4,835;
+  a body drawn twice (way and relation, or `natural=water` over
+  `landuse=reservoir`, e.g. Yellampalli) is counted once. Water spread =
+  polygon area in the map's metric projection. Below zoom 9 each tank is a
+  dot whose radius grows with the square root of its area; from zoom 9 the
+  real outline is drawn (simplified by ~11 m).
+- **Caveat:** OpenStreetMap has mapped only a fraction of Telangana's
+  46,531 minor irrigation tanks (4,835 of 0.5 ha or more), unevenly
+  across districts, and records neither a construction nor a restoration
+  date for them. The layer shows what volunteers have drawn.
+- **Mission Kakatiya figures:** Government of India, Ministry of Water
+  Resources (PMKSY / AIBP MIS), *Report on Best Practices being followed in
+  Water Resources/Irrigation – Mission Kakatiya, Telangana*,
+  <https://pmksy.mowr.gov.in/aibp-mis/Manual/Mission%20Kakatiya,%20Telangana.pdf>
+  (PDF dated 29 Aug 2018, accessed 2026-10-24; the server presents a
+  certificate browsers reject, so it was fetched with verification off).
+  It gives the programme's aim (restore all 46,531 minor irrigation sources
+  in five years, 20 % a year, ≈₹20,000 crore), the district-wise × phase-wise
+  tanks taken up (Phase I 8,043, II 9,015, III 6,152, IV 4,108 sanctioned;
+  total 27,318 across 30 districts as of 2016 boundaries), the works
+  completed by the report date (Phase I 8,003 for ₹1,568.40 crore, Phase II
+  7,060 for ₹1,152.20 crore, Phase III 1,521 for ₹224.57 crore) and the
+  ayacut stabilised (6.71 + 3.80 + 1.1 = 11.61 lakh acres). The restoration
+  components listed there are desilting, feeder-channel restoration (chain
+  of tanks), bund/weir/sluice repair and channel re-sectioning — tanks were
+  not connected to rivers or project canals under the programme. The
+  programme's launch date (12 March 2015) and the end-state figures quoted
+  as such (27,713 tanks completed, ₹8,700 crore) come from Wikipedia,
+  <https://en.wikipedia.org/wiki/Mission_Kakatiya> (accessed 2026-10-24);
+  the official portal (missionkakatiya.cgg.gov.in), which held the
+  tank-level list, no longer resolves.
+- **District mapping:** the report uses the 31 districts of 2016 (no
+  Hyderabad row). Names are mapped to geoBoundaries: *Badrachalam* →
+  Bhadradri, *Jayashankar Bhupalpally* → Jayashankar, *Yadhadhri Bhongir* →
+  Yadadri Bhongiri, *Sircilla* → Rajanna Sircilla, *Medchal (Malkajgiri)* →
+  Medchal, *Warangal Urban/Rural* → Warangal (U)/(R), *Komaram Bheem* →
+  Komaram Bheem. Mulugu (split from Jayashankar Bhupalpally in 2019) and
+  Narayanpet (from Mahabubnagar) have no row; the map shows the parent's
+  figure for them and says so.
+- **Why no per-tank before/after 2014:** no public dataset lists the
+  restored tanks with coordinates (the portal is offline; data.telangana.gov.in
+  publishes no such file; the Minor Irrigation Census is not geolocated), so
+  the "Restored 2015–18" view shades districts by tanks taken up and labels
+  each with its count. It is a district total, not a statement about any
+  individual tank.
+
 ## 7. Landmark heights (elevation comparison)
 
 Hard-coded in `web/app.js` (`LANDMARKS`), checked on 2026-10-22:

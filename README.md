@@ -61,6 +61,14 @@ uv run python serve.py      # http://127.0.0.1:8765/ opens in your browser
   Tummidihetti, Icchampally …) with the
   years and last announced target; works with no published location are
   listed in grey
+- **Tanks** (OpenStreetMap): about 4,800 village tanks, lakes and reservoirs
+  of 0.5 ha or more as blue dots sized by water spread, with their real
+  outlines when zoomed in; click one for its name, area and district. The
+  Tanks card gives the Mission Kakatiya figures (46,531 tanks to restore,
+  27,318 taken up in four phases 2015–18, Government of India report) by
+  district next to what OSM has mapped, and the "Restored 2015–18" view
+  shades each district by tanks taken up, since no source publishes which
+  tanks were restored with their locations
 - 27 cities and towns ranked by elevation, with the lowest river beds for
   comparison; click one to fly to it
 - Both side columns are stacks of small collapsible cards, one per category.

@@ -11,11 +11,13 @@ Sources (all public, no auth):
 - OpenStreetMap dams of the Kaleshwaram reservoirs that have no Wikipedia page
 - GLAD global cropland extent, 3 km percent-cropland summaries for 2003-2019
 - OpenStreetMap canals (waterway=canal) in Telangana with geometry
+- OpenStreetMap water bodies (tanks, lakes, reservoirs) in a box around the state, as polygons
 """
 from __future__ import annotations
 
 import json
 import re
+import time
 from pathlib import Path
 
 import requests
@@ -86,6 +88,14 @@ OVERPASS_CONSTRUCTION_QUERY = (
     'nwr["landuse"="construction"]["construction:landuse"~"reservoir|basin"](15.6,77.0,19.95,81.6););'
     'out center tags;'
 )
+# Every mapped water body as a polygon. One query for the whole state times out, so the box is
+# fetched in four tiles; the public server is often at capacity, hence the retries.
+OVERPASS_WATER_TILES = [(15.8, 77.2, 17.9, 79.3), (15.8, 79.3, 17.9, 81.4), (17.9, 77.2, 19.95, 79.3), (17.9, 79.3, 19.95, 81.4)]
+OVERPASS_WATER_QUERY = (
+    '[out:json][timeout:240];'
+    '(way["natural"="water"]({bbox});relation["natural"="water"]({bbox});way["landuse"="reservoir"]({bbox}););'
+    'out tags geom;'
+)
 # Overpass rejects requests without a descriptive User-Agent.
 OVERPASS_HEADERS = {"User-Agent": "telangana3d/1.0 (terrain map)", "Accept": "application/json"}
 TIMEOUT_S = 120
@@ -150,6 +160,27 @@ def fetch_osm_reservoirs() -> None:
     download(OVERPASS_URL, RAW / "osm_waterpipes.json", params={"data": OVERPASS_WATERPIPES_QUERY}, headers=OVERPASS_HEADERS)
 
 
+def fetch_osm_water() -> None:
+    target = RAW / "osm_water.json"
+    if target.exists():
+        print(f"cached  {target.name}")
+        return
+    elements = []
+    for tile in OVERPASS_WATER_TILES:
+        query = OVERPASS_WATER_QUERY.format(bbox=",".join(str(v) for v in tile))
+        for attempt in range(5):
+            response = requests.post(OVERPASS_URL, data={"data": query}, headers=OVERPASS_HEADERS, timeout=300)
+            if response.ok:
+                break
+            print(f"  overpass {response.status_code} for tile {tile}, retrying")
+            time.sleep(30 * (attempt + 1))
+        response.raise_for_status()
+        elements += response.json()["elements"]
+        print(f"  tile {tile}: {len(elements)} water bodies so far")
+    target.write_text(json.dumps({"version": 0.6, "generator": "Overpass API, four bbox tiles", "elements": elements}), encoding="utf-8")
+    print(f"fetched {target.name} ({target.stat().st_size / 1e6:.1f} MB)")
+
+
 # Potapov et al. 2021: percent cropland per 3 km cell, one layer per four-year epoch (named by its last year).
 GLAD_CROPLAND_URL = "https://glad.umd.edu/users/Potapov/Global_Crop/Data/Global_cropland_3km_{year}.tif"
 GLAD_CROPLAND_YEARS = (2003, 2007, 2011, 2015, 2019)
@@ -199,4 +230,5 @@ if __name__ == "__main__":
     fetch_wikipedia_dams()
     fetch_wikidata_dams()
     fetch_osm_reservoirs()
+    fetch_osm_water()
     fetch_cropland()

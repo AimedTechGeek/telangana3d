@@ -120,6 +120,29 @@
     </div>
   </details>
 
+  <details class="card" open id="tank-card">
+    <summary class="card-head"><span class="card-title">Tanks</span><span class="legend-inline" id="tank-count"></span><svg class="chev" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></summary>
+    <div class="card-body">
+      <section class="tanks">
+        <p class="summary" id="tank-summary">Loading…</p>
+        <div class="section-head">
+          <h2>Mission Kakatiya</h2>
+          <span class="legend-inline">restoration, 2015–18</span>
+        </div>
+        <p class="summary" id="mk-summary"></p>
+        <table class="official" id="mk-phases">
+          <thead><tr><th>Phase</th><th>Taken up</th><th>Completed</th><th>₹ crore</th></tr></thead>
+          <tbody></tbody>
+        </table>
+        <p class="hint">Tanks taken up by district (2016 districts: Mulugu and Narayanpet are counted inside Jayashankar and Mahabubnagar) next to the tanks OpenStreetMap has mapped there. Click a row to fly to the district.</p>
+        <table class="crop-table tank-table" id="tank-table">
+          <thead><tr><th>District</th><th>OSM<br><small>tanks</small></th><th>Restored<br><small>2015–18</small></th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </section>
+    </div>
+  </details>
+
   <details class="card" open>
     <summary class="card-head"><span class="card-title">Cities</span><span class="legend-inline"><i class="key city"></i>city<i class="key river"></i>lowest river bed</span><svg class="chev" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></summary>
     <div class="card-body">
@@ -176,6 +199,15 @@
         <p class="hint"><span class="key canal"></span> canal · <span class="key canal tunnel"></span> canal tunnel · <span class="key canal main"></span> pressurised tunnel or pipe; dashes move with the flow · <span class="key canal old"></span> older or undated. “After 2014” = Kaleshwaram, Palamuru-Rangareddy and Sitarama works; OSM records no dig dates, so the project decides the era.</p>
     </div>
     <div class="fgroup">
+        <p class="eyebrow">Tanks (OpenStreetMap) · Mission Kakatiya</p>
+        <div class="tabs" role="group" aria-label="Tank layer">
+          <button type="button" data-tank="off" aria-pressed="false">Off</button>
+          <button type="button" data-tank="tanks" aria-pressed="true">Tanks</button>
+          <button type="button" data-tank="kakatiya" aria-pressed="false">Restored 2015–18</button>
+        </div>
+        <p class="hint"><span class="key tank"></span> village tanks, lakes and reservoirs mapped in OpenStreetMap: dots sized by water spread, the real outlines when zoomed in. “Restored 2015–18” shades each district by the tanks taken up under Mission Kakatiya. No source publishes which tanks were restored with their locations, so the before / after 2014 view is per district, not per tank.</p>
+      </div>
+      <div class="fgroup">
         <p class="eyebrow">Cropland cover</p>
         <div class="tabs" role="group" aria-label="Cropland layer">
           <button type="button" data-crop="off" aria-pressed="true">Off</button>
