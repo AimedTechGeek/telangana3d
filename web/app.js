@@ -28,6 +28,7 @@ const MAP_THEMES = {
     background: '#e9e6df', mask: '#efece5', maskOpacity: 0.5,
     district: '#3b3a36', districtOpacity: 0.55, state: '#161616', stateCasing: '#ffffff',
     contour: '#5a4634', flowGlow: '#ffffff', flowDash: '#eef7ff', link: '#c2410c', linkDash: '#fff4e8', cropOpacity: 0.82,
+    canal: '#c2187f', canalOld: '#8a6f84', canalDash: '#fff0fa', canalCasing: '#ffffff',
     flow: ['#86d9e3', '#36aee6', '#2566d8', '#1a3aa6', '#5f2aa8'],   // FLOW_CLASSES: cyan -> blue -> navy -> purple
     shadow: '#2b2016', highlight: '#fff4e2', accent: '#4e3d2e',
     sky: { 'sky-color': '#cfe3f6', 'horizon-color': '#eef3f8', 'fog-color': '#e9e6df' },
@@ -36,6 +37,7 @@ const MAP_THEMES = {
     background: '#0e0f12', mask: '#0e0f12', maskOpacity: 0.58,
     district: '#d8d4cc', districtOpacity: 0.38, state: '#f0efec', stateCasing: '#000000',
     contour: '#d8d4cc', flowGlow: '#0b1a33', flowDash: '#ffffff', link: '#fb923c', linkDash: '#fff7ed', cropOpacity: 0.9,
+    canal: '#ff6fd0', canalOld: '#d2b4c8', canalDash: '#fff0fa', canalCasing: '#2a0d20',
     flow: ['#2f96a8', '#3cbbea', '#6a9cff', '#a9bdff', '#dcaaff'],   // FLOW_CLASSES: teal -> sky -> blue -> lilac on the dark surface
     shadow: '#000000', highlight: '#b9a68c', accent: '#000000',
     sky: { 'sky-color': '#0b1020', 'horizon-color': '#1b2233', 'fog-color': '#0e0f12' },
@@ -128,6 +130,56 @@ function cropSources() {
     `crop-${mode}`, { type: 'image', url: `data/cropland_${mode}.png`, coordinates: cropCoords() }]));
 }
 
+// Canals (OpenStreetMap): thin dashed cyan lines, dashes sliding in the flow direction.
+let canalMode = 'after';                   // off | after | all
+let canalsLoaded = false;
+const CANAL_DASH = [3, 2.2];               // in line widths, longer than the river dashes
+const canalFilter = () => (canalMode === 'all' ? ['literal', true] : ['==', ['get', 'era'], 'after']);
+function canalLayers(t) {
+  if (!canalsLoaded) return [];
+  const vis = canalMode === 'off' ? 'none' : 'visible';
+  const isNew = ['==', ['get', 'era'], 'after'];
+  // One zoom interpolation per expression (MapLibre's rule); the era case sits inside each stop.
+  const width = (scale) => ['interpolate', ['linear'], ['zoom'],
+    6, ['case', isNew, 1.4 * scale, 0.8 * scale], 9, ['case', isNew, 2.6 * scale, 1.4 * scale], 12, ['case', isNew, 4.2 * scale, 2.4 * scale]];
+  return [
+    { id: 'canals-casing', type: 'line', source: 'canals', filter: canalFilter(), layout: { 'line-join': 'round', 'line-cap': 'round', visibility: vis },
+      paint: { 'line-color': t.canalCasing, 'line-width': width(1.9), 'line-opacity': ['case', isNew, 0.75, 0.4] } },
+    { id: 'canals-line', type: 'line', source: 'canals', filter: canalFilter(), layout: { 'line-join': 'round', 'line-cap': 'round', visibility: vis },
+      paint: { 'line-color': ['case', isNew, t.canal, t.canalOld], 'line-width': width(1),
+               'line-opacity': ['case', isNew, 0.95, 0.7], 'line-dasharray': ['literal', CANAL_DASH] } },
+    ...Array.from({ length: FLOW_DASH_STEPS }, (_, k) => ({
+      id: `canals-dash-${k}`, type: 'line', source: 'canals', filter: ['all', canalFilter(), ['==', ['get', 'directed'], true]],
+      layout: { 'line-join': 'round', 'line-cap': 'butt', visibility: vis },
+      paint: { 'line-color': t.canalDash, 'line-width': width(0.45),
+               'line-dasharray': ['literal', canalDashAt(k)], 'line-opacity': k === flowStep ? 0.9 : 0 } })),
+    { id: 'canals-hit', type: 'line', source: 'canals', filter: canalFilter(), layout: { visibility: vis },
+      paint: { 'line-color': '#000000', 'line-opacity': 0, 'line-width': 12 } },
+  ];
+}
+/** Canal dash pattern shifted by `step` tenths of a period (same mechanism as the rivers). */
+function canalDashAt(step) {
+  const round = (v) => Math.round(v * 100) / 100;
+  const [length, gap] = CANAL_DASH, period = length + gap;
+  const p = round((step % FLOW_DASH_STEPS) / FLOW_DASH_STEPS * period);
+  if (p <= gap) return [0, p, length, round(gap - p)];
+  const shift = round(p - gap);
+  return [round(length - shift), gap, shift, 0];
+}
+function setCanalMode(mode) {
+  canalMode = mode;
+  for (const button of document.querySelectorAll('[data-canal]')) button.setAttribute('aria-pressed', String(button.dataset.canal === mode));
+  if (!canalsLoaded) return;
+  const vis = mode === 'off' ? 'none' : 'visible';
+  const ids = ['canals-casing', 'canals-line', 'canals-hit', ...Array.from({ length: FLOW_DASH_STEPS }, (_, k) => `canals-dash-${k}`)];
+  for (const id of ids) {
+    map.setLayoutProperty(id, 'visibility', vis);
+    map.setFilter(id, id.startsWith('canals-dash') ? ['all', canalFilter(), ['==', ['get', 'directed'], true]] : canalFilter());
+  }
+  if (mode === 'off') canalPopup.remove();
+}
+for (const button of document.querySelectorAll('[data-canal]')) button.addEventListener('click', () => setCanalMode(button.dataset.canal));
+
 function chipOn(name) {
   const chip = document.querySelector(`.chip[data-toggle="${name}"]`);
   return chip.getAttribute('aria-pressed') === 'true' ? 'visible' : 'none';
@@ -150,6 +202,7 @@ function buildStyle(theme) {
       contours: { type: 'geojson', data: 'data/contours.geojson' },
       links: { type: 'geojson', data: 'data/links.geojson' },
       ...cropSources(),
+      ...(canalsLoaded ? { canals: { type: 'geojson', data: 'data/canals.geojson' } } : {}),
     },
     layers: [
       { id: 'background', type: 'background', paint: { 'background-color': t.background } },
@@ -180,6 +233,7 @@ function buildStyle(theme) {
         paint: { 'line-color': t.flowDash, 'line-width': flowWidthExpr(0.5), 'line-dasharray': dashPatternAt(k),
                  'line-opacity': k === flowStep ? FLOW_DASH_OPACITY : 0 } })),
       { id: 'flow-hit', type: 'line', source: 'flow', paint: { 'line-color': '#000000', 'line-opacity': 0, 'line-width': 12 } },
+      ...canalLayers(t),
       // Kaleshwaram links: solid where water flows today, dashed where the link is still being built.
       { id: 'links-highlight', type: 'line', source: 'links', filter: ['==', ['get', 'link'], ''],
         layout: { 'line-join': 'round', 'line-cap': 'round', visibility: chipOn('links') },
@@ -391,6 +445,10 @@ function animateFlow(now) {
     flowStep = (flowStep + 1) % FLOW_DASH_STEPS;
     map.setPaintProperty(`flow-dash-${previous}`, 'line-opacity', 0);
     map.setPaintProperty(`flow-dash-${flowStep}`, 'line-opacity', FLOW_DASH_OPACITY);
+    if (canalsLoaded && canalMode !== 'off') {
+      map.setPaintProperty(`canals-dash-${previous}`, 'line-opacity', 0);
+      map.setPaintProperty(`canals-dash-${flowStep}`, 'line-opacity', 0.9);
+    }
   }
   drawBubbles(bubbleLast ? Math.min((now - bubbleLast) / 1000, 0.1) : 0);
   bubbleLast = now;
@@ -838,6 +896,29 @@ function renderCropTable(data) {
   $('crop-csv').href = URL.createObjectURL(new Blob(['﻿' + csv + '\r\n// Source: GLAD global cropland extent (Potapov et al. 2021), 3 km cells, mean cover per district x district area; schematic, not survey data.'], { type: 'text/csv;charset=utf-8' }));
 }
 
+// ---------- canal popup ----------
+const canalPopup = new maplibregl.Popup({ closeButton: true, closeOnClick: true, offset: 8, className: 'dam-popup canal-popup', maxWidth: '300px' });
+function openCanalPopup(p, lngLat) {
+  const content = document.createElement('div');
+  const head = textEl('div', 'head', '');
+  const era = p.era === 'after' ? 'dug after 2014' : p.era === 'before' ? 'pre-2014 project' : 'date unknown';
+  head.append(textEl('span', 'kind canal', `${p.tunnel ? 'tunnel' : 'canal'} · ${era}`), textEl('strong', '', p.name || 'Unnamed canal'));
+  content.appendChild(head);
+  const list = document.createElement('dl');
+  for (const [term, value] of [['Scheme', p.scheme || null], ['Length', `${p.km} km (this OSM segment)`], ['Flow', p.directed ? 'dashes move downstream' : 'direction not recorded'],
+                               ['Status', p.construction ? 'tagged under construction in OSM' : null]]) {
+    if (value) list.append(textEl('dt', '', term), textEl('dd', '', value));
+  }
+  content.appendChild(list);
+  const link = document.createElement('a');
+  link.href = `https://www.openstreetmap.org/way/${p.id}`; link.target = '_blank'; link.rel = 'noopener'; link.textContent = 'OpenStreetMap ↗';
+  content.appendChild(link);
+  canalPopup.setLngLat(lngLat).setDOMContent(content).addTo(map);
+}
+map.on('click', 'canals-hit', (event) => { event.originalEvent.stopPropagation(); openCanalPopup(event.features[0].properties, event.lngLat); });
+map.on('mouseenter', 'canals-hit', () => { map.getCanvas().style.cursor = 'pointer'; });
+map.on('mouseleave', 'canals-hit', () => { map.getCanvas().style.cursor = ''; });
+
 // ---------- link popup ----------
 const linkPopup = new maplibregl.Popup({ closeButton: true, closeOnClick: true, offset: 10, className: 'dam-popup link-popup', maxWidth: '340px' });
 linkPopup.on('close', () => map.setFilter('links-highlight', ['==', ['get', 'link'], '']));
@@ -1184,6 +1265,15 @@ map.on('load', async () => {
     for (const [id, source] of Object.entries(cropSources())) map.addSource(id, source);
     for (const layer of cropLayers(MAP_THEMES[currentTheme()])) map.addLayer(layer, 'mask');
     renderCropland(cropland);
+    const canals = await loadJson('data/canals.geojson').catch(() => null);   // absent until fetch_data.py gets OSM canals
+    if (canals) {
+      canalsLoaded = true;
+      map.addSource('canals', { type: 'geojson', data: canals });
+      for (const layer of canalLayers(MAP_THEMES[currentTheme()])) map.addLayer(layer, 'links-highlight');
+      debug.notes.canals = canals.features.length;
+    } else {
+      document.querySelector('[data-canal]').closest('.fgroup').hidden = true;
+    }
     debug.notes.cropDistricts = cropland.districts.length;
     prepareBubbles(flowReaches);
     dams.forEach(addDamMarker);

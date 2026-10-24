@@ -17,6 +17,7 @@ Outputs:
 - web/data/pumphouses.json    Kaleshwaram pump houses from OpenStreetMap
 - web/data/cropland_*.png     GLAD percent-cropland rasters (before/after 2014) and their change
 - web/data/cropland.json      state and district cropland statistics plus official irrigation figures
+- web/data/canals.geojson     OpenStreetMap canals oriented in flow direction, with an era class
 """
 from __future__ import annotations
 
@@ -702,6 +703,66 @@ def osm_reservoir_dams() -> list[dict]:
     return dams
 
 
+# --- canals (OpenStreetMap) -------------------------------------------------
+# OSM carries no construction dates for Telangana's canals, so the era comes from
+# the project a canal belongs to (see DATA_SOURCES.md 6f):
+# - construction=yes ways are the Sitarama lift scheme's canal works in Khammam and
+#   Bhadradri (2016-), including its extensions of older canals -> "after";
+# - real tunnels (not road culverts) within CANAL_CORRIDOR_M of a Kaleshwaram link
+#   are Kaleshwaram's (2016-) -> "after"; names of post-2014 projects -> "after";
+# - names of older projects -> "before"; everything else -> "unknown".
+CANAL_CORRIDOR_M = 20000.0
+CANAL_POST2014_NAMES = ("kaleshwaram", "link-i", "link i", "palamuru", "sitarama", "sita rama", "mallanna", "kondapochamma",
+                        "konda pochamma", "ranganayaka", "anantha", "annapurna", "medigadda", "sundilla", "annaram")
+CANAL_PRE2014_NAMES = ("nagarjun", "nagarjuna", "kakatiya", "srsp", "nizam", "jurala", "manair", "mula vagu", "palavagu",
+                       "ali sagar", "sathupally", "kurnool", "ntr canal", "flood flow", "devadula", "koil", "dindi", "kalwakurthy",
+                       "bhima", "nettempadu", "rajolibanda", "rds")
+SITARAMA_WEST_LON = 79.5            # the construction-tagged canals east of this are Sitarama's
+CANAL_SIMPLIFY_DEG = 0.00005
+
+
+def canal_era(tags: dict, near_kaleshwaram: bool, lon: float) -> tuple[str, str | None]:
+    """Return (era, scheme) for one OSM canal way."""
+    name = (tags.get("name") or "").lower()
+    real_tunnel = tags.get("tunnel") in ("yes", "flooded") or tags.get("location") == "underground"
+    if tags.get("construction") == "yes":
+        return "after", "Sitarama lift scheme (under construction)" if lon >= SITARAMA_WEST_LON else "under construction"
+    if any(k in name for k in CANAL_POST2014_NAMES):
+        return "after", "Kaleshwaram" if "link" in name or "kaleshwaram" in name else "post-2014 project (by name)"
+    if near_kaleshwaram and real_tunnel:
+        return "after", "Kaleshwaram tunnel"
+    if any(k in name for k in CANAL_PRE2014_NAMES):
+        return "before", "older project (by name)"
+    return "unknown", None
+
+
+def build_canals(links: dict) -> dict:
+    elements = json.loads((RAW / "osm_canals.json").read_text(encoding="utf-8"))["elements"]
+    to_m = Transformer.from_crs(WGS84, TARGET_CRS, always_xy=True)
+    kaleshwaram = unary_union([LineString([to_m.transform(x, y) for x, y in f["geometry"]["coordinates"]])
+                               for f in links["features"] if f["properties"]["scheme"] == "Kaleshwaram"]).buffer(CANAL_CORRIDOR_M)
+    features, lengths = [], {"after": 0.0, "before": 0.0, "unknown": 0.0}
+    for way in elements:
+        points = [(p["lon"], p["lat"]) for p in way.get("geometry", [])]
+        if len(points) < 2:
+            continue
+        tags = way.get("tags", {})
+        # OSM draws waterways in the direction of flow unless flow_direction says otherwise.
+        direction = tags.get("flow_direction", "forward")
+        if direction == "backward":
+            points.reverse()
+        line = LineString(points)
+        projected = LineString([to_m.transform(x, y) for x, y in points])
+        era, scheme = canal_era(tags, projected.intersects(kaleshwaram), line.centroid.x)
+        lengths[era] += projected.length / 1000
+        features.append({"type": "Feature", "geometry": mapping(line.simplify(CANAL_SIMPLIFY_DEG)), "properties": {
+            "id": way["id"], "name": tags.get("name"), "era": era, "scheme": scheme,
+            "tunnel": tags.get("tunnel") in ("yes", "flooded") or tags.get("location") == "underground",
+            "construction": tags.get("construction") == "yes", "directed": direction != "both", "km": round(projected.length / 1000, 2)}})
+    print(f"canals: {len(features)} ways; km after 2014 {lengths['after']:.0f}, before {lengths['before']:.0f}, unknown {lengths['unknown']:.0f}")
+    return {"type": "FeatureCollection", "features": features}
+
+
 # --- cropland (GLAD) --------------------------------------------------------
 
 CROPLAND_DIR = RAW / "cropland"
@@ -864,6 +925,10 @@ def main() -> None:
     (WEB_DATA / "pumphouses.json").write_text(json.dumps(pumphouses, indent=1, ensure_ascii=False), encoding="utf-8")
     links = build_links({node["name"]: node for node in dams} | {node["osm_name"]: node for node in pumphouses})
     (WEB_DATA / "links.geojson").write_text(json.dumps(links), encoding="utf-8")
+    if (RAW / "osm_canals.json").exists():
+        (WEB_DATA / "canals.geojson").write_text(json.dumps(build_canals(links)), encoding="utf-8")
+    else:
+        print("  warning: data/raw/osm_canals.json missing (fetch_data.py); canals.geojson not built")
     cropland = build_cropland(state, districts)
     (WEB_DATA / "cropland.json").write_text(json.dumps(cropland, indent=1, ensure_ascii=False), encoding="utf-8")
     print("cropland (GLAD, % of area): " + ", ".join(f"{v['epoch']} {v['pct']}%" for v in cropland["state"].values()))

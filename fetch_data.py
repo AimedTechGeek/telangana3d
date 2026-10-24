@@ -10,6 +10,7 @@ Sources (all public, no auth):
   page it links to (dam infoboxes carry height and coordinates)
 - OpenStreetMap dams of the Kaleshwaram reservoirs that have no Wikipedia page
 - GLAD global cropland extent, 3 km percent-cropland summaries for 2003-2019
+- OpenStreetMap canals (waterway=canal) in Telangana with geometry
 """
 from __future__ import annotations
 
@@ -56,6 +57,12 @@ OVERPASS_RESERVOIRS_QUERY = (
     '(nwr["waterway"="dam"]["name"~"Mallanna Sagar|Konda Pochamma Sagar|Ranganayaka Sagar",i](area.a);'
     'nwr["water"="reservoir"]["name"~"Mallanna Sagar|Konda Pochamma Sagar|Ranganayaka Sagar",i](area.a););'
     'out center tags;'
+)
+OVERPASS_CANALS_QUERY = (
+    '[out:json][timeout:300];'
+    'area["name"="Telangana"]["admin_level"="4"]->.a;'
+    '(way["waterway"="canal"](area.a););'
+    'out tags geom;'
 )
 OVERPASS_PUMPHOUSES_QUERY = (
     '[out:json][timeout:90];'
@@ -121,6 +128,8 @@ def wikitext(titles: list[str]) -> dict[str, str | None]:
 def fetch_osm_reservoirs() -> None:
     download(OVERPASS_URL, RAW / "osm_reservoirs.json", params={"data": OVERPASS_RESERVOIRS_QUERY}, headers=OVERPASS_HEADERS)
     download(OVERPASS_URL, RAW / "osm_pumphouses.json", params={"data": OVERPASS_PUMPHOUSES_QUERY}, headers=OVERPASS_HEADERS)
+    # ~1,600 ways with geometry; the public Overpass servers are often busy, so retry on failure.
+    download(OVERPASS_URL, RAW / "osm_canals.json", params={"data": OVERPASS_CANALS_QUERY}, headers=OVERPASS_HEADERS)
 
 
 # Potapov et al. 2021: percent cropland per 3 km cell, one layer per four-year epoch (named by its last year).

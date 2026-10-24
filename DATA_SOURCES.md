@@ -217,6 +217,30 @@ public and were downloaded by `fetch_data.py` into `data/raw/` (not committed);
   15.4–20.0 °N with coordinates, cached as `wikidata_dams.csv`; used for the
   Singotam reservoir.
 
+## 6f. Canals (OpenStreetMap)
+
+- **What:** every `waterway=canal` way inside the Telangana relation, with
+  geometry (1,582 ways, ≈5,900 km, downloaded 2026-10-24 through Overpass;
+  cached as `osm_canals.json`). Terms as in source 4 (ODbL).
+- **Direction:** OSM draws waterways in the direction of flow; ways tagged
+  `flow_direction=backward` are reversed, `both` would be shown without
+  moving dashes (none in this extract).
+- **Era:** OSM holds no construction dates for these canals, so the project
+  decides: `construction=yes` ways are the Sitarama lift scheme's canal works
+  in Khammam and Bhadradri (sanctioned 2016; they include extensions of the
+  older Sathupally, Palavagu and NTR canals) → *after 2014*; real tunnels
+  (`tunnel=yes|flooded`, `location=underground`, not road culverts) within
+  20 km of a Kaleshwaram link → *after 2014* (Kaleshwaram, 2016–); names
+  mentioning Kaleshwaram, Link-I, Palamuru, Sitarama or the new reservoirs →
+  *after 2014*; names of older projects (Nagarjuna Sagar, SRSP Kakatiya and
+  flood-flow canals, Nizam Sagar, Jurala, Manair, Mula Vagu, Ali Sagar,
+  Kurnool–Cuddapah …) → *before 2014*; the remaining 1,400 mostly unnamed
+  distributaries → *unknown*.
+- **Caveats:** OSM coverage of canals is incomplete and uneven (the
+  Kaleshwaram gravity canals in particular are only partly mapped), so the
+  layer shows what volunteers have drawn, not the full network; the
+  `construction` tags reflect the state of the map, not today's progress.
+
 ## 6d. Cropland cover (GLAD global cropland extent)
 
 - **What:** percent of each 3 km (0.025°) cell under crops, one layer per
