@@ -73,6 +73,15 @@
     </table>
   </section>
 
+  <section class="pending">
+    <div class="section-head">
+      <h2>Still to be built</h2>
+      <span class="legend-inline" id="pending-count"></span>
+    </div>
+    <p class="summary">Dams, reservoirs, barrages, pump houses, tunnels, water links and canals that are under construction or only proposed, grouped by scheme with the years a source gives and the last announced target. Click an item to fly to it and open its details; grey items have no published location. Statuses are as reported up to October 2026 and change often.</p>
+    <ol id="pending-list" class="link-list pending-list"></ol>
+  </section>
+
   <section class="rivers">
     <div class="section-head">
       <h2>River profiles</h2>
@@ -164,6 +173,16 @@
   </section>
 
   <section class="fgroup">
+    <p class="eyebrow">Works · status</p>
+    <div class="tabs" role="group" aria-label="Status of the works">
+      <button type="button" data-status="all" aria-pressed="true">All</button>
+      <button type="button" data-status="built" aria-pressed="false">Operating</button>
+      <button type="button" data-status="pending" aria-pressed="false">Still to build</button>
+    </div>
+    <p class="hint">Applies to dams, reservoirs, barrages, pump houses, tunnels, water links and canals. Dashed outline with a <span class="ic wip"><svg viewBox="0 0 16 16" aria-hidden="true"><use href="#ic-wip"/></svg></span> cone = under construction or proposed; a dotted ring = position approximate (village, not the structure). The list “Still to be built” in the left panel names them all.</p>
+  </section>
+
+  <section class="fgroup">
     <p class="eyebrow">Dams &amp; reservoirs · opening year</p>
     <div class="tabs" role="group" aria-label="Opening year">
       <button type="button" data-era="all" aria-pressed="true">All</button>
@@ -236,6 +255,7 @@
   <symbol id="ic-dam" viewBox="0 0 16 16"><path d="M2 12.5A6.5 6.5 0 0 1 14 12.5" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><path d="M4 14.5h8" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
   <symbol id="ic-wip" viewBox="0 0 16 16"><path d="M8 1.5 11.6 13H4.4z"/><path d="M5.6 9.2h4.8M6.5 6.1h3" fill="none" stroke="#fff" stroke-width="1.4"/><path d="M2.5 13.2h11v1.6h-11z"/></symbol>
   <symbol id="ic-pump" viewBox="0 0 16 16"><path d="M3 14.5h10M4.5 14.5V8.5h7v6M6 8.5V5a2 2 0 0 1 4 0v3.5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 1.5v2M11.5 2.6l-1 1.7M4.5 2.6l1 1.7" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
+  <symbol id="ic-tunnel" viewBox="0 0 16 16"><path d="M2.5 14V8.5a5.5 5.5 0 0 1 11 0V14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M5.5 14V9a2.5 2.5 0 0 1 5 0v5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-dasharray="1.6 1.4"/><path d="M1.5 14.5h13" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
   <symbol id="ic-barrage" viewBox="0 0 16 16"><path d="M1 3h14v2.5H1zM2.5 5.5h2.2v7H2.5zM6.9 5.5h2.2v7H6.9zM11.3 5.5h2.2v7h-2.2z"/><path d="M1.5 14.5h13" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
 </svg>
 <pre id="debug" hidden></pre>

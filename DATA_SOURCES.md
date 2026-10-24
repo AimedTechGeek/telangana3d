@@ -191,16 +191,17 @@ public and were downloaded by `fetch_data.py` into `data/raw/` (not committed);
     Stage II to Jonnalaboguda and Stage III to Gudipally (National Green
     Tribunal order, https://www.greentribunal.gov.in/sites/default/files/news_updates/3217120_0.pdf)
     have no published coordinates.
-  - *Palamuru-Rangareddy* — Jurala foreshore → Yellur-Narlapur pump house
-    (infobox coordinates of https://en.wikipedia.org/wiki/Palamuru-Rangareddy_Lift_Irrigation_Scheme,
-    foundation 2015, first phase started 16 September 2023; 104 m lift per
+  - *Palamuru-Rangareddy* — Srisailam backwaters → Yellur-Narlapur pump house
+    (foundation 2015, first phase started 16 September 2023; 104 m lift per
     https://thesouthfirst.com/telangana/palamuru-rangareddy-lift-irrigation-scheme-in-telangana-gets-new-deadline-december-2027/).
-    Narlapur, Yedula, Vattem, Karvena, Udandapur and KP Laxmidevipally
-    reservoirs have no published coordinates.
-  - *Not drawn for lack of coordinates:* Devadula (intake, Dharmasagar,
-    Ghanpur), Sitarama, Dindi and Koil Sagar lift schemes.
-- **Status** (operating / in progress) reflects those sources as of
-  2026-10-24 and is not an official schedule.
+    The infobox coordinates of https://en.wikipedia.org/wiki/Palamuru-Rangareddy_Lift_Irrigation_Scheme
+    (15.96 °N 78.15 °E) fall in Andhra Pradesh, south of the Krishna, so the
+    pump house is placed at OpenStreetMap's Narlapur substation in Kollapur
+    mandal (flagged approximate). The later stages are in section 6h.
+  - *Sitarama, Dindi, Devadula and the SLBC tunnel* — see section 6h; Koil
+    Sagar still has no coordinates.
+- **Status** (operating / under construction / planned) reflects those sources
+  as of 2026-10-24 and is not an official schedule.
 - **Geometry is schematic:** curves drawn between the structures' coordinates
   (through the pump house where one is known). Real canal, tunnel and
   pressure-main alignments are not available as open data. The popup's
@@ -216,6 +217,109 @@ public and were downloaded by `fetch_data.py` into `data/raw/` (not committed);
 - **Wikidata** (https://query.wikidata.org, CC0): dams within 76.9–81.6 °E,
   15.4–20.0 °N with coordinates, cached as `wikidata_dams.csv`; used for the
   Singotam reservoir.
+
+## 6h. Works still under construction or only proposed ("Still to be built")
+
+Every structure and link carries a `status`: *operational*, *under
+construction* or *proposed* (links: *operational*, *in progress*, *planned*).
+The Status filter and the "Still to be built" list use it. Statuses are what
+the sources below reported up to 2026-10-24; they change often and are not an
+official schedule. A `target` is the completion year the government last
+announced, not a forecast.
+
+- **Wikipedia dam infoboxes** (section 6): pages whose `status` is `P`
+  (proposed) or `UC` (under construction) are no longer dropped. `P` →
+  proposed; `UC` without an opening year → under construction; `UC` with an
+  opening year → operational (Sadarmat Barrage, impounded 2021; Sammakka
+  Sagar, impounding since June 2021). Lower Jurala Hydro Electric Project is
+  excluded (a power station, all units commissioned 2013–2016). Janampet
+  Barrage is kept as *proposed (shelved)*: its own article says the barrage
+  "was proposed" for the Dummugudem link that the Sitarama scheme replaced.
+  Scheme names, planned years and notes for these pages are hand-entered
+  (`PENDING_FACTS`) from the article text and:
+  - Tummidihetti: https://en.wikipedia.org/wiki/Pranahita_Chevella_Lift_Irrigation_Project
+    (2008 start of the scheme, 148 m FRL agreement of 2016);
+    https://www.newkerala.com/news/a/telangana-cm-revanth-reddy-urges-centre-expedite-approvals-590.htm
+    (September 2026 request for a 152 m agreement).
+  - Icchampally: https://thesouthfirst.com/news/telangana-proposes-inchampalli-godavari-link-as-fair-alternative-to-andhras-polavaram-banakacherla-project
+    and https://www.etvbharat.com/en/!state/andhra-pradesh-objects-to-godavari-cauvery-link-flags-use-of-chhattisgarhs-share-enn25082302273
+    (August 2025 NWDA meeting; Andhra Pradesh's objection).
+  - Sitamma Sagar: https://uniindia.com/t-gana-govt-working-to-resolve-ngt-hurdles-for-seethamma-sagar-barrage-bhatti-vikramarka/south/news/3873771.html
+    (NGT clearance and R&R bills pending, June 2026);
+    https://deccanchronicle.com/southern-states/telangana/dont-lag-on-sitarama-project-uttam-tells-officials-1826520
+    (target of 2026); the L&T contract from the article's infobox.
+- **Structures without a usable infobox** (`EXTRA_STRUCTURES`): facts from
+  the source given per entry (`url`); coordinates are *approximate* where the
+  entry names a place (`approx`): the OpenStreetMap village or tank centre
+  from Nominatim (https://nominatim.openstreetmap.org, ODbL) stands in for
+  the structure, which is why those markers carry a dotted ring and their
+  links omit terrain heights. Overpass was unavailable (timeouts, 2026-10-24),
+  so no structure outlines could be taken from OSM.
+  - *Baswapur reservoir* (11.39 TMC per the Kaleshwaram DPR as quoted in a
+    CWC RTI reply, https://cwc.gov.in/sites/default/files/reply-rti-shri-srinivas-rao-cwcnd-00108-2.pdf;
+    R&R not started per the CAG's 2024 report,
+    https://cag.gov.in/uploads/download_audit_report/2024/08_Chapter-V_Execution-of-Kaleshwaram-Project-065cdab5633b085.36569039.pdf).
+    Position: Baswapur tank, Bhongir mandal.
+  - *Annapurna (Anantha Sagar) reservoir*, 3.5 TMC, Link IV, operating
+    (Kaleshwaram article). Position: Ananthasagar village, from the
+    coordinates of https://en.wikipedia.org/wiki/Saraswathi_Kshetramu,_Ananthasagar.
+  - *Palamuru-Rangareddy stages* — Veeranjaneya (Yedula, 6.5 TMC, Stage II
+    cavern pump house with 10 × 145 MW), Venkatadri (Vattem, Stage III),
+    Kurumurthy Raya (Karvena, Stage IV), the 3.7 km twin tunnel Narlapur →
+    Yedula and the 10 km tunnel Yedula → Vattem, the December 2027 target,
+    the Udandapur (June 2027) and KP Laxmidevipalli timing:
+    https://thesouthfirst.com/news/palamuru-rangareddy-lift-irrigation-scheme-in-telangana-gets-new-deadline-december-2027
+    (2 May 2025), https://www.varksengineers.com/projects/palamuru-rangareddy-package-7,
+    https://telanganatoday.com/ground-reality-contradicts-telangana-governments-prlis-completion-claims
+    (2026) and https://www.siasat.com/telangana-uttam-sets-20-month-target-for-palamuru-project-3426924/.
+    Positions: the Yedula, Vattem and Karivena villages.
+  - *Dindi reservoir* (existing, 59 million m³ ≈ 2.08 TMC,
+    https://en.wikipedia.org/wiki/R._Vidyasagar_Rao_Dindi_Lift_Irrigation_Scheme;
+    coordinates Wikidata Q62033240) and the *Dindi head reach* from Yedula
+    (66 km canal, 5.5 km tunnel, nine reservoirs including Nakkalagandi
+    7.5 TMC: the Wikipedia list of dams, https://www.varksengineers.com/projects/dindi-lift-irrigation-scheme,
+    and https://www.uniindia.com/south-india/politics-telangana-cpi-19ms50/219572
+    for "no water yet", 19 October 2026).
+  - *SLBC tunnel* (43.9 km, 13.95 km from the inlet and 20.43 km from the
+    outlet dug, 9.8 km left, start 2006, February 2025 collapse):
+    https://indianinfrastructure.com/2026/07/03/regaining-momentum-srisailam-left-bank-canal-tunnel-project-makes-progress-after-setbacks/
+    (3 July 2026); June 2028 target per
+    https://www.siasat.com/slbc-tunnel-work-clears-major-hurdle-to-be-complete-by-june-28-3552421/.
+    Portals placed at the Domalapenta (Amrabad) and Mannevaripalle (Achampet)
+    villages; the 2005 "planned" year is the tunnel contract year quoted in
+    https://en.wikipedia.org/wiki/Srisailam_Left_Bank_Canal ("taken up in
+    2004 … scheduled for completion in 2010").
+  - *Devadula Phase III* (49.06 km tunnel, Devannapet pump house, 7 of 10
+    pumps, 2027 target, water to Dharmasagar since May 2025):
+    https://thesouthfirst.com/news/devadula-lift-irrigation-project-in-telangana-to-become-fully-operational-by-2027
+    and https://www.telangana360.com/2026/07/devadula-lift-irrigation.html
+    (secondary). Positions: Devadula village (Kannaigudem mandal) for the
+    Gangaram intake and Dharmasagar village for the tank.
+  - *Chanaka–Korata barrage* (construction March 2016 per
+    https://en.wikipedia.org/wiki/Chanaka-Korata_Barrage; wet run September
+    2023 and the unfinished canals per
+    https://www.deccanchronicle.com/southern-states/telangana/floods-due-to-incomplete-korata-chanaka-project-damage-crops-in-adilabad-district-1976070,
+    August 2026). Position: Korta village, Jainad mandal (the barrage is on
+    the Penganga just north of it).
+  - *Gouravelli reservoir* (8.23 TMC, raised from 1.41; about 98 % complete):
+    https://www.deccanchronicle.com/southern-states/telangana/congress-initiated-project-works-nearly-98-complete-uttam-1992803.
+    Position: Gouravelli village, Akkannapet mandal.
+- **Works without any published location** (`PENDING_NOTES`, listed in grey
+  with no marker): Gandhamalla reservoir (9.87 TMC in the DPR per the CAG,
+  1.41 TMC per the contractor https://www.varksengineers.com/projects/kaleshwaram-project-gandhamalla-reservoir),
+  the Kaleshwaram distributary network (CAG 2024), Udandapur and KP
+  Laxmidevipalli, the Palamuru main canal, the Dindi reservoirs, the Sitarama
+  pump houses, the Mukteshwar (Chinna Kaleshwaram) lift
+  (https://rsdebate.nic.in/bitstream/123456789/749427/1/PQ_265_22072024_U95_p356_p356.pdf,
+  July 2024) and the remaining Kalwakurthy, Nettempadu, Bhima and Koilsagar
+  works (March 2027 target, siasat.com above).
+- **Canals and tunnels:** OSM's `construction=yes` ways (section 6f, the
+  Sitarama canals) are the only canals with a pending status; every other
+  mapped canal counts as built. Kaleshwaram's unfinished canal kilometres are
+  in the network table (section 6g), not on the map.
+- **Not covered:** Modikuntavagu, Nakkalagandi's exact site, the Sammakka
+  Sagar and Sitamma Sagar hydro plants, the Lower Penganga dam itself, and
+  the Godavari–Cauvery link canal: no coordinates or no reliable status found.
 
 ## 6f. Canals (OpenStreetMap)
 

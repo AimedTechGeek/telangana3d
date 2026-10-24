@@ -49,6 +49,17 @@ uv run python serve.py      # http://127.0.0.1:8765/ opens in your browser
   reservoirs. Labels show name and gross capacity; clicking one zooms in and
   opens a popup with height, construction-start–opening years, the average
   river inflow at that point (HydroRIVERS) and capacity
+- **Still to be built:** every dam, reservoir, barrage, pump house, tunnel,
+  water link and canal carries a status (operating, under construction,
+  proposed). The Status filter on the right shows only the operating works or
+  only the pending ones; pending markers have a dashed outline and a cone,
+  approximate positions (a village standing in for the structure) a dotted
+  ring. A "Still to be built" list in the left panel groups them by scheme
+  (Kaleshwaram Link III/V/VI/VII and Baswapur, the Palamuru-Rangareddy
+  reservoirs and tunnels, Dindi, the SLBC tunnel, Devadula Phase III, Sitamma
+  Sagar, Chanaka–Korata, Gouravelli, Tummidihetti, Icchampally …) with the
+  years and last announced target; works with no published location are
+  listed in grey
 - 27 cities and towns ranked by elevation, with the lowest river beds for
   comparison; click one to fly to it
 - A "View & filters" card on the right groups the controls: Terrain

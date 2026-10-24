@@ -22,6 +22,7 @@ Outputs:
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 import math
 import re
@@ -407,16 +408,120 @@ OSM_RESERVOIRS = {
 }
 KALESHWARAM_URL = "https://en.wikipedia.org/wiki/Kaleshwaram_Lift_Irrigation_Project"
 WIKI = "https://en.wikipedia.org/wiki/"
+# Power stations with a dam infobox but no storage or diversion role.
+EXCLUDED_TITLES = ("Lower Jurala Hydro Electric Project",)
 
-# Intakes, pump houses and reservoirs that are nodes of a water link but not in dams.json.
-# Coordinates come from the article named in `source` (see DATA_SOURCES.md).
+# --- works still under construction or only proposed (see DATA_SOURCES.md 6h) ------------
+# Status words used everywhere: "operational", "under construction", "proposed".
+# Wikipedia pages whose infobox status is P (proposed) or UC (under construction) stay in
+# the data with that status; these hand-checked facts add the scheme, years and context.
+# `target` is the completion year the government last announced, not a prediction.
+PENDING_FACTS = {
+    "Icchampally Project": {"scheme": "Godavari–Cauvery link (NWDA)", "note":
+        "Multi-purpose dam proposed jointly with Maharashtra and Chhattisgarh; Telangana wants it as the source of the "
+        "Godavari–Cauvery link (NWDA meeting, August 2025), Andhra Pradesh objects; no agreement yet"},
+    "Tummidihetti Barrage": {"scheme": "Pranahita–Chevella", "planned": 2008, "note":
+        "Pranahita barrage of the Pranahita–Chevella scheme; FRL 148 m agreed with Maharashtra in 2016, Telangana asked "
+        "the Centre in September 2026 to expedite an agreement for 152 m; the 2026-27 budget speaks of reviving the scheme"},
+    "Sitamma Sagar Barrage": {"name": "Sitamma Sagar Barrage", "scheme": "Sitarama lift scheme", "planned": 2016, "target": 2026, "note":
+        "Barrage 200 m below the Dummugudem anicut, built by L&T, with 320 MW of hydro power; three pump houses and the "
+        "canals (shown from OpenStreetMap) are under construction; NGT clearance and R&R bills still pending in mid-2026"},
+    "Janampet Barrage": {"scheme": "Dummugudem link (shelved)", "status": "proposed", "note":
+        "Proposed for the Dummugudem to Nagarjuna Sagar tail pond link; shelved when the Sitarama scheme and the "
+        "Sitamma Sagar barrage replaced it"},
+    "Sadarmat Barrage": {"status": "operational", "note": "Water impounded since 2021; the Wikipedia infobox still says under construction"},
+    "Sammakka Sagar Barrage": {"status": "operational", "note": "Impounding since June 2021, not formally inaugurated; the 240 MW hydro plant is still to be built"},
+}
+# Structures with no usable Wikipedia infobox. `approx` names the place whose OpenStreetMap
+# coordinates stand in for the structure (village or tank centre), so the marker is roughly
+# right but not surveyed; `url` is the source for the facts. Capacities are only given where
+# a source states them.
+NEWS = {
+    "prlis": "https://thesouthfirst.com/news/palamuru-rangareddy-lift-irrigation-scheme-in-telangana-gets-new-deadline-december-2027",
+    "slbc": "https://indianinfrastructure.com/2026/07/03/regaining-momentum-srisailam-left-bank-canal-tunnel-project-makes-progress-after-setbacks/",
+    "devadula": "https://thesouthfirst.com/news/devadula-lift-irrigation-project-in-telangana-to-become-fully-operational-by-2027",
+    "chanaka": "https://www.deccanchronicle.com/southern-states/telangana/floods-due-to-incomplete-korata-chanaka-project-damage-crops-in-adilabad-district-1976070",
+    "gouravelli": "https://www.deccanchronicle.com/southern-states/telangana/congress-initiated-project-works-nearly-98-complete-uttam-1992803",
+    "baswapur": "https://cwc.gov.in/sites/default/files/reply-rti-shri-srinivas-rao-cwcnd-00108-2.pdf",
+    "cag": "https://cag.gov.in/uploads/download_audit_report/2024/08_Chapter-V_Execution-of-Kaleshwaram-Project-065cdab5633b085.36569039.pdf",
+    "dindi": "https://www.uniindia.com/south-india/politics-telangana-cpi-19ms50/219572",
+    "palamuru_targets": "https://www.siasat.com/telangana-uttam-sets-20-month-target-for-palamuru-project-3426924/",
+    "mukteshwar": "https://rsdebate.nic.in/bitstream/123456789/749427/1/PQ_265_22072024_U95_p356_p356.pdf",
+}
+EXTRA_STRUCTURES = [
+    {"name": "Baswapur reservoir", "kind": "dam", "scheme": "Kaleshwaram", "status": "under construction",
+     "lon": 78.8817, "lat": 17.5728, "approx": "Baswapur tank, Bhongir mandal", "capacity_tmcft": 11.39, "planned": 2016,
+     "note": "Link V storage to be fed from Konda Pochamma Sagar by gravity canals and a 1.2 km tunnel; the CAG found in 2024 "
+             "that resettlement had not started in the affected villages", "url": NEWS["baswapur"]},
+    {"name": "Annapurna reservoir (Anantha Sagar)", "kind": "dam", "scheme": "Kaleshwaram", "status": "operational",
+     "lon": 78.9881, "lat": 18.2058, "approx": "Ananthasagar village, Siddipet", "capacity_tmcft": 3.5, "planned": 2016, "began": 2016,
+     "note": "Link IV balancing reservoir between Mid Manair and Ranganayaka Sagar", "url": KALESHWARAM_URL},
+    {"name": "Veeranjaneya reservoir (Yedula)", "kind": "dam", "scheme": "Palamuru-Rangareddy", "status": "under construction",
+     "lon": 78.1740, "lat": 16.3575, "approx": "Yedula village, Gopalpet mandal", "capacity_tmcft": 6.5, "planned": 2015, "began": 2015, "target": 2027,
+     "note": "Stage II: the pump house is an underground cavern 415 m long and 90 m high with ten 145 MW pumps; the reservoir is "
+             "first in line for filling (minister's review, May 2025)", "url": NEWS["prlis"]},
+    {"name": "Venkatadri reservoir (Vattem)", "kind": "dam", "scheme": "Palamuru-Rangareddy", "status": "under construction",
+     "lon": 78.2168, "lat": 16.5823, "approx": "Vattem village, Bijinapalle mandal", "planned": 2015, "began": 2015, "target": 2027,
+     "note": "Stage III pump house with ten pumps, fed by a 10 km tunnel from Yedula", "url": NEWS["prlis"]},
+    {"name": "Kurumurthy Raya reservoir (Karvena)", "kind": "dam", "scheme": "Palamuru-Rangareddy", "status": "under construction",
+     "lon": 78.1101, "lat": 16.6686, "approx": "Karivena village, Bhoothpur mandal", "planned": 2015, "began": 2015, "target": 2027,
+     "note": "Stage IV; Udandapur and KP Laxmidevipalli follow but have no published coordinates", "url": NEWS["prlis"]},
+    {"name": "Dindi reservoir", "kind": "dam", "scheme": "Dindi lift scheme", "status": "operational",
+     "lon": 78.67944, "lat": 16.54056, "capacity_tmcft": 2.08,
+     "note": "Existing medium reservoir on the Dindi river that the lift scheme will feed; 59 million m³ gross storage (Wikipedia)",
+     "url": "https://www.wikidata.org/wiki/Q62033240"},
+    {"name": "Dharmasagar reservoir", "kind": "dam", "scheme": "Devadula lift scheme", "status": "operational",
+     "lon": 79.4418, "lat": 17.9926, "approx": "Dharmasagar village, Hanumakonda",
+     "note": "Existing tank that receives Devadula Phase III water from the Devannapet pump house (pump 02 since May 2025)", "url": NEWS["devadula"]},
+    {"name": "Chanaka–Korata barrage", "kind": "barrage", "scheme": "Lower Penganga", "status": "under construction",
+     "lon": 78.5188, "lat": 19.8112, "approx": "Korta village, Jainad mandal", "began": 2016, "river": "Penganga River",
+     "note": "Barrage on the Penganga at the Maharashtra border, wet run September 2023; canals and the pump house still unfinished, "
+             "so it stored no flood water in 2026 (about 50,000 acres planned)", "url": NEWS["chanaka"]},
+    {"name": "Gouravelli reservoir", "kind": "dam", "scheme": "Indiramma flood flow canal (SRSP)", "status": "under construction",
+     "lon": 79.1823, "lat": 18.0728, "approx": "Gouravelli village, Akkannapet mandal", "capacity_tmcft": 8.23,
+     "note": "Capacity raised from 1.41 to 8.23 TMC; works reported about 98 % complete in 2026, held up by approvals and clearances",
+     "url": NEWS["gouravelli"]},
+]
+# Pending works whose location no source publishes: listed in the panel only, no marker.
+PENDING_NOTES = [
+    {"scheme": "Kaleshwaram", "item": "Gandhamalla reservoir", "kind": "reservoir", "status": "under construction",
+     "note": "Link V storage near Gandhamalla, M. Turkapally mandal (Yadadri); 9.87 TMC in the DPR, 1.41 TMC per the contractor; resettlement not started (CAG 2024)", "url": NEWS["cag"]},
+    {"scheme": "Kaleshwaram", "item": "Distributary network", "kind": "canals", "status": "under construction",
+     "note": "690 of 9,564 km of distributaries built by March 2022; only 40,288 acres of new irrigation created against 18.26 lakh planned (CAG 2024)", "url": NEWS["cag"]},
+    {"scheme": "Palamuru-Rangareddy", "item": "Udandapur reservoir", "kind": "reservoir", "status": "under construction",
+     "note": "Fifth reservoir of the chain; headworks to Udandapur to be completed by June 2027 (CM, 2026)", "url": NEWS["prlis"]},
+    {"scheme": "Palamuru-Rangareddy", "item": "KP Laxmidevipalli reservoir", "kind": "reservoir", "status": "proposed",
+     "note": "End reservoir in Kodangal; construction to be taken up under the 2025-26 budget, six months after Udandapur", "url": NEWS["palamuru_targets"]},
+    {"scheme": "Palamuru-Rangareddy", "item": "Main canal and distributaries", "kind": "canals", "status": "under construction",
+     "note": "240 km main canal and 95 km of tunnels in all; completion target December 2027", "url": NEWS["prlis"]},
+    {"scheme": "Dindi lift scheme", "item": "Nakkalagandi, Shivannagudem and the other reservoirs", "kind": "reservoirs", "status": "under construction",
+     "note": "Nine reservoirs including Nakkalagandi (Dindi balancing reservoir, 7.5 TMC) along a 66 km canal with a 5.5 km tunnel; works since 2015, no water yet (October 2026)", "url": NEWS["dindi"]},
+    {"scheme": "Sitarama lift scheme", "item": "Pump houses and main canals", "kind": "pump houses", "status": "under construction",
+     "note": "Three pump houses and the Dummugudem–Sagar tail pond canals; the canals tagged under construction in OpenStreetMap are these", "url": WIKI + "Sitamma_Sagar_Barrage"},
+    {"scheme": "Mukteshwar (Chinna Kaleshwaram)", "item": "Lift from the Godavari at Kannepalli, Nizamabad", "kind": "lift scheme", "status": "proposed",
+     "note": "Techno-economic viability accepted by the Centre's advisory committee in 2024; ₹545 crore estimate", "url": NEWS["mukteshwar"]},
+    {"scheme": "Kalwakurthy, Nettempadu, Bhima, Koilsagar", "item": "Remaining canals and distributaries", "kind": "canals", "status": "under construction",
+     "note": "Palamuru-region lift schemes operating since 2017-19 whose last reaches are unfinished; target March 2027", "url": NEWS["palamuru_targets"]},
+]
+
+# Intakes, pump houses, tunnel portals and reservoirs that are nodes of a water link but not
+# in dams.json. Coordinates come from the article named in `source` (see DATA_SOURCES.md);
+# `approx` marks OpenStreetMap village positions standing in for the structure.
 EXTRA_NODES = {
     "Puttamgandi pump house": {"lon": 79.11694, "lat": 16.61028, "kind": "pump",
                                "source": WIKI + "Srisailam_Left_Bank_Canal"},
     "Kalwakurthy intake (Yellur)": {"lon": 78.39972, "lat": 16.10139, "kind": "pump",
                                     "source": WIKI + "Mahatma_Gandhi_Kalwakurthy_lift_irrigation_scheme"},
-    "Narlapur pump house": {"lon": 78.14639, "lat": 15.96361, "kind": "pump",
-                            "source": WIKI + "Palamuru-Rangareddy_Lift_Irrigation_Scheme"},
+    # The Wikipedia infobox puts this pump house at 15.96 N 78.15 E, which is in Andhra Pradesh;
+    # it stands at Yellur-Narlapur on the Srisailam foreshore, so OSM's Narlapur substation is used.
+    "Narlapur pump house": {"lon": 78.3760, "lat": 16.1167, "kind": "pump", "approx": "Narlapur substation, Kollapur mandal",
+                            "source": NEWS["prlis"]},
+    "SLBC tunnel inlet (Domalapenta)": {"lon": 78.8969, "lat": 16.1051, "kind": "tunnel", "status": "under construction",
+                                        "approx": "Domalapenta village, Amrabad mandal", "source": NEWS["slbc"]},
+    "SLBC tunnel outlet (Mannevaripalle)": {"lon": 78.8987, "lat": 16.5337, "kind": "tunnel", "status": "under construction",
+                                            "approx": "Mannevaripalle village, Achampet mandal", "source": NEWS["slbc"]},
+    "Devadula intake (Gangaram)": {"lon": 80.3703, "lat": 18.5682, "kind": "pump", "approx": "Devadula village, Kannaigudem mandal",
+                                   "source": NEWS["devadula"]},
 }
 WIKIDATA_NODES = {"Singotam reservoir": "Singotam Dam"}     # node name -> Wikidata label
 
@@ -456,14 +561,30 @@ LINKS = [
      {"planned": 1984, "began": 1984, "water": 2017, "done": 2017}, "lift from the Srisailam backwaters near Kollapur"),
     ("Kalwakurthy", "Stage I", "Kalwakurthy intake (Yellur)", "Singotam reservoir", None, "lift", "operational",
      {"planned": 1984, "began": 1984, "water": 2017, "done": 2017}, "Stage II continues from Singotam to the Jonnalaboguda and Gudipally reservoirs, which have no published coordinates"),
-    ("Palamuru-Rangareddy", "Stage I", "Jurala Project", "Narlapur pump house", None, "lift", "operational",
-     {"planned": 2015, "began": 2015, "water": 2023, "done": None}, "Yellur-Narlapur pump house started in September 2023, lifting 104 m into the Narlapur reservoir; the Yedula, Vattem, Karvena, Udandapur and KP Laxmidevipally stages have no published coordinates; completion target December 2027"),
+    ("Palamuru-Rangareddy", "Stage I", "Srisailam Dam", "Narlapur pump house", None, "lift", "operational",
+     {"planned": 2015, "began": 2015, "water": 2023, "done": None}, "Yellur-Narlapur pump house lifts 104 m from the Srisailam backwaters at Yellur (Kollapur) into the Anjanagiri reservoir at Narlapur (6.4 TMC); pumping since September 2023"),
+    ("Palamuru-Rangareddy", "Stage II", "Narlapur pump house", "Veeranjaneya reservoir (Yedula)", None, "tunnel", "in progress",
+     {"planned": 2015, "began": 2015, "water": None, "done": None, "target": 2027}, "twin tunnels of 3.7 km and an open canal (Package 3, due late 2025) to the Yedula pump house, an underground cavern with ten 145 MW pumps"),
+    ("Palamuru-Rangareddy", "Stage III", "Veeranjaneya reservoir (Yedula)", "Venkatadri reservoir (Vattem)", None, "tunnel", "in progress",
+     {"planned": 2015, "began": 2015, "water": None, "done": None, "target": 2027}, "10 km tunnel of 11.5 m diameter to Vattem, then the Stage III pump house with ten pumps"),
+    ("Palamuru-Rangareddy", "Stage IV", "Venkatadri reservoir (Vattem)", "Kurumurthy Raya reservoir (Karvena)", None, "lift", "in progress",
+     {"planned": 2015, "began": 2015, "water": None, "done": None, "target": 2027}, "on to Udandapur (by June 2027) and KP Laxmidevipalli (six months later), which have no published coordinates; the scheme is to lift 90 TMC in 60 days for 12.3 lakh acres"),
+    ("Dindi lift scheme", "Head reach", "Veeranjaneya reservoir (Yedula)", "Dindi reservoir", None, "lift", "in progress",
+     {"planned": 2015, "began": 2015, "water": None, "done": None}, "lift from the Yedula foreshore into a 66 km canal with a 5.5 km tunnel feeding nine reservoirs, among them Nakkalagandi (7.5 TMC); 0.5 TMC allotted in the Palamuru DPR, no water yet (October 2026)"),
+    ("Srisailam Left Bank Canal", "SLBC tunnel", "SLBC tunnel inlet (Domalapenta)", "SLBC tunnel outlet (Mannevaripalle)", None, "tunnel", "in progress",
+     {"planned": 2005, "began": 2006, "water": None, "done": None, "target": 2028}, "43.9 km gravity tunnel from the Srisailam reservoir to replace the Puttamgandi pumping: 13.95 km dug from the inlet and 20.43 km from the outlet, 9.8 km left (July 2026); the roof collapse of February 2025 killed eight workers; target June 2028"),
+    ("Devadula lift scheme", "Phase III", "Devadula intake (Gangaram)", "Dharmasagar reservoir", None, "tunnel", "in progress",
+     {"planned": None, "began": None, "water": 2025, "done": None, "target": 2027}, "49 km tunnel (Package III) with leakage repairs and the Devannapet pump house, seven of ten pumps running (July 2026); phases I and II irrigate since the 2000s; full operation targeted for 2027"),
+    ("Kaleshwaram", "Link V", "Konda Pochamma Sagar", "Baswapur reservoir", None, "canal", "planned",
+     {"planned": 2016, "began": None, "water": None, "done": None}, "gravity canals and a 1.2 km tunnel from the Link IV anicut to the Gandhamalla (no published coordinates) and Baswapur reservoirs, 2.4 lakh acres towards Chityala"),
 ]
 LINK_SOURCES = {
     "Kaleshwaram": KALESHWARAM_URL, "Sriram Sagar canals": WIKI + "Sriram_Sagar_Project",
     "Srisailam Left Bank Canal": WIKI + "Srisailam_Left_Bank_Canal",
     "Kalwakurthy": WIKI + "Mahatma_Gandhi_Kalwakurthy_lift_irrigation_scheme",
     "Palamuru-Rangareddy": WIKI + "Palamuru-Rangareddy_Lift_Irrigation_Scheme",
+    "Dindi lift scheme": WIKI + "R._Vidyasagar_Rao_Dindi_Lift_Irrigation_Scheme",
+    "Devadula lift scheme": WIKI + "J._Chokka_Rao_Devadula_Lift_Irrigation_Scheme",
 }
 LINK_BULGE = 0.12                   # schematic arc height as a fraction of the straight distance
 NODE_ELEV_RADIUS_PX = 2             # 400 m window for a structure's elevation
@@ -491,10 +612,12 @@ def load_pumphouses() -> list[dict]:
         tags, centre = element["tags"], element.get("center", element)
         houses.append({"name": tags.get("alt_name") or tags["name"], "osm_name": tags["name"], "scheme": "Kaleshwaram",
                        "power": tags.get("power:input"), "since": (tags.get("start_date") or "")[:4] or None,
-                       "lon": round(centre["lon"], 5), "lat": round(centre["lat"], 5), "source": "OpenStreetMap"})
+                       "lon": round(centre["lon"], 5), "lat": round(centre["lat"], 5), "source": "OpenStreetMap",
+                       "kind": "pump", "status": "operational", "approx": None})
     for name, node in EXTRA_NODES.items():
         houses.append({"name": name, "osm_name": name, "scheme": None, "power": None, "since": None,
-                       "lon": node["lon"], "lat": node["lat"], "source": node["source"]})
+                       "lon": node["lon"], "lat": node["lat"], "source": node["source"], "kind": node["kind"],
+                       "status": node.get("status", "operational"), "approx": node.get("approx")})
     return houses
 
 
@@ -537,7 +660,8 @@ def build_links(nodes_by_name: dict[str, dict]) -> dict:
         for a, b in zip(stops, stops[1:]):
             coords.extend(arc(a, b, LINK_BULGE if not via else LINK_BULGE / 2)[: -1])
         coords.append([round(stops[-1][0], 5), round(stops[-1][1], 5)])
-        elev_from, elev_to = nodes_by_name[source].get("elev_m"), nodes_by_name[target].get("elev_m")
+        # A village standing in for a structure can sit far above the water, so approximate nodes give no terrain height.
+        elev_from, elev_to = (None if nodes_by_name[n].get("approx") else nodes_by_name[n].get("elev_m") for n in (source, target))
         features.append({"type": "Feature", "geometry": {"type": "LineString", "coordinates": coords},
                          "properties": {"id": index, "scheme": scheme, "link": link, "from": source, "to": target, "via": via,
                                         "kind": kind, "status": status, "note": note, "source": LINK_SOURCES[scheme],
@@ -638,10 +762,7 @@ def build_dams(state: gpd.GeoDataFrame, reaches: gpd.GeoDataFrame) -> list[dict]
     for title, text in pages.items():
         if not text or not re.search(r"\{\{\s*infobox dam", text, re.I):
             continue
-        if any(word in title.lower() for word in EXCLUDED_TITLE_WORDS):
-            continue
-        status = (infobox_field(text, "status") or "").lower()
-        if re.search(r"^(p|pl|uc)$|construction|proposed|planned", status):   # NRLD codes: P proposed, UC building
+        if any(word in title.lower() for word in EXCLUDED_TITLE_WORDS) or title in EXCLUDED_TITLES:
             continue
         coord = parse_coord(text)
         if not coord or not corridor.contains(Point(to_dem.transform(*coord))):
@@ -649,6 +770,8 @@ def build_dams(state: gpd.GeoDataFrame, reaches: gpd.GeoDataFrame) -> list[dict]
         name = strip_markup(infobox_field(text, "name") or infobox_field(text, "dam_name") or title)
         kind_text = f"{title} {name} {infobox_field(text, 'dam_type') or ''}".lower()
         barrage = title in BARRAGE_TITLES or re.search(r"barrage|anicut", kind_text) is not None
+        opened = parse_year(infobox_field(text, "opening") or infobox_field(text, "dam_opening") or infobox_field(text, "completion"))
+        facts = PENDING_FACTS.get(title, {})
         dams.append({
             "name": name, "kind": "barrage" if barrage else "dam",
             "lon": round(coord[0], 5), "lat": round(coord[1], 5),
@@ -657,15 +780,35 @@ def build_dams(state: gpd.GeoDataFrame, reaches: gpd.GeoDataFrame) -> list[dict]
             "river": strip_markup(infobox_field(text, "dam_crosses") or infobox_field(text, "crosses") or "") or None,
             # Infoboxes record when building started and when the dam opened; no page states a proposal year.
             "began": parse_year(infobox_field(text, "construction_began")),
-            "opened": parse_year(infobox_field(text, "opening") or infobox_field(text, "dam_opening") or infobox_field(text, "completion")),
+            "opened": opened,
             "capacity_tmcft": parse_capacity_tmcft(infobox_field(text, "res_capacity_total")),
             "url": "https://en.wikipedia.org/wiki/" + title.replace(" ", "_"),
+            "status": facts.get("status") or infobox_status(infobox_field(text, "status"), opened),
+            **{k: v for k, v in facts.items() if k != "status"},
         })
     dams.extend(osm_reservoir_dams())
     dams.extend(wikidata_nodes())
+    dams.extend(copy.deepcopy(EXTRA_STRUCTURES))
+    for dam in dams:
+        for key, default in (("status", "operational"), ("scheme", None), ("planned", None), ("target", None),
+                             ("note", None), ("approx", None), ("height", None), ("river", None), ("began", None),
+                             ("opened", None), ("capacity_tmcft", None)):
+            dam.setdefault(key, default)
+        if dam["river"] is None and dam["scheme"]:
+            dam["river"] = f"{dam['scheme']} (off-river)"
     attach_inflow(dams, reaches)
     dams.sort(key=lambda d: (d["height"] is None, -(d["height"] or 0)))
     return dams
+
+
+def infobox_status(value: str | None, opened: int | None) -> str:
+    """Map the infobox status (NRLD codes P / UC, or words) to the three status words."""
+    status = (value or "").lower()
+    if re.search(r"^(p|pl)$|proposed|planned", status):
+        return "proposed"
+    if re.search(r"^uc$|construction", status) and not opened:
+        return "under construction"
+    return "operational"
 
 
 def attach_inflow(dams: list[dict], reaches: gpd.GeoDataFrame) -> None:
@@ -955,6 +1098,12 @@ def main() -> None:
         node["elev_m"] = round(elevation) if elevation is not None else None
     (WEB_DATA / "dams.json").write_text(json.dumps(dams, indent=1, ensure_ascii=False), encoding="utf-8")
     (WEB_DATA / "pumphouses.json").write_text(json.dumps(pumphouses, indent=1, ensure_ascii=False), encoding="utf-8")
+    (WEB_DATA / "pending.json").write_text(json.dumps(PENDING_NOTES, indent=1, ensure_ascii=False), encoding="utf-8")
+    pending = [d for d in dams if d["status"] != "operational"]
+    print(f"pending: {len(pending)} structures ({sum(1 for d in pending if d['status'] == 'proposed')} proposed, "
+          f"{sum(1 for d in pending if d['approx'])} at approximate positions), {len(PENDING_NOTES)} without coordinates")
+    for dam in pending:
+        print(f"  {dam['status']:18} {dam['kind']:7} {dam['name'][:38]:38} {dam['scheme'] or ''}")
     links = build_links({node["name"]: node for node in dams} | {node["osm_name"]: node for node in pumphouses})
     (WEB_DATA / "links.geojson").write_text(json.dumps(links), encoding="utf-8")
     if (RAW / "osm_canals.json").exists():

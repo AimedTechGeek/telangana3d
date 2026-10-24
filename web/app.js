@@ -134,7 +134,15 @@ function cropSources() {
 let canalMode = 'after';                   // off | after | all
 let canalsLoaded = false;
 const CANAL_DASH = [3, 2.2];               // in line widths, longer than the river dashes
-const canalFilter = () => (canalMode === 'all' ? ['literal', true] : ['==', ['get', 'era'], 'after']);
+// Status filter (all | built | pending) shared by dams, pump houses, links and canals.
+let statusMode = 'all';
+const isPending = (status) => status !== 'operational';
+const statusShown = (status) => statusMode === 'all' || (statusMode === 'pending') === isPending(status);
+const STATUS_LABEL = { operational: 'operating', 'in progress': 'under construction', 'under construction': 'under construction', planned: 'planned', proposed: 'proposed' };
+const linkStatusFilter = () => (statusMode === 'all' ? ['literal', true] : [statusMode === 'built' ? '==' : '!=', ['get', 'status'], 'operational']);
+// OSM marks the Sitarama canals under construction; every other canal counts as built.
+const canalFilter = () => ['all', canalMode === 'all' ? ['literal', true] : ['==', ['get', 'era'], 'after'],
+                           statusMode === 'all' ? ['literal', true] : ['==', ['get', 'construction'], statusMode === 'pending']];
 function canalLayers(t) {
   if (!canalsLoaded) return [];
   const vis = canalMode === 'off' ? 'none' : 'visible';
@@ -175,16 +183,19 @@ function canalDashAt(step) {
   const shift = round(p - gap);
   return [round(length - shift), gap, shift, 0];
 }
-function setCanalMode(mode) {
-  canalMode = mode;
-  for (const button of document.querySelectorAll('[data-canal]')) button.setAttribute('aria-pressed', String(button.dataset.canal === mode));
+function applyCanalFilters() {
   if (!canalsLoaded) return;
-  const vis = mode === 'off' ? 'none' : 'visible';
+  const vis = canalMode === 'off' ? 'none' : 'visible';
   const ids = ['canals-casing', 'canals-line', 'canals-hit', ...Array.from({ length: FLOW_DASH_STEPS }, (_, k) => `canals-dash-${k}`)];
   for (const id of ids) {
     map.setLayoutProperty(id, 'visibility', vis);
     map.setFilter(id, id.startsWith('canals-dash') ? ['all', canalFilter(), ['==', ['get', 'directed'], true]] : canalFilter());
   }
+}
+function setCanalMode(mode) {
+  canalMode = mode;
+  for (const button of document.querySelectorAll('[data-canal]')) button.setAttribute('aria-pressed', String(button.dataset.canal === mode));
+  applyCanalFilters();
   if (mode === 'off') canalPopup.remove();
 }
 for (const button of document.querySelectorAll('[data-canal]')) button.addEventListener('click', () => setCanalMode(button.dataset.canal));
@@ -247,18 +258,18 @@ function buildStyle(theme) {
       { id: 'links-highlight', type: 'line', source: 'links', filter: ['==', ['get', 'link'], ''],
         layout: { 'line-join': 'round', 'line-cap': 'round', visibility: chipOn('links') },
         paint: { 'line-color': t.link, 'line-width': 12, 'line-opacity': 0.25, 'line-blur': 2 } },
-      { id: 'links-casing', type: 'line', source: 'links', layout: { 'line-join': 'round', 'line-cap': 'round', visibility: chipOn('links') },
+      { id: 'links-casing', type: 'line', source: 'links', filter: linkStatusFilter(), layout: { 'line-join': 'round', 'line-cap': 'round', visibility: chipOn('links') },
         paint: { 'line-color': t.linkDash, 'line-width': ['interpolate', ['linear'], ['zoom'], 6, 5, 10, 7.5], 'line-opacity': 0.8 } },
-      { id: 'links-line', type: 'line', source: 'links', layout: { 'line-join': 'round', 'line-cap': 'round', visibility: chipOn('links') },
+      { id: 'links-line', type: 'line', source: 'links', filter: linkStatusFilter(), layout: { 'line-join': 'round', 'line-cap': 'round', visibility: chipOn('links') },
         paint: { 'line-color': t.link, 'line-width': ['interpolate', ['linear'], ['zoom'], 6, 2.6, 10, 4.2],
                  'line-opacity': ['case', ['==', ['get', 'status'], 'operational'], 0.9, 0.6],
-                 'line-dasharray': ['case', ['==', ['get', 'status'], 'operational'], ['literal', [1, 0]], ['literal', [2, 2]]] } },
+                 'line-dasharray': ['case', ['==', ['get', 'status'], 'operational'], ['literal', [1, 0]], ['==', ['get', 'status'], 'planned'], ['literal', [0.6, 2.4]], ['literal', [2, 2]]] } },
       // Static arrows give direction on links still being built; operating links get moving chevrons on the canvas.
-      { id: 'links-arrows', type: 'symbol', source: 'links', filter: ['!=', ['get', 'status'], 'operational'],
+      { id: 'links-arrows', type: 'symbol', source: 'links', filter: ['all', ['!=', ['get', 'status'], 'operational'], linkStatusFilter()],
         layout: { 'symbol-placement': 'line', 'symbol-spacing': 70, 'icon-image': 'arrow', 'icon-size': ['interpolate', ['linear'], ['zoom'], 6, 0.4, 10, 0.6],
                   'icon-rotation-alignment': 'map', 'icon-allow-overlap': true, 'icon-ignore-placement': true, visibility: chipOn('links') },
         paint: { 'icon-opacity': 0.7 } },
-      { id: 'links-hit', type: 'line', source: 'links', layout: { visibility: chipOn('links') },
+      { id: 'links-hit', type: 'line', source: 'links', filter: linkStatusFilter(), layout: { visibility: chipOn('links') },
         paint: { 'line-color': '#000000', 'line-opacity': 0, 'line-width': 16 } },
     ],
     terrain: { source: 'dem', exaggeration: Number($('exag').value) },
@@ -539,7 +550,7 @@ function prepareLinkParticles(links) {
 }
 
 function drawLinkChevrons(dt, metresPerPixel, west, south, east, north, width, height) {
-  if (document.body.classList.contains('links-off')) return;
+  if (document.body.classList.contains('links-off') || statusMode === 'pending') return;   // chevrons mark operating links only
   const colour = MAP_THEMES[currentTheme()].link;
   for (const track of linkTracks) {
     const step = LINK_CHEVRON.speedPx * metresPerPixel * dt;
@@ -776,38 +787,87 @@ function renderEraCounts(dams) {
 }
 for (const button of document.querySelectorAll('[data-era]')) button.addEventListener('click', () => setEra(button.dataset.era));
 
+// ---------- status filter: operating vs still to build ----------
+const pumpMarkers = [];                      // { house, element }
+const wipMarkers = [];                       // link cones: { status, element }
+function setStatusMode(mode) {
+  statusMode = mode;
+  for (const button of document.querySelectorAll('[data-status]')) button.setAttribute('aria-pressed', String(button.dataset.status === mode));
+  for (const { dam, element } of damMarkers) element.classList.toggle('status-hidden', !statusShown(dam.status));
+  for (const { house, element } of pumpMarkers) element.classList.toggle('status-hidden', !statusShown(house.status));
+  for (const { status, element } of wipMarkers) element.classList.toggle('status-hidden', !statusShown(status));
+  for (const id of ['links-casing', 'links-line', 'links-hit']) if (map.getLayer(id)) map.setFilter(id, linkStatusFilter());
+  if (map.getLayer('links-arrows')) map.setFilter('links-arrows', ['all', ['!=', ['get', 'status'], 'operational'], linkStatusFilter()]);
+  applyCanalFilters();
+  if (mode !== 'all') { damPopup.remove(); linkPopup.remove(); canalPopup.remove(); }
+}
+function renderStatusCounts(dams, links) {
+  const linkGroups = groupLinks(links);
+  for (const button of document.querySelectorAll('[data-status]')) {
+    const mode = button.dataset.status;
+    const shown = (status) => mode === 'all' || (mode === 'pending') === isPending(status);
+    const count = dams.filter((dam) => shown(dam.status)).length + [...linkGroups.values()].filter((group) => shown(group.status)).length;
+    const badge = button.querySelector('b') || button.appendChild(textEl('b', '', ''));
+    badge.textContent = String(count);
+  }
+}
+for (const button of document.querySelectorAll('[data-status]')) button.addEventListener('click', () => setStatusMode(button.dataset.status));
+
 const formatTmcft = (value) => `${value.toLocaleString('en-IN', { maximumFractionDigits: value < 10 ? 2 : 0 })} tmcft`;
 const damYears = (dam) => (dam.began && dam.opened ? `${dam.began}–${dam.opened}` : dam.opened ? `${dam.opened}` : dam.began ? `since ${dam.began}` : null);
+// Years of a work still to be built: planned (sanctioned), construction start, announced target.
+function pendingYears(item) {
+  const parts = [];
+  if (item.planned) parts.push(`planned ${item.planned}`);
+  if (item.began) parts.push(`construction since ${item.began}`);
+  if (item.target) parts.push(`target ${item.target}`);
+  return parts.length ? parts.join(' · ') : null;
+}
+function statusBadge() {
+  const badge = document.createElement('span'); badge.className = 'badge'; badge.title = 'under construction or proposed';
+  const svg = document.createElementNS(SVG_NS, 'svg'); svg.setAttribute('viewBox', '0 0 16 16'); svg.setAttribute('aria-hidden', 'true');
+  const use = document.createElementNS(SVG_NS, 'use'); use.setAttribute('href', '#ic-wip'); svg.appendChild(use); badge.appendChild(svg);
+  return badge;
+}
 
 // The label carries name and capacity; while a dam's popup is open it shrinks to the name.
 const damPopup = new maplibregl.Popup({ closeButton: true, closeOnClick: true, offset: 16, className: 'dam-popup', maxWidth: '320px' });
 let openDamNode = null;
 damPopup.on('close', () => { if (openDamNode) openDamNode.classList.remove('open'); openDamNode = null; });
 
+const damKindLabel = (dam) => (dam.kind === 'barrage' ? 'Barrage' : dam.river && dam.river.includes('off-river') ? 'Reservoir' : 'Dam');
 function addDamMarker(dam) {
   const node = document.createElement('div');
-  node.className = `mk-dam ${dam.kind}`;
+  node.className = `mk-dam ${dam.kind}${isPending(dam.status) ? ` pending ${dam.status === 'proposed' ? 'proposed' : 'uc'}` : ''}${dam.approx ? ' approx' : ''}`;
   damMarkers.push({ dam, element: node });
   const icon = document.createElement('span'); icon.className = 'ic';
   const svg = document.createElementNS(SVG_NS, 'svg'); svg.setAttribute('viewBox', '0 0 16 16'); svg.setAttribute('aria-hidden', 'true');
   const use = document.createElementNS(SVG_NS, 'use'); use.setAttribute('href', `#ic-${dam.kind}`); svg.appendChild(use); icon.appendChild(svg);
+  if (isPending(dam.status)) icon.appendChild(statusBadge());
   const label = textEl('span', 'lbl', dam.name);
   if (dam.capacity_tmcft) label.appendChild(textEl('span', 'e', formatTmcft(dam.capacity_tmcft)));
+  if (isPending(dam.status)) label.appendChild(textEl('span', 'st', STATUS_LABEL[dam.status]));
   node.append(icon, label);
-  node.title = `${dam.kind === 'barrage' ? 'Barrage' : 'Dam'}${dam.river ? ` on the ${dam.river}` : ''} · click for details`;
+  node.title = `${damKindLabel(dam)}${dam.river && !dam.river.includes('off-river') ? ` on the ${dam.river}` : ''}${isPending(dam.status) ? ` · ${STATUS_LABEL[dam.status]}` : ''}`
+             + `${dam.approx ? ` · position approximate (${dam.approx})` : ''} · click for details`;
   node.addEventListener('click', (event) => { event.stopPropagation(); openDamPopup(dam, node); flyToPoint(dam.lon, dam.lat, 11.5); });
   new maplibregl.Marker({ element: node, anchor: 'left', offset: [-11, 0] }).setLngLat([dam.lon, dam.lat]).addTo(map);
 }
 
-// ---------- Kaleshwaram links: pump houses and the link list ----------
+// ---------- Kaleshwaram links: pump houses, tunnel portals and the link list ----------
 function addPumpMarker(house) {
-  const node = document.createElement('div'); node.className = 'mk-pump';
+  const node = document.createElement('div');
+  node.className = `mk-pump${isPending(house.status) ? ' pending' : ''}${house.approx ? ' approx' : ''}`;
+  pumpMarkers.push({ house, element: node });
   const icon = document.createElement('span'); icon.className = 'ic';
   const svg = document.createElementNS(SVG_NS, 'svg'); svg.setAttribute('viewBox', '0 0 16 16'); svg.setAttribute('aria-hidden', 'true');
-  const use = document.createElementNS(SVG_NS, 'use'); use.setAttribute('href', '#ic-pump'); svg.appendChild(use); icon.appendChild(svg);
+  const use = document.createElementNS(SVG_NS, 'use'); use.setAttribute('href', house.kind === 'tunnel' ? '#ic-tunnel' : '#ic-pump'); svg.appendChild(use); icon.appendChild(svg);
+  if (isPending(house.status)) icon.appendChild(statusBadge());
   const label = textEl('span', 'lbl', `${house.name}${house.power ? ` · ${house.power.replace('MW', ' MW')}` : ''}`);
+  if (isPending(house.status)) label.appendChild(textEl('span', 'st', STATUS_LABEL[house.status]));
   node.append(icon, label);
-  node.title = `${house.name}${house.elev_m ? ` · terrain ${house.elev_m} m` : ''}${house.since ? ` · pumping since ${house.since}` : ''} · ${house.source === 'OpenStreetMap' ? 'OpenStreetMap' : 'Wikipedia'}`;
+  node.title = `${house.name}${house.elev_m ? ` · terrain ${house.elev_m} m` : ''}${house.since ? ` · pumping since ${house.since}` : ''}`
+             + `${house.approx ? ` · position approximate (${house.approx})` : ''} · ${house.source === 'OpenStreetMap' ? 'OpenStreetMap' : 'see the link popup for the source'}`;
   new maplibregl.Marker({ element: node, anchor: 'left', offset: [-10, 0] }).setLngLat([house.lon, house.lat]).addTo(map);
 }
 
@@ -964,6 +1024,7 @@ function linkYears(p) {
   if (p.began) parts.push(`construction ${p.began}`);
   if (p.water) parts.push(`first water ${p.water}`);
   if (p.done) parts.push(`complete ${p.done}`);
+  if (p.target && !p.done) parts.push(`target ${p.target}`);
   return parts.length ? parts.join(' · ') : null;
 }
 function linkElevation(p) {
@@ -979,7 +1040,7 @@ function openLinkPopup(p, lngLat) {
   head.append(textEl('span', `kind link ${p.status === 'operational' ? '' : 'planned'}`, `${p.scheme} · ${p.kind}`), textEl('strong', '', `${p.link}: ${p.from} → ${p.to}`));
   content.appendChild(head);
   const rows = [
-    ['Status', p.status === 'operational' ? 'operating' : p.status],
+    ['Status', STATUS_LABEL[p.status] || p.status],
     ['Via', p.via || null],
     ['Years', linkYears(p)],
     ['Terrain', linkElevation(p)],
@@ -1013,14 +1074,16 @@ function addWorkInProgressMarkers(links) {
     const icon = document.createElement('span'); icon.className = 'ic';
     const svg = document.createElementNS(SVG_NS, 'svg'); svg.setAttribute('viewBox', '0 0 16 16'); svg.setAttribute('aria-hidden', 'true');
     const use = document.createElementNS(SVG_NS, 'use'); use.setAttribute('href', '#ic-wip'); svg.appendChild(use); icon.appendChild(svg);
-    node.append(icon, textEl('span', 'lbl', `${p.link} · ${p.status}`));
+    node.append(icon, textEl('span', 'lbl', `${p.link} · ${STATUS_LABEL[p.status] || p.status}`));
     node.title = `${p.link}: ${p.from} → ${p.to} · ${p.note}`;
+    wipMarkers.push({ status: p.status, element: node });
     new maplibregl.Marker({ element: node, anchor: 'left', offset: [-11, 0] }).setLngLat(mid).addTo(map);
   }
 }
 
-function renderLinkList(links) {
-  const groups = new Map();                      // "scheme · link" -> { chain, features, status, props }
+/** Link features grouped into chains: "scheme · link" -> { scheme, link, chain, features, status, props }. */
+function groupLinks(links) {
+  const groups = new Map();
   for (const feature of links.features) {
     const p = feature.properties, key = linkKey(p);
     const group = groups.get(key) || { scheme: p.scheme, link: p.link, chain: [p.from], features: [], status: p.status, props: p };
@@ -1029,33 +1092,92 @@ function renderLinkList(links) {
     group.features.push(feature);
     groups.set(key, group);
   }
+  return groups;
+}
+function focusLinkGroup(group, button) {
+  for (const other of document.querySelectorAll('.link-list .row')) other.classList.toggle('active', other === button);
+  const bounds = new maplibregl.LngLatBounds();
+  for (const feature of group.features) for (const coord of feature.geometry.coordinates) bounds.extend(coord);
+  map.fitBounds(bounds, { padding: { top: 80, bottom: 80, left: 400, right: 340 }, pitch: 50, bearing: -15, duration: 1800, maxZoom: 10.5 });
+  const first = group.features[0], mid = first.geometry.coordinates[Math.floor(first.geometry.coordinates.length / 2)];
+  openLinkPopup(first.properties, mid);
+}
+function linkRow(group) {
+  const button = document.createElement('button'); button.type = 'button';
+  button.className = `row${group.status === 'operational' ? '' : ' planned'}`;
+  const chain = textEl('span', 'chain', group.chain.join(' → '));
+  const years = linkYears(group.props);
+  chain.appendChild(textEl('small', '', `${STATUS_LABEL[group.status] || group.status}${years ? ` · ${years}` : ''}`));
+  button.append(textEl('span', 'tag', group.link), chain);
+  button.addEventListener('click', () => focusLinkGroup(group, button));
+  return button;
+}
+function schemeHeader(list, scheme) {
+  const header = document.createElement('li'); header.className = 'group';
+  header.append(document.createElement('i'), document.createTextNode(scheme));
+  list.appendChild(header);
+}
+
+function renderLinkList(links) {
   const list = $('link-list');
   list.textContent = '';
   let scheme = null;
-  for (const group of groups.values()) {
-    if (group.scheme !== scheme) {
-      scheme = group.scheme;
-      const header = document.createElement('li'); header.className = 'group';
-      header.append(document.createElement('i'), document.createTextNode(scheme));
-      list.appendChild(header);
-    }
+  for (const group of groupLinks(links).values()) {
+    if (group.scheme !== scheme) { scheme = group.scheme; schemeHeader(list, scheme); }
     const item = document.createElement('li');
-    const button = document.createElement('button'); button.type = 'button';
-    button.className = `row${group.status === 'operational' ? '' : ' planned'}`;
-    const chain = textEl('span', 'chain', group.chain.join(' → '));
-    const years = linkYears(group.props);
-    chain.appendChild(textEl('small', '', `${group.status === 'operational' ? 'operating' : group.status}${years ? ` · ${years}` : ''}`));
-    button.append(textEl('span', 'tag', group.link), chain);
-    button.addEventListener('click', () => {
-      for (const other of document.querySelectorAll('.link-list .row')) other.classList.toggle('active', other === button);
-      const bounds = new maplibregl.LngLatBounds();
-      for (const feature of group.features) for (const coord of feature.geometry.coordinates) bounds.extend(coord);
-      map.fitBounds(bounds, { padding: { top: 80, bottom: 80, left: 400, right: 340 }, pitch: 50, bearing: -15, duration: 1800, maxZoom: 10.5 });
-      const first = group.features[0], mid = first.geometry.coordinates[Math.floor(first.geometry.coordinates.length / 2)];
-      openLinkPopup(first.properties, mid);
-    });
-    item.appendChild(button); list.appendChild(item);
+    item.appendChild(linkRow(group)); list.appendChild(item);
   }
+}
+
+// ---------- "Still to be built": every pending structure, link and unlocated work by scheme ----------
+function renderPendingList(dams, links, notes) {
+  const bySchemes = new Map();                 // scheme -> [{ kind, label, status, years, onClick, note }]
+  const add = (scheme, row) => { if (!bySchemes.has(scheme)) bySchemes.set(scheme, []); bySchemes.get(scheme).push(row); };
+  for (const entry of damMarkers) {
+    const { dam, element } = entry;
+    if (!isPending(dam.status)) continue;
+    add(dam.scheme || 'Other projects', {
+      kind: damKindLabel(dam).toLowerCase(), label: dam.name, status: dam.status, years: pendingYears(dam),
+      extra: [dam.capacity_tmcft ? formatTmcft(dam.capacity_tmcft) : null, dam.approx ? 'position approximate' : null].filter(Boolean).join(' · '),
+      onClick: (button) => { for (const other of document.querySelectorAll('.link-list .row')) other.classList.toggle('active', other === button); openDamPopup(dam, element); flyToPoint(dam.lon, dam.lat, 11); },
+    });
+  }
+  for (const group of groupLinks(links).values()) {
+    if (!isPending(group.status)) continue;
+    add(group.scheme, { kind: `${group.props.kind} link`, label: `${group.link}: ${group.chain.join(' → ')}`, status: group.status,
+                        years: pendingYears(group.props), extra: null, onClick: (button) => focusLinkGroup(group, button) });
+  }
+  for (const note of notes) add(note.scheme, { kind: note.kind, label: note.item, status: note.status, years: null, extra: note.note, url: note.url, onClick: null });
+  const list = $('pending-list');
+  list.textContent = '';
+  let structures = 0, linkCount = 0, unlocated = 0;
+  for (const [scheme, rows] of bySchemes) {
+    schemeHeader(list, scheme);
+    for (const row of rows) {
+      const item = document.createElement('li');
+      const small = `${STATUS_LABEL[row.status] || row.status}${row.years ? ` · ${row.years}` : ''}${row.extra ? ` · ${row.extra}` : ''}`;
+      if (row.onClick) {
+        const button = document.createElement('button'); button.type = 'button';
+        button.className = `row planned${row.status === 'proposed' ? ' proposed' : ''}`;
+        const chain = textEl('span', 'chain', row.label); chain.appendChild(textEl('small', '', small));
+        button.append(textEl('span', 'tag', row.kind), chain);
+        button.addEventListener('click', () => row.onClick(button));
+        item.appendChild(button);
+        if (row.kind.endsWith('link')) linkCount++; else structures++;
+      } else {
+        item.className = 'note';
+        const chain = textEl('span', 'chain', `${row.label} · no published location`);
+        const detail = textEl('small', '', small);
+        if (row.url) { const a = document.createElement('a'); a.href = row.url; a.target = '_blank'; a.rel = 'noopener'; a.textContent = ' source ↗'; detail.appendChild(a); }
+        chain.appendChild(detail);
+        item.append(textEl('span', 'tag', row.kind), chain);
+        unlocated++;
+      }
+      list.appendChild(item);
+    }
+  }
+  $('pending-count').textContent = `${structures} structures · ${linkCount} links · ${unlocated} unlocated`;
+  return { structures, links: linkCount, unlocated };
 }
 
 function openDamPopup(dam, node) {
@@ -1063,25 +1185,31 @@ function openDamPopup(dam, node) {
   linkPopup.remove();
   const content = document.createElement('div');
   const head = textEl('div', 'head', '');
-  head.append(textEl('span', `kind ${dam.kind}`, dam.kind === 'barrage' ? 'Barrage' : dam.river && dam.river.includes('off-river') ? 'Reservoir' : 'Dam'),
+  const pending = isPending(dam.status);
+  head.append(textEl('span', `kind ${dam.kind}${pending ? ' pending' : ''}`, `${damKindLabel(dam)}${pending ? ` · ${STATUS_LABEL[dam.status]}` : ''}`),
               textEl('strong', '', dam.name));
   content.appendChild(head);
   const rows = [
+    ['Status', pending ? `${STATUS_LABEL[dam.status]}${dam.target ? `, target ${dam.target}` : ''}` : null],
+    ['Scheme', dam.scheme],
     ['Height', dam.height ? `${dam.height} m` : null],
     ['Terrain', dam.elev_m ? `${dam.elev_m} m above sea level` : null],
-    ['Built', damYears(dam)],
+    [pending ? 'Years' : 'Built', pending ? pendingYears(dam) : damYears(dam)],
     ['Average inflow', dam.inflow_q ? `${dam.inflow_q.toLocaleString('en-IN')} m³/s${dam.inflow_name ? ` · ${dam.inflow_name}` : ''}` : null],
-    ['Gross capacity', dam.capacity_tmcft ? formatTmcft(dam.capacity_tmcft) : null],
-    ['River', dam.river],
+    [pending ? 'Planned capacity' : 'Gross capacity', dam.capacity_tmcft ? formatTmcft(dam.capacity_tmcft) : null],
+    ['River', dam.river && !dam.river.includes('off-river') ? dam.river : null],
+    ['Note', dam.note],
   ];
   const list = document.createElement('dl');
   for (const [term, value] of rows) {
     if (!value) continue;
-    list.append(textEl('dt', '', term), textEl('dd', '', value));
+    list.append(textEl('dt', '', term), textEl('dd', term === 'Note' ? 'prose' : '', value));
   }
   content.appendChild(list);
+  if (dam.approx) content.appendChild(textEl('p', 'fine', `Position approximate: ${dam.approx} (OpenStreetMap), not the structure itself.`));
   const link = document.createElement('a');
-  link.href = dam.url; link.target = '_blank'; link.rel = 'noopener'; link.textContent = 'Source: Wikipedia ↗';
+  link.href = dam.url; link.target = '_blank'; link.rel = 'noopener';
+  link.textContent = dam.url.includes('wikipedia.org') ? 'Source: Wikipedia ↗' : dam.url.includes('wikidata.org') ? 'Source: Wikidata ↗' : 'Source ↗';
   content.appendChild(link);
   node.classList.add('open');
   openDamNode = node;
@@ -1291,10 +1419,11 @@ async function loadJson(url) { const response = await fetch(url); if (!response.
 map.on('load', async () => {
   debug.phase = 'style-loaded'; writeDebug();
   try {
-    const [cities, profiles, districtPoints, flowSummary, flowReaches, dams, links, pumphouses, cropland] = await Promise.all([
+    const [cities, profiles, districtPoints, flowSummary, flowReaches, dams, links, pumphouses, cropland, pendingNotes] = await Promise.all([
       loadJson('data/cities.json'), loadJson('data/rivers.json'), loadJson('data/district_points.geojson'),
       loadJson('data/flow_summary.json'), loadJson('data/flow.geojson'), loadJson('data/dams.json'),
-      loadJson('data/links.geojson'), loadJson('data/pumphouses.json'), loadJson('data/cropland.json')]);
+      loadJson('data/links.geojson'), loadJson('data/pumphouses.json'), loadJson('data/cropland.json'),
+      loadJson('data/pending.json').catch(() => [])]);
     cropBounds = cropland.bounds;
     for (const [id, source] of Object.entries(cropSources())) map.addSource(id, source);
     for (const layer of cropLayers(MAP_THEMES[currentTheme()])) map.addLayer(layer, 'mask');
@@ -1318,6 +1447,8 @@ map.on('load', async () => {
     renderLinkList(links);
     prepareLinkParticles(links);
     addWorkInProgressMarkers(links);
+    renderStatusCounts(dams, links);
+    debug.notes.pending = renderPendingList(dams, links, pendingNotes);
     debug.notes.dams = dams.length;
     debug.notes.links = links.features.length;
     debug.notes.bubbles = bubbleReaches.reduce((n, reach) => n + reach.particles.length, 0);

@@ -270,12 +270,14 @@ section { display: flex; flex-direction: column; gap: 8px; }
 /* Kaleshwaram links */
 .links { padding-top: 14px; border-top: 1px solid var(--hair); }
 .legend-inline .key.link { height: 3px; background: var(--link); margin-left: 0; }
-.legend-inline .ic.wip, .mk-wip .ic {
+.legend-inline .ic.wip, .hint .ic.wip, .mk-wip .ic {
   display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; color: var(--link);
   background: var(--panel-solid); border: 1px solid var(--border); box-shadow: 0 1px 4px rgba(0,0,0,.3);
 }
 .legend-inline .ic.wip { margin-left: 8px; margin-right: 2px; }
-.legend-inline .ic.wip svg, .mk-wip .ic svg { width: 13px; height: 13px; }
+.hint .ic.wip { width: 16px; height: 16px; vertical-align: middle; margin: 0 2px; }
+.legend-inline .ic.wip svg, .hint .ic.wip svg, .mk-wip .ic svg { width: 13px; height: 13px; }
+.hint .ic.wip svg { width: 10px; height: 10px; }
 .mk-wip { display: flex; align-items: center; gap: 5px; cursor: default; }
 .mk-wip .lbl { padding: 2px 6px; border-radius: 6px; white-space: nowrap; font-size: 10.5px; font-weight: 500; color: var(--ink-2); background: var(--panel); backdrop-filter: blur(6px); border: 1px dashed var(--link); }
 body.links-off .mk-wip { display: none; }
@@ -356,6 +358,29 @@ body.links-off .mk-pump { display: none; }
 :root[data-theme="dark"] .dam-popup .kind.barrage { color: #4fd1c5; }
 /* Dam labels follow only the Dams chip: visible at every zoom, unaffected by Labels. */
 body.dams-off .mk-dam { display: none; }
+
+/* Works still to be built: dashed outline, muted weight and a cone badge; approximate positions get a dotted ring. */
+.mk-dam .ic, .mk-pump .ic { position: relative; }
+.mk-dam.pending .ic, .mk-pump.pending .ic { border: 1.5px dashed currentColor; background: var(--panel); }
+.mk-dam.pending .lbl, .mk-pump.pending .lbl { border-style: dashed; font-weight: 500; }
+.mk-dam.proposed .ic, .mk-pump.proposed .ic { opacity: .8; }
+.mk-dam.approx .ic, .mk-pump.approx .ic { outline: 1.5px dotted currentColor; outline-offset: 2px; }
+.mk-dam .lbl .st, .mk-pump .lbl .st { font-family: var(--mono); font-weight: 500; font-size: 10px; color: var(--muted); margin-left: 4px; }
+.mk-dam.open .lbl .st { display: none; }
+.mk-dam .badge, .mk-pump .badge {
+  position: absolute; right: -7px; bottom: -6px; width: 14px; height: 14px; border-radius: 50%; display: grid; place-items: center;
+  color: var(--link); background: var(--panel-solid); border: 1px solid var(--border); opacity: 1;
+}
+.mk-dam .badge svg, .mk-pump .badge svg { width: 9px; height: 9px; }
+.mk-dam.status-hidden, .mk-pump.status-hidden, .mk-wip.status-hidden { display: none; }
+.dam-popup .kind.pending { color: var(--muted); }
+.pending-list .row .tag { color: var(--ink-2); }
+.pending-list .row.proposed .tag { color: var(--muted); }
+.pending-list li.note { display: grid; grid-template-columns: 58px 1fr; gap: 8px; padding: 5px 6px; color: var(--muted); }
+.pending-list li.note .tag { font-family: var(--mono); font-size: 10.5px; font-weight: 600; padding-top: 1px; overflow-wrap: anywhere; }
+.pending-list li.note .chain { font-size: 12.5px; font-weight: 500; line-height: 1.3; color: var(--ink-2); }
+.pending-list li.note .chain small { display: block; font-size: 10.5px; font-weight: 400; color: var(--muted); margin-top: 1px; }
+.pending-list .group i { background: var(--muted); }
 
 .mk-peak { position: relative; width: 18px; height: 18px; cursor: pointer; }
 .mk-peak .ring { position: absolute; inset: 0; border-radius: 50%; border: 2px solid var(--river); animation: pulse 1.8s ease-out infinite; }
