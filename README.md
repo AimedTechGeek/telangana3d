@@ -114,7 +114,9 @@ uv run python web_smoke_test.py   # headless Edge check of the web map -> out/we
 ## Data and choices
 
 Full provenance, licences, access dates and processing notes for every dataset
-are in [DATA_SOURCES.md](DATA_SOURCES.md).
+are in [DATA_SOURCES.md](DATA_SOURCES.md). The sources that could not be reached,
+and what stands in for them, are listed by topic in
+[README_UNREACHABLE_SOURCES.md](README_UNREACHABLE_SOURCES.md).
 
 | Item | Source / value |
 |---|---|
