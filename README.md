@@ -27,10 +27,15 @@ uv run python serve.py      # http://127.0.0.1:8765/ opens in your browser
   status, years (planned, construction, first water, complete), terrain
   heights at both ends, straight-line distance and source. Lines are
   schematic, not real canal alignments
-- **Canals** (OpenStreetMap): thin cyan dashed lines whose dashes move with
-  the flow; the Canals control shows those dug after 2014 (Sitarama and
-  Kaleshwaram works, by project since OSM has no dig dates), or all canals
-  with the older ones faint. Click a canal for its name, scheme and length
+- **Canals, tunnels and pressure mains** (OpenStreetMap): thin magenta
+  dashed lines whose dashes move with the flow; canal tunnels are dotted
+  with a wide casing, pressurised tunnels/pipes solid. The Canals control
+  shows those dug after 2014 (Kaleshwaram and Sitarama works, by project
+  since OSM has no dig dates) or everything with the older ones faint. Click
+  one for its name, scheme and length. A table under Water links sets the
+  official Kaleshwaram network figures (planned 1,832 km; CAG: 57 % of main
+  canals and 7 % of distributaries built by March 2022) against what OSM has
+  mapped
 - **Cropland cover** (GLAD, Potapov et al. 2021): the Agriculture control
   switches a raster of the share of land under crops for 2008–2011 ("Before
   2014"), 2016–2019 ("After 2014") or the change between them, and opens a

@@ -139,19 +139,28 @@ function canalLayers(t) {
   if (!canalsLoaded) return [];
   const vis = canalMode === 'off' ? 'none' : 'visible';
   const isNew = ['==', ['get', 'era'], 'after'];
-  // One zoom interpolation per expression (MapLibre's rule); the era case sits inside each stop.
-  const width = (scale) => ['interpolate', ['linear'], ['zoom'],
-    6, ['case', isNew, 1.4 * scale, 0.8 * scale], 9, ['case', isNew, 2.6 * scale, 1.4 * scale], 12, ['case', isNew, 4.2 * scale, 2.4 * scale]];
+  const isTunnel = ['==', ['get', 'kind'], 'tunnel'];
+  const isMain = ['==', ['get', 'kind'], 'main'];
+  // MapLibre allows one zoom interpolation per expression, so the kind and era cases sit inside each stop.
+  // `s` scales the base width per kind; older canals draw at 60 %.
+  const kindWidth = (base, s) => ['case',
+    isTunnel, ['case', isNew, base * s.tunnel, base * 0.6 * s.tunnel],
+    isMain, ['case', isNew, base * s.main, base * 0.6 * s.main],
+    ['case', isNew, base * s.canal, base * 0.6 * s.canal]];
+  const width = (s) => ['interpolate', ['linear'], ['zoom'], 6, kindWidth(1.4, s), 9, kindWidth(2.6, s), 12, kindWidth(4.2, s)];
   return [
+    // Casing: canals get a thin contrast edge; tunnels a wide one so they read as a tube; mains in between.
     { id: 'canals-casing', type: 'line', source: 'canals', filter: canalFilter(), layout: { 'line-join': 'round', 'line-cap': 'round', visibility: vis },
-      paint: { 'line-color': t.canalCasing, 'line-width': width(1.9), 'line-opacity': ['case', isNew, 0.75, 0.4] } },
+      paint: { 'line-color': t.canalCasing, 'line-width': width({ canal: 1.9, tunnel: 3.2, main: 2.4 }),
+               'line-opacity': ['case', isNew, ['case', isTunnel, 0.9, 0.75], 0.4] } },
     { id: 'canals-line', type: 'line', source: 'canals', filter: canalFilter(), layout: { 'line-join': 'round', 'line-cap': 'round', visibility: vis },
-      paint: { 'line-color': ['case', isNew, t.canal, t.canalOld], 'line-width': width(1),
-               'line-opacity': ['case', isNew, 0.95, 0.7], 'line-dasharray': ['literal', CANAL_DASH] } },
+      paint: { 'line-color': ['case', isNew, t.canal, t.canalOld], 'line-width': width({ canal: 1, tunnel: 1.6, main: 1.2 }),
+               'line-opacity': ['case', isNew, 0.95, 0.7],
+               'line-dasharray': ['case', isTunnel, ['literal', [0.6, 1.1]], isMain, ['literal', [1, 0]], ['literal', CANAL_DASH]] } },
     ...Array.from({ length: FLOW_DASH_STEPS }, (_, k) => ({
       id: `canals-dash-${k}`, type: 'line', source: 'canals', filter: ['all', canalFilter(), ['==', ['get', 'directed'], true]],
       layout: { 'line-join': 'round', 'line-cap': 'butt', visibility: vis },
-      paint: { 'line-color': t.canalDash, 'line-width': width(0.45),
+      paint: { 'line-color': t.canalDash, 'line-width': width({ canal: 0.45, tunnel: 0.7, main: 0.45 }),
                'line-dasharray': ['literal', canalDashAt(k)], 'line-opacity': k === flowStep ? 0.9 : 0 } })),
     { id: 'canals-hit', type: 'line', source: 'canals', filter: canalFilter(), layout: { visibility: vis },
       paint: { 'line-color': '#000000', 'line-opacity': 0, 'line-width': 12 } },
@@ -896,13 +905,38 @@ function renderCropTable(data) {
   $('crop-csv').href = URL.createObjectURL(new Blob(['﻿' + csv + '\r\n// Source: GLAD global cropland extent (Potapov et al. 2021), 3 km cells, mean cover per district x district area; schematic, not survey data.'], { type: 'text/csv;charset=utf-8' }));
 }
 
+// ---------- Kaleshwaram canal network: planned vs built vs mapped ----------
+function renderCanalNetwork(summary) {
+  const tbody = $('canal-network').tBodies[0];
+  tbody.textContent = '';
+  const row = (label, planned, done, note) => {
+    const tr = document.createElement('tr');
+    for (const [text, cls] of [[label, 'lbl'], [planned, 'num'], [done, 'num'], [note, 'note']]) {
+      const td = document.createElement('td'); td.className = cls; td.textContent = text; tr.appendChild(td);
+    }
+    tbody.appendChild(tr);
+  };
+  const kmText = (v) => `${Math.round(v).toLocaleString('en-IN')} km`;
+  for (const [label, planned] of summary.network.planned) row(label, kmText(planned), '—', 'planned');
+  for (const [label, planned, done] of summary.network.cag) row(label, kmText(planned), kmText(done), `${Math.round(done / planned * 100)} % by ${summary.network.cag_asof}`);
+  const osm = summary.osm_km;
+  const after = (osm.after_canal || 0) + (osm.after_tunnel || 0) + (osm.after_main || 0);
+  row('Mapped in OSM, post-2014', '—', kmText(after), `${kmText((osm.after_tunnel || 0) + (osm.after_main || 0))} of it tunnels and pipes`);
+  const links = document.createElement('p'); links.className = 'hint';
+  const a1 = document.createElement('a'); a1.href = summary.network.planned_source; a1.target = '_blank'; a1.rel = 'noopener'; a1.textContent = 'Irrigation Dept';
+  const a2 = document.createElement('a'); a2.href = summary.network.cag_source; a2.target = '_blank'; a2.rel = 'noopener'; a2.textContent = 'CAG audit (2024)';
+  links.append('Planned lengths: ', a1, ' · completed lengths: ', a2, ', an audited snapshot, not today\'s total; dug is not the same as lined and connected to fields.');
+  $('canal-network').after(links);
+}
+
 // ---------- canal popup ----------
 const canalPopup = new maplibregl.Popup({ closeButton: true, closeOnClick: true, offset: 8, className: 'dam-popup canal-popup', maxWidth: '300px' });
 function openCanalPopup(p, lngLat) {
   const content = document.createElement('div');
   const head = textEl('div', 'head', '');
   const era = p.era === 'after' ? 'dug after 2014' : p.era === 'before' ? 'pre-2014 project' : 'date unknown';
-  head.append(textEl('span', 'kind canal', `${p.tunnel ? 'tunnel' : 'canal'} · ${era}`), textEl('strong', '', p.name || 'Unnamed canal'));
+  const kindLabel = { tunnel: 'canal tunnel', main: 'pressurised tunnel / pipe', canal: 'canal' }[p.kind] || 'canal';
+  head.append(textEl('span', 'kind canal', `${kindLabel} · ${era}`), textEl('strong', '', p.name || `Unnamed ${kindLabel}`));
   content.appendChild(head);
   const list = document.createElement('dl');
   for (const [term, value] of [['Scheme', p.scheme || null], ['Length', `${p.km} km (this OSM segment)`], ['Flow', p.directed ? 'dashes move downstream' : 'direction not recorded'],
@@ -1271,6 +1305,8 @@ map.on('load', async () => {
       map.addSource('canals', { type: 'geojson', data: canals });
       for (const layer of canalLayers(MAP_THEMES[currentTheme()])) map.addLayer(layer, 'links-highlight');
       debug.notes.canals = canals.features.length;
+      const canalSummary = await loadJson('data/canals_summary.json').catch(() => null);
+      if (canalSummary) renderCanalNetwork(canalSummary);
     } else {
       document.querySelector('[data-canal]').closest('.fgroup').hidden = true;
     }

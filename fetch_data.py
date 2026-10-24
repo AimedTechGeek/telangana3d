@@ -64,6 +64,12 @@ OVERPASS_CANALS_QUERY = (
     '(way["waterway"="canal"](area.a););'
     'out tags geom;'
 )
+OVERPASS_WATERPIPES_QUERY = (       # pressure mains and tunnels that are not tagged as canals
+    '[out:json][timeout:240];'
+    'area["name"="Telangana"]["admin_level"="4"]->.a;'
+    '(way["waterway"="pressurised"](area.a);way["man_made"="pipeline"]["substance"="water"](area.a););'
+    'out tags geom;'
+)
 OVERPASS_PUMPHOUSES_QUERY = (
     '[out:json][timeout:90];'
     'area["name"="Telangana"]["admin_level"="4"]->.a;'
@@ -130,6 +136,7 @@ def fetch_osm_reservoirs() -> None:
     download(OVERPASS_URL, RAW / "osm_pumphouses.json", params={"data": OVERPASS_PUMPHOUSES_QUERY}, headers=OVERPASS_HEADERS)
     # ~1,600 ways with geometry; the public Overpass servers are often busy, so retry on failure.
     download(OVERPASS_URL, RAW / "osm_canals.json", params={"data": OVERPASS_CANALS_QUERY}, headers=OVERPASS_HEADERS)
+    download(OVERPASS_URL, RAW / "osm_waterpipes.json", params={"data": OVERPASS_WATERPIPES_QUERY}, headers=OVERPASS_HEADERS)
 
 
 # Potapov et al. 2021: percent cropland per 3 km cell, one layer per four-year epoch (named by its last year).

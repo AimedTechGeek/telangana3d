@@ -724,7 +724,7 @@ CANAL_SIMPLIFY_DEG = 0.00005
 def canal_era(tags: dict, near_kaleshwaram: bool, lon: float) -> tuple[str, str | None]:
     """Return (era, scheme) for one OSM canal way."""
     name = (tags.get("name") or "").lower()
-    real_tunnel = tags.get("tunnel") in ("yes", "flooded") or tags.get("location") == "underground"
+    real_tunnel = way_kind(tags) == "tunnel"
     if tags.get("construction") == "yes":
         return "after", "Sitarama lift scheme (under construction)" if lon >= SITARAMA_WEST_LON else "under construction"
     if any(k in name for k in CANAL_POST2014_NAMES):
@@ -736,12 +736,35 @@ def canal_era(tags: dict, near_kaleshwaram: bool, lon: float) -> tuple[str, str 
     return "unknown", None
 
 
-def build_canals(links: dict) -> dict:
+# Official scale of the Kaleshwaram canal network, quoted in the panel next to what OSM has mapped.
+KALESHWARAM_NETWORK = {
+    "planned": [("Gravity canals", 1531), ("Tunnels", 203), ("Pressure / delivery mains", 98)],
+    "planned_source": "https://irrigation.telangana.gov.in/",
+    "cag": [("Main canals", 1566.04, 897.0), ("Distributary canals", 9564.35, 690.18)],   # planned km, completed km
+    "cag_asof": "March 2022",
+    "cag_source": "https://cag.gov.in/en/audit-report/details/119583",
+}
+
+
+def way_kind(tags: dict) -> str:
+    if tags.get("waterway") == "pressurised" or tags.get("man_made") == "pipeline":
+        return "main"                      # pressure / delivery main
+    if tags.get("tunnel") in ("yes", "flooded") or tags.get("location") == "underground":
+        return "tunnel"
+    return "canal"
+
+
+def build_canals(links: dict) -> tuple[dict, dict]:
+    """Canals, tunnels and pressure mains from OSM, plus a summary for the panel."""
     elements = json.loads((RAW / "osm_canals.json").read_text(encoding="utf-8"))["elements"]
+    extra = RAW / "osm_waterpipes.json"
+    if extra.exists():
+        seen = {w["id"] for w in elements}
+        elements += [w for w in json.loads(extra.read_text(encoding="utf-8"))["elements"] if w["id"] not in seen]
     to_m = Transformer.from_crs(WGS84, TARGET_CRS, always_xy=True)
     kaleshwaram = unary_union([LineString([to_m.transform(x, y) for x, y in f["geometry"]["coordinates"]])
                                for f in links["features"] if f["properties"]["scheme"] == "Kaleshwaram"]).buffer(CANAL_CORRIDOR_M)
-    features, lengths = [], {"after": 0.0, "before": 0.0, "unknown": 0.0}
+    features, km = [], {}
     for way in elements:
         points = [(p["lon"], p["lat"]) for p in way.get("geometry", [])]
         if len(points) < 2:
@@ -753,14 +776,23 @@ def build_canals(links: dict) -> dict:
             points.reverse()
         line = LineString(points)
         projected = LineString([to_m.transform(x, y) for x, y in points])
-        era, scheme = canal_era(tags, projected.intersects(kaleshwaram), line.centroid.x)
-        lengths[era] += projected.length / 1000
+        near = projected.intersects(kaleshwaram)
+        kind = way_kind(tags)
+        era, scheme = canal_era(tags, near, line.centroid.x)
+        if kind == "main" and era == "unknown" and near:
+            era, scheme = "after", "Kaleshwaram pressure main"
+        length = projected.length / 1000
+        km[(era, kind)] = km.get((era, kind), 0.0) + length
         features.append({"type": "Feature", "geometry": mapping(line.simplify(CANAL_SIMPLIFY_DEG)), "properties": {
-            "id": way["id"], "name": tags.get("name"), "era": era, "scheme": scheme,
-            "tunnel": tags.get("tunnel") in ("yes", "flooded") or tags.get("location") == "underground",
-            "construction": tags.get("construction") == "yes", "directed": direction != "both", "km": round(projected.length / 1000, 2)}})
-    print(f"canals: {len(features)} ways; km after 2014 {lengths['after']:.0f}, before {lengths['before']:.0f}, unknown {lengths['unknown']:.0f}")
-    return {"type": "FeatureCollection", "features": features}
+            "id": way["id"], "name": tags.get("name"), "era": era, "scheme": scheme, "kind": kind,
+            "tunnel": kind == "tunnel", "construction": tags.get("construction") == "yes",
+            "directed": direction != "both", "km": round(length, 2)}})
+    summary = {
+        "osm_km": {f"{era}_{kind}": round(v) for (era, kind), v in km.items()},
+        "osm_ways": len(features), "network": KALESHWARAM_NETWORK,
+    }
+    print(f"canals: {len(features)} ways; km " + ", ".join(f"{k} {v}" for k, v in sorted(summary["osm_km"].items())))
+    return {"type": "FeatureCollection", "features": features}, summary
 
 
 # --- cropland (GLAD) --------------------------------------------------------
@@ -926,7 +958,9 @@ def main() -> None:
     links = build_links({node["name"]: node for node in dams} | {node["osm_name"]: node for node in pumphouses})
     (WEB_DATA / "links.geojson").write_text(json.dumps(links), encoding="utf-8")
     if (RAW / "osm_canals.json").exists():
-        (WEB_DATA / "canals.geojson").write_text(json.dumps(build_canals(links)), encoding="utf-8")
+        canals, canal_summary = build_canals(links)
+        (WEB_DATA / "canals.geojson").write_text(json.dumps(canals), encoding="utf-8")
+        (WEB_DATA / "canals_summary.json").write_text(json.dumps(canal_summary, indent=1), encoding="utf-8")
     else:
         print("  warning: data/raw/osm_canals.json missing (fetch_data.py); canals.geojson not built")
     cropland = build_cropland(state, districts)

@@ -219,9 +219,14 @@ public and were downloaded by `fetch_data.py` into `data/raw/` (not committed);
 
 ## 6f. Canals (OpenStreetMap)
 
-- **What:** every `waterway=canal` way inside the Telangana relation, with
-  geometry (1,582 ways, ≈5,900 km, downloaded 2026-10-24 through Overpass;
-  cached as `osm_canals.json`). Terms as in source 4 (ODbL).
+- **What:** every `waterway=canal` way inside the Telangana relation
+  (1,582 ways, ≈5,900 km; `osm_canals.json`), plus `waterway=pressurised`
+  and water `man_made=pipeline` ways (253 ways, ≈490 km; `osm_waterpipes.json`),
+  all with geometry, downloaded 2026-10-24 through Overpass. Terms as in
+  source 4 (ODbL). Kinds drawn: *canal*; *canal tunnel* (`tunnel=yes|flooded`
+  or `location=underground` on a canal, road culverts excluded); *pressurised
+  tunnel or pipe* (`waterway=pressurised`, which is how OSM mappers drew the
+  Kaleshwaram tunnels and pressure mains).
 - **Direction:** OSM draws waterways in the direction of flow; ways tagged
   `flow_direction=backward` are reversed, `both` would be shown without
   moving dashes (none in this extract).
@@ -230,16 +235,40 @@ public and were downloaded by `fetch_data.py` into `data/raw/` (not committed);
   in Khammam and Bhadradri (sanctioned 2016; they include extensions of the
   older Sathupally, Palavagu and NTR canals) → *after 2014*; real tunnels
   (`tunnel=yes|flooded`, `location=underground`, not road culverts) within
-  20 km of a Kaleshwaram link → *after 2014* (Kaleshwaram, 2016–); names
-  mentioning Kaleshwaram, Link-I, Palamuru, Sitarama or the new reservoirs →
-  *after 2014*; names of older projects (Nagarjuna Sagar, SRSP Kakatiya and
-  flood-flow canals, Nizam Sagar, Jurala, Manair, Mula Vagu, Ali Sagar,
-  Kurnool–Cuddapah …) → *before 2014*; the remaining 1,400 mostly unnamed
-  distributaries → *unknown*.
+  20 km of a Kaleshwaram link → *after 2014* (Kaleshwaram, 2016–);
+  pressurised ways within that corridor → *after 2014* (Kaleshwaram pressure
+  mains and tunnels, ≈300 km mapped); names mentioning Kaleshwaram, Link-I,
+  Palamuru, Sitarama or the new reservoirs → *after 2014*; names of older
+  projects (Nagarjuna Sagar, SRSP Kakatiya and flood-flow canals, Nizam
+  Sagar, Jurala, Manair, Mula Vagu, Ali Sagar, Kurnool–Cuddapah …) →
+  *before 2014*; the remaining mostly unnamed distributaries, the Jurala-area
+  tunnels and the pressurised ways near Devadula (a 2004– project) →
+  *unknown*.
 - **Caveats:** OSM coverage of canals is incomplete and uneven (the
   Kaleshwaram gravity canals in particular are only partly mapped), so the
   layer shows what volunteers have drawn, not the full network; the
   `construction` tags reflect the state of the map, not today's progress.
+
+## 6g. Kaleshwaram canal network figures (Water links panel table)
+
+- **Planned lengths** 1,531 km gravity canals, 203 km tunnels, 98 km
+  pressure/delivery mains (1,832 km): Telangana Irrigation Department
+  project description, https://irrigation.telangana.gov.in/ (also quoted on
+  the Wikipedia project page).
+- **Completed lengths as of March 2022** — main canals 897 km of 1,566.04 km
+  (57 %), distributary canals 690.18 km of 9,564.35 km (7 %): CAG Performance
+  Audit of the Kaleshwaram Lift Irrigation Project, Report No. 1 of 2024
+  (tabled 15 February 2024), Chapter V "Execution",
+  https://cag.gov.in/en/audit-report/details/119583 (chapter PDF:
+  https://cag.gov.in/uploads/download_audit_report/2024/08_Chapter-V_Execution-of-Kaleshwaram-Project-065cdab5633b085.36569039.pdf).
+  The chapter PDF could not be re-downloaded on 2026-10-24 (HTTP 404 from the
+  CAG site), so these two rows were taken from the user's transcription of
+  the audit and should be re-checked against the report.
+- **Caveats:** an audited historical snapshot, not a 2026 completion total;
+  "completed" excavation does not mean a canal is lined, operational or
+  connected to fields; the CAG planned total (1,566 km of main canals) differs
+  slightly from the department's 1,531 km because the two documents cut the
+  network differently.
 
 ## 6d. Cropland cover (GLAD global cropland extent)
 

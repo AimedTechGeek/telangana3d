@@ -230,6 +230,11 @@ section { display: flex; flex-direction: column; gap: 8px; }
 /* canals */
 .key.canal { display: inline-block; width: 22px; height: 0; border-top: 2px dashed var(--canal); vertical-align: middle; margin-right: 2px; }
 .key.canal.old { border-top: 1px dashed var(--muted); }
+.key.canal.tunnel { border-top: 4px dotted var(--canal); }
+.key.canal.main { border-top: 3px solid var(--canal); }
+.official.network td.num { text-align: right; }
+.official.network td.note { color: var(--muted); font-family: var(--font); font-size: 10.5px; }
+.official.network th:nth-child(2), .official.network th:nth-child(3) { text-align: right; }
 .canal-popup .maplibregl-popup-content { min-width: 200px; }
 
 /* cropland */
