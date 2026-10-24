@@ -14,6 +14,7 @@ Sources (all public, no auth):
 - OpenStreetMap water bodies (tanks, lakes, reservoirs) in a box around the state, as polygons
 - India-WRIS groundwater level readings of the CGWB and Telangana Ground Water Department
   monitoring wells (manual network), via the India Data Portal datastore mirror
+- ESA WorldCover 2021 land cover (10 m), read at 320 m from the cloud-optimised tiles
 """
 from __future__ import annotations
 
@@ -231,6 +232,43 @@ def fetch_groundwater_levels() -> None:
     print(f"fetched {target.name} ({target.stat().st_size / 1e6:.1f} MB, {len(rows):,} readings)")
 
 
+# ESA WorldCover 2021 (v200, CC BY 4.0): 10 m land cover in 3-degree COG tiles on AWS. Only the 1/32
+# overview (320 m) is read, straight from the cloud files, and written as one small mosaic.
+WORLDCOVER_URL = "https://esa-worldcover.s3.eu-central-1.amazonaws.com/v200/2021/map/ESA_WorldCover_10m_2021_v200_{tile}_Map.tif"
+WORLDCOVER_TILES = ("N15E075", "N15E078", "N15E081", "N18E075", "N18E078", "N18E081")
+WORLDCOVER_FACTOR = 32
+
+
+def fetch_worldcover() -> None:
+    """Land-cover classes around Telangana at 320 m (tree, shrub, grass, crop, built-up, bare, water, wetland)."""
+    target = RAW / "worldcover_320m.tif"
+    if target.exists():
+        print(f"cached  {target.name}")
+        return
+    import numpy as np
+    import rasterio
+    from rasterio.merge import merge
+    from rasterio.io import MemoryFile
+    sources = []
+    with rasterio.Env(GDAL_DISABLE_READDIR_ON_OPEN="EMPTY_DIR", CPL_VSIL_CURL_ALLOWED_EXTENSIONS=".tif"):
+        for tile in WORLDCOVER_TILES:
+            with rasterio.open(WORLDCOVER_URL.format(tile=tile)) as src:
+                shape = (src.height // WORLDCOVER_FACTOR, src.width // WORLDCOVER_FACTOR)
+                data = src.read(1, out_shape=shape)
+                transform = src.transform * src.transform.scale(src.width / shape[1], src.height / shape[0])
+                memory = MemoryFile()
+                with memory.open(driver="GTiff", height=shape[0], width=shape[1], count=1, dtype=data.dtype,
+                                 crs=src.crs, transform=transform, nodata=0) as dst:
+                    dst.write(data, 1)
+                sources.append(memory.open())
+                print(f"  {tile}: {np.count_nonzero(data):,} land-cover cells")
+    mosaic, transform = merge(sources)
+    profile = sources[0].profile | {"height": mosaic.shape[1], "width": mosaic.shape[2], "transform": transform, "compress": "lzw"}
+    with rasterio.open(target, "w", **profile) as dst:
+        dst.write(mosaic)
+    print(f"fetched {target.name} ({target.stat().st_size / 1e6:.1f} MB)")
+
+
 # Potapov et al. 2021: percent cropland per 3 km cell, one layer per four-year epoch (named by its last year).
 GLAD_CROPLAND_URL = "https://glad.umd.edu/users/Potapov/Global_Crop/Data/Global_cropland_3km_{year}.tif"
 GLAD_CROPLAND_YEARS = (2003, 2007, 2011, 2015, 2019)
@@ -282,4 +320,5 @@ if __name__ == "__main__":
     fetch_osm_reservoirs()
     fetch_osm_water()
     fetch_groundwater_levels()
+    fetch_worldcover()
     fetch_cropland()

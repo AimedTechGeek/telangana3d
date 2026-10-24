@@ -120,6 +120,46 @@
     </div>
   </details>
 
+  <details class="card" open id="proposal-card">
+    <summary class="card-head"><span class="card-title">Proposal</span><span class="legend-inline" id="prop-count"></span><svg class="chev" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></summary>
+    <div class="card-body">
+      <section class="proposal">
+        <p class="summary" id="prop-summary">Loading…</p>
+        <p class="hint">A planning sketch, not a design: computed by <code>propose_water.py</code> from the 200 m terrain model, HydroRIVERS mean flows, ESA WorldCover land cover and the works already on the map, under the norms listed at the end. Surveys, real hydrology and inter-state awards would change every number.</p>
+        <div class="section-head">
+          <h2>Water budget</h2>
+          <span class="legend-inline">TMC a year</span>
+        </div>
+        <table class="official prop-budget" id="prop-envelopes">
+          <thead><tr><th>River</th><th>Share</th><th>Committed</th><th>Free now</th><th>Free if 2025 ask granted</th><th>Proposal draws</th></tr></thead>
+          <tbody></tbody>
+        </table>
+        <p class="hint" id="prop-envelope-note"></p>
+        <div class="section-head">
+          <h2>Works</h2>
+          <span class="legend-inline" id="prop-works-count"></span>
+        </div>
+        <p class="hint">Reservoirs where the terrain allows a dam, lift deliveries where it does not. Lift is new pumping; water routed through a reservoir that an existing scheme fills also pays that scheme's lift. Click a row to fly there.</p>
+        <table class="crop-table prop-table" id="prop-works">
+          <thead><tr><th>Work</th><th>TMC<br><small>a year</small></th><th>Lift<br><small>m</small></th><th>Route<br><small>km</small></th><th>Tunnel<br><small>km</small></th><th>₹<br><small>crore</small></th></tr></thead>
+          <tbody></tbody>
+        </table>
+        <div class="section-head">
+          <h2>Districts</h2>
+          <span class="legend-inline">share of cultivable land</span>
+        </div>
+        <table class="crop-table prop-table" id="prop-districts">
+          <thead><tr><th>District</th><th>Cropped<br><small>% now</small></th><th>Add<br><small>lakh acres</small></th><th>Need<br><small>TMC</small></th><th>Gravity<br><small>% served</small></th></tr></thead>
+          <tbody></tbody>
+        </table>
+        <div class="section-head">
+          <h2>Norms and sources</h2>
+        </div>
+        <ul class="hint prop-norms" id="prop-norms"></ul>
+      </section>
+    </div>
+  </details>
+
   <details class="card" open id="tank-card">
     <summary class="card-head"><span class="card-title">Tanks</span><span class="legend-inline" id="tank-count"></span><svg class="chev" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></summary>
     <div class="card-body">
@@ -272,6 +312,14 @@
         </div>
         <p class="hint">Construction start is used when the opening year is unknown</p>
     </div>
+      <div class="fgroup">
+        <p class="eyebrow">Proposal · river water for 90 % of farmland</p>
+        <div class="tabs" role="group" aria-label="Proposal view">
+          <button type="button" data-proposal="off" aria-pressed="true">Off</button>
+          <button type="button" data-proposal="on" aria-pressed="false">Show proposal</button>
+        </div>
+        <p class="hint">A planning sketch computed from this map's terrain, river-flow and land-cover data, not a design: <span class="key prop pool"></span> new reservoirs, <span class="key prop delivery"></span> lift deliveries, <span class="key prop pump"></span> pump houses, <span class="key prop canal"></span> canals, <span class="key prop tunnel"></span> tunnels, <span class="key prop cmd"></span> land that gravity can serve from a reservoir. Opens the Proposal card.</p>
+      </div>
     </div>
   </details>
 

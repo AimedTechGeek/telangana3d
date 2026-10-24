@@ -32,6 +32,7 @@ const MAP_THEMES = {
     tank: '#3b95dc', tankEdge: '#1b5a93', tankRamp: ['#e6eef5', '#1d5f99'],
     gwDepth: [[0, '#0b5fa5'], [2, '#4f9bd8'], [5, '#a9d4ef'], [10, '#f2e2b8'], [20, '#d98b3c'], [40, '#7a2e0d']],   // metres below ground
     gwChange: [[-6, '#b2182b'], [-2, '#ef8a62'], [0, '#f4f1ea'], [2, '#67a9cf'], [6, '#2166ac']], gwStroke: '#ffffff',       // fell … rose
+    prop: '#0f766e', propPool: '#4f46e5', propPump: '#b45309', propCmdExisting: 'rgba(34,197,94,0.22)', propCmdNew: 'rgba(20,184,166,0.32)',
     flow: ['#86d9e3', '#36aee6', '#2566d8', '#1a3aa6', '#5f2aa8'],   // FLOW_CLASSES: cyan -> blue -> navy -> purple
     shadow: '#2b2016', highlight: '#fff4e2', accent: '#4e3d2e',
     sky: { 'sky-color': '#cfe3f6', 'horizon-color': '#eef3f8', 'fog-color': '#e9e6df' },
@@ -44,6 +45,7 @@ const MAP_THEMES = {
     tank: '#4fb3ff', tankEdge: '#bfe3ff', tankRamp: ['#161c26', '#3f8fd0'],
     gwDepth: [[0, '#9fd8ff'], [2, '#5eb0ea'], [5, '#2f6f9f'], [10, '#4a4238'], [20, '#b86b2a'], [40, '#ff9d5c']],
     gwChange: [[-6, '#ff6b6b'], [-2, '#c97a6a'], [0, '#2a2f38'], [2, '#5f9bd0'], [6, '#8fd0ff']], gwStroke: '#0b1a33',
+    prop: '#2dd4bf', propPool: '#818cf8', propPump: '#fbbf24', propCmdExisting: 'rgba(74,222,128,0.20)', propCmdNew: 'rgba(45,212,191,0.30)',
     flow: ['#2f96a8', '#3cbbea', '#6a9cff', '#a9bdff', '#dcaaff'],   // FLOW_CLASSES: teal -> sky -> blue -> lilac on the dark surface
     shadow: '#000000', highlight: '#b9a68c', accent: '#000000',
     sky: { 'sky-color': '#0b1020', 'horizon-color': '#1b2233', 'fog-color': '#0e0f12' },
@@ -320,6 +322,41 @@ function setGwMode(mode) {
 }
 for (const button of document.querySelectorAll('[data-gw]')) button.addEventListener('click', () => setGwMode(button.dataset.gw));
 
+// Proposal: river water for 90 % of farmland, computed by propose_water.py (reservoirs, lift deliveries, routes, commands).
+let proposalMode = 'off';                  // off | on
+let proposalLoaded = false;
+let proposalData = null;                   // proposal.json
+const proposalMarkers = [];
+const propVisibility = () => (proposalMode === 'on' ? 'visible' : 'none');
+function proposalLayers(t) {
+  if (!proposalLoaded) return [];
+  const vis = propVisibility();
+  const kind = (k) => ['==', ['get', 'kind'], k];
+  return [
+    { id: 'prop-command-existing', type: 'fill', source: 'proposal', filter: kind('command_existing'), layout: { visibility: vis }, paint: { 'fill-color': t.propCmdExisting } },
+    { id: 'prop-command-new', type: 'fill', source: 'proposal', filter: kind('command_new'), layout: { visibility: vis }, paint: { 'fill-color': t.propCmdNew } },
+    { id: 'prop-pool', type: 'fill', source: 'proposal', filter: kind('pool'), layout: { visibility: vis }, paint: { 'fill-color': t.propPool, 'fill-opacity': 0.6 } },
+    { id: 'prop-pool-line', type: 'line', source: 'proposal', filter: kind('pool'), layout: { visibility: vis }, paint: { 'line-color': t.propPool, 'line-width': 1.5 } },
+    { id: 'prop-canal', type: 'line', source: 'proposal', filter: kind('canal'), layout: { visibility: vis, 'line-cap': 'round' },
+      paint: { 'line-color': t.prop, 'line-width': ['interpolate', ['linear'], ['zoom'], 6, 1.8, 10, 3.4] } },
+    { id: 'prop-tunnel', type: 'line', source: 'proposal', filter: kind('tunnel'), layout: { visibility: vis },
+      paint: { 'line-color': t.prop, 'line-width': ['interpolate', ['linear'], ['zoom'], 6, 2.6, 10, 4.8], 'line-dasharray': [0.5, 1.3] } },
+    { id: 'prop-delivery', type: 'circle', source: 'proposal', filter: kind('delivery'), layout: { visibility: vis },
+      paint: { 'circle-radius': 7, 'circle-color': t.prop, 'circle-stroke-color': '#ffffff', 'circle-stroke-width': 1.5 } },
+    { id: 'prop-pump', type: 'circle', source: 'proposal', filter: kind('pump'), layout: { visibility: vis },
+      paint: { 'circle-radius': 5, 'circle-color': t.propPump, 'circle-stroke-color': '#ffffff', 'circle-stroke-width': 1.2 } },
+  ];
+}
+function setProposalMode(mode) {
+  proposalMode = mode;
+  for (const button of document.querySelectorAll('[data-proposal]')) button.setAttribute('aria-pressed', String(button.dataset.proposal === mode));
+  document.body.classList.toggle('proposal-off', mode === 'off');
+  if (proposalLoaded) for (const layer of proposalLayers(MAP_THEMES[currentTheme()])) map.setLayoutProperty(layer.id, 'visibility', propVisibility());
+  if (mode === 'off') proposalPopup.remove();
+}
+for (const button of document.querySelectorAll('[data-proposal]')) button.addEventListener('click', () => setProposalMode(button.dataset.proposal));
+document.body.classList.add('proposal-off');
+
 function chipOn(name) {
   const chip = document.querySelector(`.chip[data-toggle="${name}"]`);
   return chip.getAttribute('aria-pressed') === 'true' ? 'visible' : 'none';
@@ -345,6 +382,7 @@ function buildStyle(theme) {
       ...(canalsLoaded ? { canals: { type: 'geojson', data: 'data/canals.geojson' } } : {}),
       ...(tanksLoaded ? { tanks: { type: 'geojson', data: 'data/tanks.geojson' }, 'tank-points': { type: 'geojson', data: 'data/tank_points.geojson' } } : {}),
       ...(gwLoaded ? { groundwater: { type: 'geojson', data: 'data/groundwater.geojson' } } : {}),
+      ...(proposalLoaded ? { proposal: { type: 'geojson', data: 'data/proposal.geojson' } } : {}),
     },
     layers: [
       { id: 'background', type: 'background', paint: { 'background-color': t.background } },
@@ -359,6 +397,7 @@ function buildStyle(theme) {
           'line-width': ['case', ['==', ['%', ['get', 'elev'], 500], 0], 1.4, 0.6] } },
       ...tankLayers(t),                      // tanks and the Mission Kakatiya shading sit under the district lines
       ...gwLayers(t),                        // groundwater wells and district shading, same slot
+      ...proposalLayers(t),                  // proposed reservoirs, routes and commands
       { id: 'districts', type: 'line', source: 'districts', layout: { visibility: chipOn('districts'), 'line-join': 'round' }, paint: {
           'line-color': t.district, 'line-opacity': t.districtOpacity,
           'line-width': ['interpolate', ['linear'], ['zoom'], 6, 0.5, 10, 1.2] } },
@@ -1362,6 +1401,142 @@ function renderGroundwater(data) {
   renderGwLegend();
 }
 
+// ---------- proposal: popups, map labels and the Proposal card ----------
+const proposalPopup = new maplibregl.Popup({ closeButton: true, closeOnClick: true, offset: 8, className: 'dam-popup prop-popup', maxWidth: '330px' });
+const crore = (value) => `₹${indian(Math.round(value))} crore`;
+const proposalWork = (id) => proposalData && proposalData.works.find((w) => w.id === id);
+const PROP_KIND_LABEL = { pool: 'proposed reservoir', delivery: 'proposed lift delivery', tunnel: 'proposed tunnel', canal: 'proposed canal' };
+function openProposalPopup(p, lngLat) {
+  const work = proposalWork(p.id);
+  if (!work) return;
+  const content = document.createElement('div');
+  const head = textEl('div', 'head', '');
+  head.append(textEl('span', 'kind prop', p.kind === 'pump' ? `pump house · stage ${p.stage} of ${work.stages}` : PROP_KIND_LABEL[p.kind]),
+              textEl('strong', '', p.kind === 'pump' ? p.name : work.name));
+  const dl = document.createElement('dl');
+  const row = (label, value) => dl.append(textEl('dt', '', label), textEl('dd', '', value));
+  if (p.kind === 'pump') {
+    row('Lift', `${p.lift_m} m in this stage`);
+    row('Pumps', `${p.mw} MW for ${work.design_cms} m³/s over a ${proposalData.norms.costs.pump_days}-day season`);
+    row('Carries', `${work.annual_tmc} TMC a year from ${work.source} to ${work.name}`);
+  } else {
+    row('Serves', `${work.serves} district · ${work.annual_tmc} TMC a year`);
+    if (work.kind === 'reservoir') {
+      row('Storage', `${work.storage_tmc} TMC behind a ${work.crest_m} m high, ${work.dam_km} km long dam`);
+      row('Submerges', `${work.area_km2} km², of which ${work.cropland_km2} km² farmland`);
+      row('Full level', `${work.frl_m} m above sea (river bed ${work.bed_m} m)`);
+    } else {
+      row('Delivery level', `${work.frl_m} m above sea; land below it is commanded by gravity, balancing tanks priced in`);
+    }
+    row('Fed from', work.intake && work.intake !== work.source ? `${work.source}, with the water taken at ${work.intake}` : work.source);
+    row('Lift', `${work.lift_m} m new${work.base_lift_m ? ` + ${work.base_lift_m} m already made by the scheme that fills ${work.source}` : ''}`);
+    row('Route', `${work.route_km} km straight: ${work.canal_km} km canal, ${work.tunnel_km} km tunnel, ${work.stages} pump stage${work.stages === 1 ? '' : 's'} (${indian(work.mw)} MW)`);
+    row('Cost', `${crore(work.capex_cr)}: works ${crore(work.cost_cr)}, conveyance ${crore(work.capex_conveyance_cr)}, distribution ${crore(work.capex_distribution_cr)}; power ${crore(work.energy_cr_per_year)} a year`);
+    if (work.over_cap) row('Water', 'No intake had this much to spare under the surplus rule; the cheapest route is shown anyway.');
+  }
+  content.append(head, dl, textEl('p', 'fine', 'Computed from the 200 m terrain model under planning norms; routes are straight lines, not alignments. Method and norms in the Proposal card.'));
+  proposalPopup.setLngLat(lngLat).setDOMContent(content).addTo(map);
+}
+for (const id of ['prop-pool', 'prop-canal', 'prop-tunnel', 'prop-delivery', 'prop-pump']) {
+  map.on('click', id, (event) => { event.originalEvent.stopPropagation(); openProposalPopup(event.features[0].properties, event.lngLat); });
+  map.on('mouseenter', id, () => { map.getCanvas().style.cursor = 'pointer'; });
+  map.on('mouseleave', id, () => { map.getCanvas().style.cursor = ''; });
+}
+function addProposalMarkers(data) {
+  for (const w of data.works) {
+    const el = textEl('div', `prop-marker ${w.kind}`, '');
+    el.append(textEl('span', 'nm', w.name.replace(' lift delivery', '')), textEl('b', '', w.kind === 'reservoir' ? `${w.storage_tmc} TMC` : `${w.annual_tmc} TMC/yr`));
+    el.addEventListener('click', (event) => { event.stopPropagation(); openProposalPopup({ kind: w.kind === 'reservoir' ? 'pool' : 'delivery', id: w.id }, [w.lon, w.lat]); });
+    proposalMarkers.push(new maplibregl.Marker({ element: el, anchor: 'bottom', offset: [0, -9] }).setLngLat([w.lon, w.lat]).addTo(map));
+    for (const p of w.pumps) {
+      const pel = textEl('div', 'prop-marker pump', '');
+      pel.append(textEl('b', '', `P${p.stage}`), textEl('span', 'nm', `${p.mw} MW · ${p.lift_m} m`));
+      proposalMarkers.push(new maplibregl.Marker({ element: pel, anchor: 'top', offset: [0, 7] }).setLngLat([p.lon, p.lat]).addTo(map));
+    }
+  }
+}
+function renderProposal(data) {
+  proposalData = data;
+  const s = data.demand.state;
+  const t = data.totals;
+  const n = data.norms;
+  $('prop-count').textContent = `${t.reservoirs + t.deliveries} works · ${indian(t.annual_tmc)} TMC`;
+  const summary = $('prop-summary');
+  summary.textContent = '';
+  summary.append(`Land cover says ${s.cultivable_pct} % of Telangana is cultivable (the rest is forest, towns, water and steep ground) and `, bold(`${s.cropland_pct} %`),
+                 ` is cropped already, ${s.cropland_of_cultivable_pct} % of the cultivable land, so 80 % is met today. Taking it to ${Math.round(100 * n.target_share)} % adds `,
+                 bold(`${s.new_lakh_acres} lakh acres`), ` and, with assured water for the ${Math.round(100 * n.rainfed_share)} % of fields that live on rain, needs `,
+                 bold(`${indian(Math.round(s.tmc))} TMC`), ` a year. The sketch meets ${t.demand_met_pct} % of that with `, bold(`${t.reservoirs} new reservoirs`),
+                 ` (${t.storage_tmc} TMC of storage) and `, bold(`${t.deliveries} lift deliveries`), ` to districts without a usable dam site: ${t.pump_houses} pump houses (${indian(t.mw)} MW), `,
+                 `${indian(t.tunnel_km)} km of tunnel and ${indian(t.canal_km)} km of canal, about `, bold(crore(t.capex_cr)), ` to build and ${crore(t.energy_cr_per_year)} of power a year.`);
+  const envelopes = $('prop-envelopes').tBodies[0];
+  envelopes.textContent = '';
+  for (const e of data.envelopes) {
+    const tr = document.createElement('tr');
+    tr.append(textEl('td', '', e.river), textEl('td', '', indian(Math.round(e.award))), textEl('td', '', indian(Math.round(e.committed))), textEl('td', '', indian(Math.round(e.free_within_award))),
+              textEl('td', '', indian(Math.round(e.free_if_requested))), textEl('td', e.beyond_request > 0 ? 'down' : 'up', indian(Math.round(e.proposal_draws))));
+    envelopes.appendChild(tr);
+  }
+  const godavari = data.envelopes.find((e) => e.river === 'Godavari');
+  const krishna = data.envelopes.find((e) => e.river === 'Krishna');
+  $('prop-envelope-note').textContent = `Shares: Godavari 967.94 TMC (758.76 cleared by the CWC, 148.82 cleared for availability, 60.26 reserve, per the Chief Minister's letter of September 2021); Krishna 299 TMC interim, fully committed. In June 2025 the state asked the Centre for 1,000 + 500. `
+    + (godavari.beyond_request > 0 ? `The Godavari draw here exceeds even the 1,000 TMC asked for by ${indian(Math.round(godavari.beyond_request))} TMC: the water exists (HydroRIVERS puts the mean flow leaving the state at about ${indian(godavari.mean_flow_tmc)} TMC a year) but needs a new inter-state award and monsoon capture. ` : '')
+    + (krishna.beyond_request > 0 ? `The Krishna draw exceeds the 500 TMC asked for by ${indian(Math.round(krishna.beyond_request))} TMC.` : `The Krishna draw fits the 500 TMC asked for but not today's 299 TMC share.`);
+  const works = $('prop-works').tBodies[0];
+  works.textContent = '';
+  $('prop-works-count').textContent = `${t.reservoirs} reservoirs · ${t.deliveries} deliveries`;
+  for (const w of [...data.works].sort((a, b) => b.annual_tmc - a.annual_tmc)) {
+    const tr = document.createElement('tr');
+    tr.className = w.kind;
+    tr.append(textEl('td', '', w.name.replace(' lift delivery', ' (lift)')), textEl('td', '', w.annual_tmc.toFixed(1)), textEl('td', '', indian(w.lift_m)),
+              textEl('td', '', indian(Math.round(w.route_km))), textEl('td', '', w.tunnel_km.toFixed(0)), textEl('td', '', indian(w.capex_cr)));
+    tr.title = `${w.name}: serves ${w.serves}, fed from ${w.source}${w.kind === 'reservoir' ? `, ${w.storage_tmc} TMC storage` : ''}, ${w.stages} pump stage(s), ${indian(w.mw)} MW`;
+    tr.addEventListener('click', () => {
+      if (proposalMode === 'off') setProposalMode('on');
+      map.flyTo({ center: [w.lon, w.lat], zoom: 9, duration: 1200 });
+      map.once('moveend', () => openProposalPopup({ kind: w.kind === 'reservoir' ? 'pool' : 'delivery', id: w.id }, [w.lon, w.lat]));
+      for (const other of works.rows) other.classList.toggle('active', other === tr);
+    });
+    works.appendChild(tr);
+  }
+  const districts = $('prop-districts').tBodies[0];
+  districts.textContent = '';
+  const coverage = new Map(data.coverage.map((c) => [c.district, c]));
+  const rows = [...data.demand.districts].sort((a, b) => b.tmc - a.tmc);
+  for (const d of rows) {
+    const c = coverage.get(d.district) || {};
+    const served = (c.gravity_existing_pct || 0) + (c.gravity_new_pct || 0);
+    const tr = document.createElement('tr');
+    tr.append(textEl('td', '', d.district), textEl('td', '', d.cropland_of_cultivable_pct === null ? '—' : d.cropland_of_cultivable_pct.toFixed(0)),
+              textEl('td', '', d.new_lakh_acres.toFixed(2)), textEl('td', '', d.tmc.toFixed(1)), textEl('td', served >= 60 ? 'up' : '', served.toFixed(0)));
+    tr.title = `${d.district}: ${d.cultivable_pct} % of the district cultivable, ${d.cropland_pct} % cropped; gravity from existing reservoirs ${c.gravity_existing_pct} %, from proposed ${c.gravity_new_pct} %, the rest needs pressurised or lift distribution; works: ${(c.works || []).join(', ') || 'none'}`;
+    tr.addEventListener('click', () => {
+      const centre = districtCentres.get(d.district);
+      if (proposalMode === 'off') setProposalMode('on');
+      if (centre) map.flyTo({ center: centre, zoom: 9, duration: 1200 });
+    });
+    districts.appendChild(tr);
+  }
+  const total = document.createElement('tr');
+  total.className = 'total';
+  total.append(textEl('td', '', 'Telangana'), textEl('td', '', s.cropland_of_cultivable_pct.toFixed(0)), textEl('td', '', s.new_lakh_acres.toFixed(1)), textEl('td', '', indian(Math.round(s.tmc))),
+               textEl('td', '', (t.gravity_existing_pct + t.gravity_new_pct).toFixed(0)));
+  districts.appendChild(total);
+  const norms = $('prop-norms');
+  norms.textContent = '';
+  const c = n.costs;
+  const items = [
+    `Target: cropland at ${Math.round(100 * n.target_share)} % of cultivable land in every district (ESA WorldCover 2021 crop, grass, shrub and bare classes on slopes up to ${n.max_slope_pct} %; forest, built-up, water and steep ground are left out). At 80 % the state is already there; 85 % would need ${indian(s.tmc_at_85)} TMC.`,
+    `Water: ${indian(n.duty_new_acres_per_tmc)} acres a TMC for newly irrigated land, ${indian(n.duty_stabilise_acres_per_tmc)} acres a TMC to assure the ${Math.round(100 * n.rainfed_share)} % of existing cropland that is rainfed (gross irrigated 135 of 233 lakh acres gross cropped, official statistics). Storage sized at ${n.storage_per_annual} of the annual draw, as at Kaleshwaram.`,
+    `Reservoir sites: every HydroRIVERS reach of order 4 or more inside the state, a dam every 5 km, heights of ${n.crest_options_m.join(', ')} m, pools flooded on the 200 m DEM behind a dam line scanned across the valley; rejected when the dam would exceed 16 km, the pool leaks past 30 km, drowns a town or built-up land, or takes more than 2.5 km² of farmland per TMC. Cheapest storage per district wins, at least 15 km apart.`,
+    `Water sources: Godavari and Krishna barrages and dams, plus reservoirs that existing lift schemes fill (Kaleshwaram's Mid Manair, Mallanna Sagar, Konda Pochamma, Ranganayaka Sagar, Baswapur, Singur, Nizam Sagar; Palamuru's Yedula, Vattem, Karvena; Dindi). An intake may give up to 25 % of the mean flow HydroRIVERS puts past it; the Krishna total is capped at the 2025 request.`,
+    `Routes: straight lines; lift = full reservoir level − source level + ${15} m; ground more than ${25} m above the water level is tunnelled, the rest is canal at 1.4 × the straight length; pump stages of at most ${n.pump_stage_m} m placed where the ground next rises above the previous stage's level. Gravity command = cultivable land within ${n.command_km} km and at least ${n.command_head_m} m below a reservoir's level.`,
+    `Costs (₹ crore, indicative): ${c.storage_per_tmc_cr} per TMC of storage + ${c.embankment_per_km_m_cr} per km·m of embankment + ${c.land_per_ha_cr} per hectare submerged; pumps ${c.pump_per_mw_cr} per MW; tunnel ${c.tunnel_per_km_cr} per km; canal ${c.canal_per_km_cr} per km; distribution ${c.distribution_per_tmc_cr} per TMC a year (₹1.5 lakh an acre); power at ₹${c.power_rs_per_kwh} a unit, ${Math.round(100 * c.pump_efficiency)} % efficiency, ${c.pump_days}-day season. Benchmarks: ${Object.entries(n.cost_benchmarks).map(([k, v]) => `${k} (${v[0]})`).join('; ')}.`,
+    'Not modelled: evaporation and seepage, sediment, river regulation between states, environmental flows, canal alignments, land that pressurised networks could serve above the gravity command, and the phasing of works.',
+  ];
+  for (const text of items) norms.appendChild(textEl('li', '', text));
+}
+
 // ---------- link popup ----------
 const linkPopup = new maplibregl.Popup({ closeButton: true, closeOnClick: true, offset: 10, className: 'dam-popup link-popup', maxWidth: '340px' });
 linkPopup.on('close', () => map.setFilter('links-highlight', ['==', ['get', 'link'], '']));
@@ -1828,6 +2003,18 @@ map.on('load', async () => {
     } else {
       document.querySelector('[data-gw]').closest('.fgroup').hidden = true;
       $('gw-card').hidden = true;
+    }
+    const proposal = await loadJson('data/proposal.json').catch(() => null);   // absent until propose_water.py has run
+    if (proposal) {
+      proposalLoaded = true;
+      map.addSource('proposal', { type: 'geojson', data: 'data/proposal.geojson' });
+      for (const layer of proposalLayers(MAP_THEMES[currentTheme()])) map.addLayer(layer, 'districts');
+      renderProposal(proposal);
+      addProposalMarkers(proposal);
+      debug.notes.proposal = proposal.works.length;
+    } else {
+      document.querySelector('[data-proposal]').closest('.fgroup').hidden = true;
+      $('proposal-card').hidden = true;
     }
     renderCities(cities, profiles);
     renderProfile();
