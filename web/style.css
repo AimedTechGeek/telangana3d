@@ -17,6 +17,7 @@
   --chip-on: #0b0b0b;
   --chip-on-ink: #fcfcfb;
   --shadow: 0 12px 40px rgba(20, 16, 8, 0.18);
+  --card-shadow: 0 2px 10px rgba(20, 16, 8, 0.1);
   --font: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
   --mono: "JetBrains Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
 }
@@ -40,6 +41,7 @@
     --chip-on: #f0efec;
     --chip-on-ink: #0e0f12;
     --shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+    --card-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
   }
 }
 :root[data-theme="dark"] {
@@ -61,6 +63,7 @@
   --chip-on: #f0efec;
   --chip-on-ink: #0e0f12;
   --shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+  --card-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
 }
 
 * { box-sizing: border-box; }
@@ -84,21 +87,38 @@ button { font: inherit; color: inherit; }
 .panel {
   position: fixed;
   top: 16px; left: 16px; bottom: 16px;
-  width: 352px;
-  display: flex; flex-direction: column; gap: 18px;
-  padding: 20px 20px 16px;
+  width: 368px;
+  display: flex; flex-direction: column; gap: 10px;
+  padding: 0 8px 8px 0;
   overflow-y: auto; overscroll-behavior: contain;
-  background: var(--panel);
-  backdrop-filter: blur(18px) saturate(1.4);
-  -webkit-backdrop-filter: blur(18px) saturate(1.4);
-  border: 1px solid var(--border);
-  border-radius: 18px;
-  box-shadow: var(--shadow);
   transition: transform .35s cubic-bezier(.2,.8,.2,1), opacity .3s;
   scrollbar-width: thin;
 }
 .panel.hidden { transform: translateX(calc(-100% - 24px)); opacity: 0; pointer-events: none; }
 .panel-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+
+/* ---------- cards: each category of the two side columns is its own small, collapsible panel ---------- */
+.card {
+  flex: none; display: flex; flex-direction: column; gap: 10px; padding: 14px 16px;
+  background: var(--panel); backdrop-filter: blur(18px) saturate(1.4); -webkit-backdrop-filter: blur(18px) saturate(1.4);
+  border: 1px solid var(--border); border-radius: 16px; box-shadow: var(--card-shadow);
+}
+.head-card { gap: 14px; padding: 16px 18px; }
+details.card { display: block; padding: 0; }
+details.card > summary {
+  list-style: none; display: flex; align-items: center; gap: 8px; padding: 11px 14px 11px 16px;
+  cursor: pointer; user-select: none; border-radius: 16px;
+}
+details.card > summary::-webkit-details-marker { display: none; }
+details.card > summary:hover { background: var(--accent-soft); }
+details.card[open] > summary { border-radius: 16px 16px 0 0; border-bottom: 1px solid var(--hair); }
+.card-title { flex: 1; font-size: 13.5px; font-weight: 700; letter-spacing: -.01em; }
+details.card > summary .legend-inline { flex: none; }
+details.card > summary .chev { flex: none; color: var(--muted); transition: transform .2s; }
+details.card[open] > summary .chev { transform: rotate(180deg); }
+.card-body { display: flex; flex-direction: column; gap: 12px; padding: 12px 16px 14px; }
+.card-body > section + section, .card-body > .fgroup + .fgroup { padding-top: 12px; border-top: 1px solid var(--hair); }
+.card-body > .dam-legend + section { padding-top: 10px; border-top: 1px solid var(--hair); }
 .eyebrow {
   margin: 0 0 4px; font-size: 11px; font-weight: 600; letter-spacing: .08em;
   text-transform: uppercase; color: var(--muted);
@@ -120,20 +140,20 @@ h2 { margin: 0; font-size: 13px; font-weight: 600; letter-spacing: .02em; color:
   :root:not([data-theme="light"]) .icon-btn .sun { display: none; }
   :root:not([data-theme="light"]) .icon-btn .moon { display: block; }
 }
-.fab { position: fixed; top: 16px; left: 16px; width: 40px; height: 40px; background: var(--panel); backdrop-filter: blur(12px); box-shadow: var(--shadow); z-index: 5; }
+.fab { position: fixed; top: 16px; left: 16px; width: 40px; height: 40px; background: var(--panel); backdrop-filter: blur(12px); box-shadow: var(--card-shadow); z-index: 5; }
 
-/* ---------- right-hand stack: view & filters card above the cropland card ---------- */
+/* ---------- right-hand stack: view & filters cards above the cropland card ---------- */
 .right-stack {
-  position: fixed; top: 16px; right: 16px; bottom: 16px; z-index: 4; width: 300px;
+  position: fixed; top: 16px; right: 16px; bottom: 16px; z-index: 4; width: 308px;
   display: flex; flex-direction: column; gap: 12px; pointer-events: none;
 }
 .right-stack > * { pointer-events: auto; }
-.filters, .crop-card {
-  display: flex; flex-direction: column; min-height: 0;
+.crop-card {
+  display: flex; flex-direction: column; min-height: 0; margin-right: 8px;
   background: var(--panel); backdrop-filter: blur(18px) saturate(1.4); -webkit-backdrop-filter: blur(18px) saturate(1.4);
-  border: 1px solid var(--border); border-radius: 16px; box-shadow: var(--shadow);
+  border: 1px solid var(--border); border-radius: 16px; box-shadow: var(--card-shadow);
 }
-.filters { flex: 1 1 380px; gap: 14px; padding: 14px 16px 14px; overflow-y: auto; scrollbar-width: thin; }
+.filters { flex: 1 1 380px; min-height: 0; display: flex; flex-direction: column; gap: 10px; padding: 0 8px 8px 0; overflow-y: auto; scrollbar-width: thin; }
 body.crop-off .filters { flex: 0 1 auto; }           /* alone, the filters card takes only what it needs */
 .filters.hidden { display: none; }
 .crop-card { flex: 1 1 460px; min-height: 280px; padding: 14px 16px 10px; gap: 10px; }
@@ -143,7 +163,8 @@ body.crop-off .crop-card { display: none; }
 .crop-body .section-head .hint { flex: 1; }
 .filters-head { display: flex; justify-content: space-between; align-items: center; }
 .filters-head h2 { font-size: 13px; }
-.fgroup { display: flex; flex-direction: column; gap: 8px; padding-top: 12px; border-top: 1px solid var(--hair); }
+header.filters-head.card { flex-direction: row; padding: 8px 10px 8px 16px; }
+.fgroup { display: flex; flex-direction: column; gap: 8px; }
 .fgroup .eyebrow { margin: 0; }
 .fgroup .hint { margin: 0; }
 .filters .tabs { align-self: flex-start; }
@@ -189,7 +210,6 @@ body.crop-off .crop-card { display: none; }
 /* ---------- sections ---------- */
 section { display: flex; flex-direction: column; gap: 8px; }
 .section-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
-.flow, .rivers, .cities { padding-top: 14px; border-top: 1px solid var(--hair); }
 
 /* ---------- river flow ---------- */
 .flow-legend { display: flex; align-items: flex-end; gap: 8px; padding: 4px 2px 0; }
@@ -268,7 +288,6 @@ section { display: flex; flex-direction: column; gap: 8px; }
 }
 
 /* Kaleshwaram links */
-.links { padding-top: 14px; border-top: 1px solid var(--hair); }
 .legend-inline .key.link { height: 3px; background: var(--link); margin-left: 0; }
 .legend-inline .ic.wip, .hint .ic.wip, .mk-wip .ic {
   display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; color: var(--link);
@@ -444,6 +463,7 @@ details.table td { padding: 2px 0; border-bottom: 1px solid var(--hair); }
 .legend-inline { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: var(--muted); }
 .legend-inline .key { display: inline-block; width: 12px; height: 8px; border-radius: 2px; background: var(--accent); margin-right: 2px; }
 .legend-inline .key.river { height: 2px; background: var(--river); margin-left: 8px; }
+.legend-inline .key.river:first-child { margin-left: 0; }
 #city-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
 #city-list .row {
   display: grid; grid-template-columns: 112px 1fr 52px; align-items: center; gap: 10px;
@@ -491,11 +511,14 @@ body.labels-off .mk-city .lbl, body.labels-off .mk-district { display: none; }
 
 @media (max-width: 760px) {
   .right-stack { top: 10px; right: 10px; bottom: auto; width: min(300px, calc(100vw - 20px)); max-height: 42vh; }
-  .filters { padding: 10px 12px; gap: 10px; }
+  .filters { padding: 0 6px 6px 0; gap: 8px; }
+  .card-body { padding: 10px 12px 12px; }
+  .right-stack .crop-card { margin-right: 6px; }
   .filters .hint { display: none; }
   .crop-card { flex-basis: 200px; min-height: 160px; }
   .fab-right { top: 10px; bottom: auto; left: auto; right: 10px; }
-  .panel { top: auto; left: 10px; right: 10px; bottom: 10px; width: auto; max-height: 56vh; padding: 14px 16px; gap: 14px; border-radius: 16px; }
+  .panel { top: auto; left: 10px; right: 10px; bottom: 10px; width: auto; max-height: 56vh; padding: 0 0 6px; gap: 8px; }
+  .head-card { padding: 12px 14px; gap: 10px; }
   .panel.hidden { transform: translateY(calc(100% + 20px)); }
   .hero #cursor-elev { font-size: 34px; }
   .fab { top: auto; bottom: 16px; left: 16px; }
