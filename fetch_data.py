@@ -269,6 +269,40 @@ def fetch_worldcover() -> None:
     print(f"fetched {target.name} ({target.stat().st_size / 1e6:.1f} MB)")
 
 
+# Places named by the proposal's multi-stage trunk systems that are not on the map yet: stage reservoirs
+# of existing schemes that have no Wikipedia page and towns that would name new balancing reservoirs.
+# Nominatim (OpenStreetMap, ODbL) gives a village or town centre, which stands in for the site.
+NOMINATIM_URL = "https://nominatim.openstreetmap.org/search"
+NOMINATIM_HEADERS = {"User-Agent": "telangana3d/1.0 (terrain map; proposal sketch)"}
+PROPOSAL_PLACES = [
+    "Nandi Medaram, Peddapalli", "Bheemghanpur, Mulugu", "Dharmasagar, Hanamkonda", "Narlapur, Nagarkurnool", "Uddandapur, Nagarkurnool",
+    "Sangambanda, Narayanpet", "Ryalampad, Jogulamba Gadwal", "Asifabad, Komaram Bheem", "Utnur, Adilabad", "Ichoda, Adilabad",
+    "Kohir, Sangareddy", "Vikarabad", "Jangaon", "Palvancha, Bhadradri Kothagudem", "Yellandu, Bhadradri Kothagudem",
+    "Kulkacherla, Vikarabad", "Kosgi, Narayanpet", "Keshavapuram, Medchal", "Chityal, Nalgonda", "Bhainsa, Nirmal",
+]
+
+
+def fetch_proposal_places() -> None:
+    target = RAW / "nominatim_proposal.json"
+    if target.exists():
+        print(f"cached  {target.name}")
+        return
+    found = {}
+    for place in PROPOSAL_PLACES:
+        response = requests.get(NOMINATIM_URL, headers=NOMINATIM_HEADERS, timeout=TIMEOUT_S,
+                                params={"q": f"{place}, Telangana, India", "format": "json", "limit": 1})
+        response.raise_for_status()
+        hits = response.json()
+        if hits:
+            found[place] = {"lat": float(hits[0]["lat"]), "lon": float(hits[0]["lon"]), "display": hits[0]["display_name"], "type": hits[0].get("type")}
+            print(f"  {place}: {hits[0]['display_name'][:70]}")
+        else:
+            print(f"  {place}: not found")
+        time.sleep(1.1)                                       # Nominatim usage policy: one request a second
+    target.write_text(json.dumps(found, indent=1, ensure_ascii=False), encoding="utf-8")
+    print(f"fetched {target.name} ({len(found)} of {len(PROPOSAL_PLACES)} places)")
+
+
 # Potapov et al. 2021: percent cropland per 3 km cell, one layer per four-year epoch (named by its last year).
 GLAD_CROPLAND_URL = "https://glad.umd.edu/users/Potapov/Global_Crop/Data/Global_cropland_3km_{year}.tif"
 GLAD_CROPLAND_YEARS = (2003, 2007, 2011, 2015, 2019)
@@ -321,4 +355,5 @@ if __name__ == "__main__":
     fetch_osm_water()
     fetch_groundwater_levels()
     fetch_worldcover()
+    fetch_proposal_places()
     fetch_cropland()

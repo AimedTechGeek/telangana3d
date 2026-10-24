@@ -1,0 +1,98 @@
+{
+ "Dharmasagar, Hanamkonda": {
+  "lat": 17.986416,
+  "lon": 79.4480878,
+  "display": "Dharmasagar-X, Dharmasagar Road, Wadderacolony, Dharmasagar, Dharmasagar mandal, Hanumakonda, Telangana, 506151, India",
+  "type": "childcare"
+ },
+ "Narlapur, Nagarkurnool": {
+  "lat": 16.1167905,
+  "lon": 78.3760797,
+  "display": "Narlapur Sub Station, Amaragiri Village Road, Amaragiri, Kollapur mandal, Nagarkurnool, Telangana, India",
+  "type": "substation"
+ },
+ "Sangambanda, Narayanpet": {
+  "lat": 16.4506139,
+  "lon": 77.4128891,
+  "display": "Sangambanda-I, NH167, Maganuru, Maganoor mandal, Narayanpet, Telangana, India",
+  "type": "childcare"
+ },
+ "Ryalampad, Jogulamba Gadwal": {
+  "lat": 16.2591037,
+  "lon": 77.7165905,
+  "display": "RYALAMPAD -I, Palcherla, Dharoor mandal, Jogulamba Gadwal, Telangana, 509133, India",
+  "type": "childcare"
+ },
+ "Asifabad, Komaram Bheem": {
+  "lat": 19.3593461,
+  "lon": 79.2960404,
+  "display": "Asifabad, Asifabad mandal, Kumuram Bheem Asifabad, Telangana, 504293, India",
+  "type": "town"
+ },
+ "Utnur, Adilabad": {
+  "lat": 19.369594,
+  "lon": 78.7736687,
+  "display": "Utnur, Utnur mandal, Adilabad, Telangana, 504311, India",
+  "type": "town"
+ },
+ "Ichoda, Adilabad": {
+  "lat": 19.4286536,
+  "lon": 78.4528573,
+  "display": "Ichoda, Ichoda mandal, Adilabad, Telangana, 504307, India",
+  "type": "town"
+ },
+ "Kohir, Sangareddy": {
+  "lat": 17.5996678,
+  "lon": 77.7169218,
+  "display": "Kohir mandal, Sangareddy, Telangana, India",
+  "type": "administrative"
+ },
+ "Vikarabad": {
+  "lat": 17.2702855,
+  "lon": 77.745297,
+  "display": "Vikarabad, Telangana, India",
+  "type": "administrative"
+ },
+ "Jangaon": {
+  "lat": 17.7465843,
+  "lon": 79.2407218,
+  "display": "Jangaon, Telangana, India",
+  "type": "administrative"
+ },
+ "Palvancha, Bhadradri Kothagudem": {
+  "lat": 17.6997439,
+  "lon": 80.6890514,
+  "display": "Palvancha mandal, Bhadradri Kothagudem, Telangana, 507115, India",
+  "type": "administrative"
+ },
+ "Yellandu, Bhadradri Kothagudem": {
+  "lat": 17.5915639,
+  "lon": 80.3216885,
+  "display": "Yellandu, Yellandu mandal, Bhadradri Kothagudem, Telangana, 507123, India",
+  "type": "town"
+ },
+ "Kulkacherla, Vikarabad": {
+  "lat": 17.0150535,
+  "lon": 77.8755632,
+  "display": "Kulkacharla mandal, Vikarabad, Telangana, India",
+  "type": "administrative"
+ },
+ "Kosgi, Narayanpet": {
+  "lat": 16.9884481,
+  "lon": 77.7164865,
+  "display": "Kosgi, Kosgi mandal, Narayanpet, Telangana, 509339, India",
+  "type": "village"
+ },
+ "Chityal, Nalgonda": {
+  "lat": 17.2314588,
+  "lon": 79.1293471,
+  "display": "Chityal, Chityal mandal, Nalgonda, Telangana, 508114, India",
+  "type": "town"
+ },
+ "Bhainsa, Nirmal": {
+  "lat": 19.107085,
+  "lon": 77.9635656,
+  "display": "Bhainsa, Bhainsa mandal, Nirmal, Telangana, 504103, India",
+  "type": "town"
+ }
+}

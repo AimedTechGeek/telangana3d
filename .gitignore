@@ -15,6 +15,7 @@ data/raw/*
 !data/raw/osm_water.json
 !data/raw/gw_levels.csv.gz
 !data/raw/worldcover_320m.tif
+!data/raw/nominatim_proposal.json
 !data/raw/wikipedia_dams.json
 !data/raw/wikidata_dams.csv
 

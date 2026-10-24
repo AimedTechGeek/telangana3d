@@ -15,7 +15,7 @@ path-traced 3D terrain block and a native forge3d viewer.
 | Tanks | About 4,800 village tanks and lakes; districts shaded by tanks restored under Mission Kakatiya 2015–18 | OpenStreetMap, Government of India report |
 | Groundwater | 1,605 monitoring wells with depth to water in May before (2010–14) and after 2014 (2015–23), the change per well and district, a state curve 2005–2023 | India-WRIS via India Data Portal |
 | Cropland | Share of land under crops before and after 2014 and the change, with cultivated area per district | GLAD global cropland (Potapov et al. 2021) |
-| Proposal | A planning sketch of river water for 90 % of cultivable land: new reservoir sites, lift deliveries, pump stages, tunnels, canals, gravity commands and costs, set against the state's river-water shares | Computed from the terrain, HydroRIVERS, ESA WorldCover and the works on the map |
+| Proposal | A planning sketch of river water for 85 % of cultivable land: six multi-stage trunk systems, new reservoir sites, lift deliveries, pump stages, tunnels, canals, gravity commands and indicative costs, set against the state's river-water shares | Computed from the terrain, HydroRIVERS, ESA WorldCover and the works on the map, under an engineering review's norms |
 
 Every figure on the map is traceable in [DATA_SOURCES.md](DATA_SOURCES.md);
 sources that could not be reached are listed in
@@ -128,15 +128,19 @@ uv run python serve.py      # http://127.0.0.1:8765/ opens in your browser
   tanks were restored with their locations
 - **Groundwater** (India-WRIS): 1,605 CGWB and state-department monitoring wells with their mean depth to water in May before 2014 (2010–14) and after (2015–23), the change per well and per district, a year-by-year state curve, and popups with each well's readings. Depth is below ground, so the drought years 2015–18 show as a fall and the wet 2020–22 monsoons as a recovery.
 - **Proposal** (a planning sketch, off by default): the "Show proposal" control
-  in the Filters card draws what it would take to put 90 % of the state's
+  in the Filters card draws what it would take to put 85 % of the state's
   cultivable land under river water, computed by `propose_water.py` from the
   terrain, HydroRIVERS flows, ESA WorldCover land cover and the works already
-  on the map: new reservoirs sited on the DEM, lift deliveries for districts
-  without a dam site, the cheapest intake or existing reservoir to feed each,
-  pump stages, tunnels and canals, and the land gravity could then serve. The
-  Proposal card gives the water budget against the state's Godavari and
-  Krishna shares, every work with its lift, route and indicative cost, the
-  per-district need and the norms behind every number
+  on the map, under norms set by a lift-irrigation engineering review: new
+  reservoirs sited on the DEM, lift deliveries for districts without a dam
+  site, six multi-stage trunk systems that reuse Kaleshwaram's, Devadula's and
+  Palamuru's stages and add new ones, the cheapest feed for each work (river
+  intake, existing reservoir or canal, trunk stage or cascade), pump stages,
+  tunnels, deep cuts, canals and pressure mains routed inside the state, and
+  the land gravity could then serve. Everything drawn is marked "new" with its
+  TMC; the Proposal card gives the water budget against the Godavari and
+  Krishna shares, every system and work with its lift, route and indicative
+  cost, the per-district need, the engineering caveats and the norms
 - 27 cities and towns ranked by elevation, with the lowest river beds for
   comparison; click one to fly to it
 - Both side columns are stacks of small collapsible cards, one per category.

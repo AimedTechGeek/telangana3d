@@ -125,7 +125,7 @@
     <div class="card-body">
       <section class="proposal">
         <p class="summary" id="prop-summary">Loading…</p>
-        <p class="hint">A planning sketch, not a design: computed by <code>propose_water.py</code> from the 200 m terrain model, HydroRIVERS mean flows, ESA WorldCover land cover and the works already on the map, under the norms listed at the end. Surveys, real hydrology and inter-state awards would change every number.</p>
+        <p class="hint">A planning sketch, not a design: computed by <code>propose_water.py</code> from the 200 m terrain model, HydroRIVERS mean flows, ESA WorldCover land cover and the works already on the map, under norms and trunk systems set by a lift-irrigation engineering review (listed at the end). Surveys, real hydrology and inter-state awards would change every number.</p>
         <div class="section-head">
           <h2>Water budget</h2>
           <span class="legend-inline">TMC a year</span>
@@ -136,12 +136,18 @@
         </table>
         <p class="hint" id="prop-envelope-note"></p>
         <div class="section-head">
+          <h2>Multi-stage trunk systems</h2>
+          <span class="legend-inline" id="prop-systems-count"></span>
+        </div>
+        <p class="hint">Water climbs the plateau the way Kaleshwaram does: intake, pump, pool, canal or tunnel, pump again. Existing stages are reused; new stage reservoirs and lifts are added. Open a system for its stages; click one to fly to its intake.</p>
+        <div id="prop-systems"></div>
+        <div class="section-head">
           <h2>Works</h2>
           <span class="legend-inline" id="prop-works-count"></span>
         </div>
         <p class="hint">Reservoirs where the terrain allows a dam, lift deliveries where it does not. Lift is new pumping; water routed through a reservoir that an existing scheme fills also pays that scheme's lift. Click a row to fly there.</p>
         <table class="crop-table prop-table" id="prop-works">
-          <thead><tr><th>Work</th><th>TMC<br><small>a year</small></th><th>Lift<br><small>m</small></th><th>Route<br><small>km</small></th><th>Tunnel<br><small>km</small></th><th>₹<br><small>crore</small></th></tr></thead>
+          <thead><tr><th>Work</th><th>TMC<br><small>a year</small></th><th>Lift<br><small>m</small></th><th>Feed</th><th>Tunnel<br><small>km</small></th><th>₹<br><small>crore</small></th></tr></thead>
           <tbody></tbody>
         </table>
         <div class="section-head">
@@ -152,6 +158,10 @@
           <thead><tr><th>District</th><th>Cropped<br><small>% now</small></th><th>Add<br><small>lakh acres</small></th><th>Need<br><small>TMC</small></th><th>Gravity<br><small>% served</small></th></tr></thead>
           <tbody></tbody>
         </table>
+        <div class="section-head">
+          <h2>Engineering caveats</h2>
+        </div>
+        <ul class="hint prop-norms" id="prop-caveats"></ul>
         <div class="section-head">
           <h2>Norms and sources</h2>
         </div>
@@ -318,7 +328,7 @@
           <button type="button" data-proposal="off" aria-pressed="true">Off</button>
           <button type="button" data-proposal="on" aria-pressed="false">Show proposal</button>
         </div>
-        <p class="hint">A planning sketch computed from this map's terrain, river-flow and land-cover data, not a design: <span class="key prop pool"></span> new reservoirs, <span class="key prop delivery"></span> lift deliveries, <span class="key prop pump"></span> pump houses, <span class="key prop canal"></span> canals, <span class="key prop tunnel"></span> tunnels, <span class="key prop cmd"></span> land that gravity can serve from a reservoir. Opens the Proposal card.</p>
+        <p class="hint">A planning sketch computed from this map's terrain, river-flow and land-cover data, not a design. Everything drawn is new and marked “new”: <span class="key-ic"><svg viewBox="0 0 16 16" aria-hidden="true"><use href="#ic-dam"/></svg></span> reservoir with its storage in TMC, <span class="key-ic"><svg viewBox="0 0 16 16" aria-hidden="true"><use href="#ic-tank"/></svg></span> lift delivery (balancing tank) with TMC a year, <span class="key-ic"><svg viewBox="0 0 16 16" aria-hidden="true"><use href="#ic-pump"/></svg></span> pump house with MW and lift, <span class="key-ic"><svg viewBox="0 0 16 16" aria-hidden="true"><use href="#ic-canal"/></svg></span> canal and <span class="key-ic"><svg viewBox="0 0 16 16" aria-hidden="true"><use href="#ic-tunnel"/></svg></span> tunnel with km and TMC a year, <span class="key prop cmd"></span> land that gravity can serve from them; <span class="key prop trunk"></span> new and <span class="key prop trunk old"></span> existing stages of the six multi-stage trunk systems. Each work takes water from the cheapest source with spare flow: a river intake, a reservoir or canal an existing scheme already fills, or a reservoir proposed here, so lifts cascade in stages as Kaleshwaram's do. Opens the Proposal card.</p>
       </div>
     </div>
   </details>
@@ -390,6 +400,8 @@
   <symbol id="ic-pump" viewBox="0 0 16 16"><path d="M3 14.5h10M4.5 14.5V8.5h7v6M6 8.5V5a2 2 0 0 1 4 0v3.5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 1.5v2M11.5 2.6l-1 1.7M4.5 2.6l1 1.7" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
   <symbol id="ic-tunnel" viewBox="0 0 16 16"><path d="M2.5 14V8.5a5.5 5.5 0 0 1 11 0V14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M5.5 14V9a2.5 2.5 0 0 1 5 0v5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-dasharray="1.6 1.4"/><path d="M1.5 14.5h13" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
   <symbol id="ic-barrage" viewBox="0 0 16 16"><path d="M1 3h14v2.5H1zM2.5 5.5h2.2v7H2.5zM6.9 5.5h2.2v7H6.9zM11.3 5.5h2.2v7h-2.2z"/><path d="M1.5 14.5h13" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
+  <symbol id="ic-canal" viewBox="0 0 16 16"><path d="M1.5 5.5c2-1.6 4-1.6 6 0s4 1.6 6 0M1.5 10.5c2-1.6 4-1.6 6 0s4 1.6 6 0" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M2 14h12" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></symbol>
+  <symbol id="ic-tank" viewBox="0 0 16 16"><path d="M2.5 4.5h11v8a1.5 1.5 0 0 1-1.5 1.5H4a1.5 1.5 0 0 1-1.5-1.5z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M4.5 8.2c1.2-.9 2.3-.9 3.5 0s2.3.9 3.5 0" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M5 2.5h6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
 </svg>
 <pre id="debug" hidden></pre>
 
