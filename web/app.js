@@ -167,15 +167,11 @@ function buildStyle(theme) {
         paint: { 'line-color': t.link, 'line-width': ['interpolate', ['linear'], ['zoom'], 6, 2.6, 10, 4.2],
                  'line-opacity': ['case', ['==', ['get', 'status'], 'operational'], 0.9, 0.6],
                  'line-dasharray': ['case', ['==', ['get', 'status'], 'operational'], ['literal', [1, 0]], ['literal', [2, 2]]] } },
-      ...Array.from({ length: FLOW_DASH_STEPS }, (_, k) => ({
-        id: `links-dash-${k}`, type: 'line', source: 'links', filter: ['==', ['get', 'status'], 'operational'],
-        layout: { 'line-join': 'round', 'line-cap': 'butt', visibility: chipOn('links') },
-        paint: { 'line-color': t.linkDash, 'line-width': ['interpolate', ['linear'], ['zoom'], 6, 1, 10, 1.8],
-                 'line-dasharray': dashPatternAt(k), 'line-opacity': k === flowStep ? FLOW_DASH_OPACITY : 0 } })),
-      { id: 'links-arrows', type: 'symbol', source: 'links',
+      // Static arrows give direction on links still being built; operating links get moving chevrons on the canvas.
+      { id: 'links-arrows', type: 'symbol', source: 'links', filter: ['!=', ['get', 'status'], 'operational'],
         layout: { 'symbol-placement': 'line', 'symbol-spacing': 70, 'icon-image': 'arrow', 'icon-size': ['interpolate', ['linear'], ['zoom'], 6, 0.55, 10, 0.85],
                   'icon-rotation-alignment': 'map', 'icon-allow-overlap': true, 'icon-ignore-placement': true, visibility: chipOn('links') },
-        paint: { 'icon-opacity': ['case', ['==', ['get', 'status'], 'operational'], 1, 0.6] } },
+        paint: { 'icon-opacity': 0.7 } },
     ],
     terrain: { source: 'dem', exaggeration: Number($('exag').value) },
     sky: { ...t.sky, 'fog-ground-blend': 0.6, 'horizon-fog-blend': 0.7, 'sky-horizon-blend': 0.85,
@@ -347,9 +343,7 @@ const toggles = {
   dams: (on) => document.body.classList.toggle('dams-off', !on),
   links: (on) => {
     const visibility = on ? 'visible' : 'none';
-    for (const id of ['links-highlight', 'links-casing', 'links-line', 'links-arrows', ...Array.from({ length: FLOW_DASH_STEPS }, (_, k) => `links-dash-${k}`)]) {
-      map.setLayoutProperty(id, 'visibility', visibility);
-    }
+    for (const id of ['links-highlight', 'links-casing', 'links-line', 'links-arrows']) map.setLayoutProperty(id, 'visibility', visibility);
     document.body.classList.toggle('links-off', !on);
   },
   orbit: (on) => { orbiting = on; if (on) orbitStep(); },
@@ -371,8 +365,6 @@ function animateFlow(now) {
     flowStep = (flowStep + 1) % FLOW_DASH_STEPS;
     map.setPaintProperty(`flow-dash-${previous}`, 'line-opacity', 0);
     map.setPaintProperty(`flow-dash-${flowStep}`, 'line-opacity', FLOW_DASH_OPACITY);
-    map.setPaintProperty(`links-dash-${previous}`, 'line-opacity', 0);
-    map.setPaintProperty(`links-dash-${flowStep}`, 'line-opacity', FLOW_DASH_OPACITY);
   }
   drawBubbles(bubbleLast ? Math.min((now - bubbleLast) / 1000, 0.1) : 0);
   bubbleLast = now;
@@ -431,6 +423,56 @@ function resizeBubbleCanvas() {
   bubbleCtx.setTransform(ratio, 0, 0, ratio, 0, 0);
 }
 function clearBubbles() { bubbleCtx.clearRect(0, 0, bubbleCanvas.width, bubbleCanvas.height); }
+// Operating Kaleshwaram links carry moving chevrons so the direction of pumping is unmistakable.
+const LINK_CHEVRON = { spacingM: 4000, speedPx: 45, size: 7 };
+let linkTracks = [];
+
+function prepareLinkParticles(links) {
+  linkTracks = [];
+  for (const feature of links.features) {
+    if (feature.properties.status !== 'operational') continue;
+    const coords = feature.geometry.coordinates, cum = [0];
+    for (let i = 1; i < coords.length; i++) {
+      const dx = (coords[i][0] - coords[i - 1][0]) * EARTH_M_PER_DEG * Math.cos(coords[i][1] * Math.PI / 180);
+      const dy = (coords[i][1] - coords[i - 1][1]) * EARTH_M_PER_DEG;
+      cum.push(cum[i - 1] + Math.hypot(dx, dy));
+    }
+    const length = cum[cum.length - 1];
+    const count = Math.max(2, Math.round(length / LINK_CHEVRON.spacingM));
+    const lngs = coords.map((c) => c[0]), lats = coords.map((c) => c[1]);
+    linkTracks.push({ coords, cum, length, bbox: [Math.min(...lngs), Math.min(...lats), Math.max(...lngs), Math.max(...lats)],
+                      particles: Array.from({ length: count }, (_, i) => i * length / count) });
+  }
+}
+
+function drawLinkChevrons(dt, metresPerPixel, west, south, east, north, width, height) {
+  if (document.body.classList.contains('links-off')) return;
+  const colour = MAP_THEMES[currentTheme()].link;
+  for (const track of linkTracks) {
+    const step = LINK_CHEVRON.speedPx * metresPerPixel * dt;
+    for (let i = 0; i < track.particles.length; i++) track.particles[i] = (track.particles[i] + step) % track.length;
+    const [minLng, minLat, maxLng, maxLat] = track.bbox;
+    if (maxLng < west || minLng > east || maxLat < south || minLat > north) continue;
+    for (const distance of track.particles) {
+      const here = map.project(pointAlong(track, distance));
+      const ahead = map.project(pointAlong(track, Math.min(distance + 300, track.length)));
+      if (here.x < -20 || here.y < -20 || here.x > width + 20 || here.y > height + 20) continue;
+      const angle = Math.atan2(ahead.y - here.y, ahead.x - here.x);
+      const alpha = Math.min(1, distance / 1500, (track.length - distance) / 1500);
+      drawChevron(here.x, here.y, angle, LINK_CHEVRON.size, colour, alpha);
+    }
+  }
+}
+function drawChevron(x, y, angle, size, colour, alpha) {
+  bubbleCtx.save();
+  bubbleCtx.translate(x, y); bubbleCtx.rotate(angle); bubbleCtx.globalAlpha = alpha;
+  bubbleCtx.beginPath();
+  bubbleCtx.moveTo(size, 0); bubbleCtx.lineTo(-size * 0.8, size * 0.9); bubbleCtx.lineTo(-size * 0.3, 0); bubbleCtx.lineTo(-size * 0.8, -size * 0.9); bubbleCtx.closePath();
+  bubbleCtx.fillStyle = colour; bubbleCtx.fill();
+  bubbleCtx.lineWidth = 1.5; bubbleCtx.strokeStyle = 'rgba(255,255,255,0.95)'; bubbleCtx.lineJoin = 'round'; bubbleCtx.stroke();
+  bubbleCtx.restore();
+}
+
 function drawBubbles(dt) {
   clearBubbles();
   if (!bubbleReaches.length) return;
@@ -453,6 +495,7 @@ function drawBubbles(dt) {
       drawBubble(point.x, point.y, reach.radius, alpha);
     }
   }
+  drawLinkChevrons(dt, metresPerPixel, west, south, east, north, width, height);
 }
 // Bubbles keep one light body and a dark rim in both themes, so they show on
 // every river colour (a bubble in its river's own colour vanished on the Krishna).
@@ -673,6 +716,23 @@ function addPumpMarker(house) {
   node.append(icon, label);
   node.title = `${house.name} (${house.osm_name})${house.since ? ` · pumping since ${house.since}` : ''}`;
   new maplibregl.Marker({ element: node, anchor: 'left', offset: [-10, 0] }).setLngLat([house.lon, house.lat]).addTo(map);
+}
+
+function addWorkInProgressMarkers(links) {
+  const seen = new Set();
+  for (const feature of links.features) {
+    const p = feature.properties;
+    if (p.status === 'operational' || seen.has(p.link)) continue;
+    seen.add(p.link);
+    const coords = feature.geometry.coordinates, mid = coords[Math.floor(coords.length / 2)];
+    const node = document.createElement('div'); node.className = 'mk-wip';
+    const icon = document.createElement('span'); icon.className = 'ic';
+    const svg = document.createElementNS(SVG_NS, 'svg'); svg.setAttribute('viewBox', '0 0 16 16'); svg.setAttribute('aria-hidden', 'true');
+    const use = document.createElementNS(SVG_NS, 'use'); use.setAttribute('href', '#ic-wip'); svg.appendChild(use); icon.appendChild(svg);
+    node.append(icon, textEl('span', 'lbl', `${p.link} · ${p.status}`));
+    node.title = `${p.link}: ${p.from} → ${p.to} · ${p.note}`;
+    new maplibregl.Marker({ element: node, anchor: 'left', offset: [-11, 0] }).setLngLat(mid).addTo(map);
+  }
 }
 
 function renderLinkList(links) {
@@ -945,6 +1005,8 @@ map.on('load', async () => {
     renderEraCounts(dams);
     pumphouses.forEach(addPumpMarker);
     renderLinkList(links);
+    prepareLinkParticles(links);
+    addWorkInProgressMarkers(links);
     debug.notes.dams = dams.length;
     debug.notes.links = links.features.length;
     debug.notes.bubbles = bubbleReaches.reduce((n, reach) => n + reach.particles.length, 0);

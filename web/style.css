@@ -216,7 +216,15 @@ section { display: flex; flex-direction: column; gap: 8px; }
 /* Kaleshwaram links */
 .links { padding-top: 14px; border-top: 1px solid var(--hair); }
 .legend-inline .key.link { height: 3px; background: var(--link); margin-left: 0; }
-.legend-inline .key.link.planned { margin-left: 8px; background: repeating-linear-gradient(90deg, var(--link) 0 3px, transparent 3px 6px); opacity: .7; }
+.legend-inline .ic.wip, .mk-wip .ic {
+  display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; color: var(--link);
+  background: var(--panel-solid); border: 1px solid var(--border); box-shadow: 0 1px 4px rgba(0,0,0,.3);
+}
+.legend-inline .ic.wip { margin-left: 8px; margin-right: 2px; }
+.legend-inline .ic.wip svg, .mk-wip .ic svg { width: 13px; height: 13px; }
+.mk-wip { display: flex; align-items: center; gap: 5px; cursor: default; }
+.mk-wip .lbl { padding: 2px 6px; border-radius: 6px; white-space: nowrap; font-size: 10.5px; font-weight: 500; color: var(--ink-2); background: var(--panel); backdrop-filter: blur(6px); border: 1px dashed var(--link); }
+body.links-off .mk-wip { display: none; }
 .link-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
 .link-list .row {
   display: grid; grid-template-columns: 56px 1fr; gap: 8px; align-items: start;
