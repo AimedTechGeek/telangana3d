@@ -4,6 +4,9 @@ Interactive 3D relief map of Telangana in the browser (elevation above sea
 level, Godavari and Krishna river profiles, city elevations), plus a
 path-traced 3D terrain block and a native forge3d viewer.
 
+**Live map:** <https://aimedtechgeek.github.io/telangana3d/> (GitHub Pages,
+served from the `gh-pages` branch, which holds the built `web/` folder).
+
 ## At a glance
 
 | Theme | What the map shows | Where the numbers come from |
@@ -182,6 +185,23 @@ uv run python build_web_data.py   # terrain tiles, profiles, contours -> web/ (~
 uv run python propose_water.py    # the Proposal view: reservoir sites, routes, pump houses -> web/data/proposal.*
 uv run python web_smoke_test.py   # headless Edge check of the web map -> out/web_home.png
 ```
+
+## Publish to GitHub Pages
+
+The site is the `web/` folder as built above, pushed to the `gh-pages` branch
+(root, with a `.nojekyll` file so GitHub serves it as is). After rebuilding
+`web/`, redeploy from the repo root:
+
+```bash
+git worktree add ../telangana3d-pages gh-pages          # once per clone
+SRC=$(git rev-parse --short HEAD)
+rm -rf ../telangana3d-pages/data ../telangana3d-pages/tiles
+cp -r web/. ../telangana3d-pages/
+cd ../telangana3d-pages && git add -A && git commit -m "Deploy the built map from $SRC" && git push
+```
+
+The repo's Pages setting must point at `gh-pages` / root. Every URL in
+`web/` is relative, so the same files work locally and under the project path.
 
 ## Data and choices
 
