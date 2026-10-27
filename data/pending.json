@@ -1,0 +1,74 @@
+[
+ {
+  "scheme": "Kaleshwaram",
+  "item": "Gandhamalla reservoir",
+  "kind": "reservoir",
+  "status": "under construction",
+  "note": "Link V storage near Gandhamalla, M. Turkapally mandal (Yadadri); 9.87 TMC in the DPR, 1.41 TMC per the contractor; resettlement not started (CAG 2024)",
+  "url": "https://cag.gov.in/uploads/download_audit_report/2024/08_Chapter-V_Execution-of-Kaleshwaram-Project-065cdab5633b085.36569039.pdf"
+ },
+ {
+  "scheme": "Kaleshwaram",
+  "item": "Distributary network",
+  "kind": "canals",
+  "status": "under construction",
+  "note": "690 of 9,564 km of distributaries built by March 2022; only 40,288 acres of new irrigation created against 18.26 lakh planned (CAG 2024)",
+  "url": "https://cag.gov.in/uploads/download_audit_report/2024/08_Chapter-V_Execution-of-Kaleshwaram-Project-065cdab5633b085.36569039.pdf"
+ },
+ {
+  "scheme": "Palamuru-Rangareddy",
+  "item": "Udandapur reservoir",
+  "kind": "reservoir",
+  "status": "under construction",
+  "note": "Fifth reservoir of the chain; headworks to Udandapur to be completed by June 2027 (CM, 2026)",
+  "url": "https://thesouthfirst.com/news/palamuru-rangareddy-lift-irrigation-scheme-in-telangana-gets-new-deadline-december-2027"
+ },
+ {
+  "scheme": "Palamuru-Rangareddy",
+  "item": "KP Laxmidevipalli reservoir",
+  "kind": "reservoir",
+  "status": "proposed",
+  "note": "End reservoir in Kodangal; construction to be taken up under the 2025-26 budget, six months after Udandapur",
+  "url": "https://www.siasat.com/telangana-uttam-sets-20-month-target-for-palamuru-project-3426924/"
+ },
+ {
+  "scheme": "Palamuru-Rangareddy",
+  "item": "Main canal and distributaries",
+  "kind": "canals",
+  "status": "under construction",
+  "note": "240 km main canal and 95 km of tunnels in all; completion target December 2027",
+  "url": "https://thesouthfirst.com/news/palamuru-rangareddy-lift-irrigation-scheme-in-telangana-gets-new-deadline-december-2027"
+ },
+ {
+  "scheme": "Dindi lift scheme",
+  "item": "Nakkalagandi, Shivannagudem and the other reservoirs",
+  "kind": "reservoirs",
+  "status": "under construction",
+  "note": "Nine reservoirs including Nakkalagandi (Dindi balancing reservoir, 7.5 TMC) along a 66 km canal with a 5.5 km tunnel; works since 2015, no water yet (October 2026)",
+  "url": "https://www.uniindia.com/south-india/politics-telangana-cpi-19ms50/219572"
+ },
+ {
+  "scheme": "Sitarama lift scheme",
+  "item": "Main canals and distributaries",
+  "kind": "canals",
+  "status": "under construction",
+  "note": "The Dummugudem–Sagar tail pond canals for 9.36 lakh acres; the canals tagged under construction in OpenStreetMap are these",
+  "url": "https://en.wikipedia.org/wiki/Sitamma_Sagar_Barrage"
+ },
+ {
+  "scheme": "Mukteshwar (Chinna Kaleshwaram)",
+  "item": "Lift from the Godavari at Kannepalli, Nizamabad",
+  "kind": "lift scheme",
+  "status": "proposed",
+  "note": "Techno-economic viability accepted by the Centre's advisory committee in 2024; ₹545 crore estimate",
+  "url": "https://rsdebate.nic.in/bitstream/123456789/749427/1/PQ_265_22072024_U95_p356_p356.pdf"
+ },
+ {
+  "scheme": "Kalwakurthy, Nettempadu, Bhima, Koilsagar",
+  "item": "Remaining canals and distributaries",
+  "kind": "canals",
+  "status": "under construction",
+  "note": "Palamuru-region lift schemes operating since 2017-19 whose last reaches are unfinished; target March 2027",
+  "url": "https://www.siasat.com/telangana-uttam-sets-20-month-target-for-palamuru-project-3426924/"
+ }
+]

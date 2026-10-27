@@ -1,0 +1,410 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Telangana Relief</title>
+<meta name="description" content="3D terrain of Telangana with elevation above sea level, river profiles of the Godavari and Krishna, and city elevations.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⛰️</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.12.0/dist/maplibre-gl.css">
+<link rel="stylesheet" href="style.css">
+<script src="https://unpkg.com/maplibre-gl@5.12.0/dist/maplibre-gl.js"></script>
+</head>
+<body>
+<div id="map" role="application" aria-label="3D terrain map of Telangana"></div>
+
+<aside class="panel" id="panel">
+  <div class="card head-card">
+    <header class="panel-head">
+      <div>
+        <p class="eyebrow">Telangana · elevation above sea level</p>
+        <h1>Relief Atlas</h1>
+      </div>
+      <div class="head-actions">
+        <button id="theme" class="icon-btn" type="button" aria-label="Toggle light or dark theme" title="Theme">
+          <svg class="sun" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+          <svg class="moon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+        </button>
+        <button id="collapse" class="icon-btn" type="button" aria-label="Hide panel" title="Hide panel">
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M15 6l-6 6 6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <section class="readout" aria-live="polite">
+      <div class="hero"><span id="cursor-elev">—</span><span class="unit">m ASL</span></div>
+      <p class="coords" id="cursor-pos">Move the pointer over the terrain</p>
+      <p class="compare" id="cursor-compare" hidden>
+        <span class="lm-row" id="lm-row"></span>
+        <span class="lm-text" id="lm-text"></span>
+      </p>
+    </section>
+
+    <section class="legend" aria-label="Elevation colour scale">
+      <div class="ramp" id="ramp"></div>
+      <div class="ticks" id="ramp-ticks"></div>
+    </section>
+  </div>
+
+  <details class="card" open>
+    <summary class="card-head"><span class="card-title">Rivers</span><span class="legend-inline"><i class="key river"></i>Godavari &amp; Krishna</span><svg class="chev" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></summary>
+    <div class="card-body">
+      <section class="flow">
+        <div class="section-head">
+          <h2>River flow</h2>
+        </div>
+        <p class="summary">Long-term average flow of every stream (HydroRIVERS model). Wider, darker and faster means more water collected upstream; bubbles ride rivers above 100 m³/s, denser and bigger with flow.</p>
+        <div class="flow-legend" id="flow-legend" aria-label="Average flow scale, cubic metres per second"></div>
+        <div class="peaks" id="peaks"></div>
+        <p class="hint">Average flow of the main rivers through each district, upstream to downstream. Click a row to fly there.</p>
+        <ol class="district-flow" id="district-flow"></ol>
+      </section>
+
+      <section class="rivers">
+        <div class="section-head">
+          <h2>River profiles</h2>
+          <div class="tabs" role="tablist" aria-label="River">
+            <button role="tab" type="button" data-river="Godavari" aria-selected="true">Godavari</button>
+            <button role="tab" type="button" data-river="Krishna" aria-selected="false">Krishna</button>
+          </div>
+        </div>
+        <p class="summary" id="river-summary">Loading…</p>
+        <div class="chart-wrap">
+          <svg id="profile" viewBox="0 0 328 150" role="img" aria-labelledby="profile-title"><title id="profile-title">River bed elevation along the river through Telangana</title></svg>
+          <div class="tip" id="profile-tip" hidden></div>
+        </div>
+        <p class="chart-label">Average flow along the same stretch, m³/s</p>
+        <div class="chart-wrap">
+          <svg id="flow-profile" viewBox="0 0 328 110" role="img" aria-labelledby="flow-profile-title"><title id="flow-profile-title">Average river flow along the river through Telangana</title></svg>
+        </div>
+        <input type="range" id="scrub" min="0" max="1000" value="0" aria-label="Position along the river">
+        <p class="hint">Hover or drag to follow the river on the map · click to fly there</p>
+        <details class="table">
+          <summary>Table view</summary>
+          <table id="profile-table"><thead><tr><th>km</th><th>River bed, m ASL</th><th>Flow, m³/s</th></tr></thead><tbody></tbody></table>
+        </details>
+      </section>
+    </div>
+  </details>
+
+  <details class="card" open>
+    <summary class="card-head"><span class="card-title">Water works</span><svg class="chev" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></summary>
+    <div class="card-body">
+      <p class="dam-legend"><span class="ic dam"><svg viewBox="0 0 16 16" aria-hidden="true"><use href="#ic-dam"/></svg></span>dam <span class="ic barrage"><svg viewBox="0 0 16 16" aria-hidden="true"><use href="#ic-barrage"/></svg></span>barrage · label shows gross capacity; click for height, years and inflow (Wikipedia, HydroRIVERS)</p>
+
+      <section class="links">
+        <div class="section-head">
+          <h2>Water links</h2>
+          <span class="legend-inline"><i class="key link"></i>operating<span class="ic wip"><svg viewBox="0 0 16 16" aria-hidden="true"><use href="#ic-wip"/></svg></span>in progress</span>
+        </div>
+        <p class="summary">How water is moved between the structures: Kaleshwaram, the Sriram Sagar canals, the Srisailam Left Bank Canal, Kalwakurthy and Palamuru-Rangareddy. Moving chevrons show the direction of flow on operating links; dashed links with a cone are still being built. Click a link on the map or below for its years, terrain heights and distance. Lines are schematic, not the real canal and tunnel alignments.</p>
+        <ol id="link-list" class="link-list"></ol>
+        <div class="section-head"><h2>Kaleshwaram canal network</h2></div>
+        <table class="official network" id="canal-network">
+          <thead><tr><th>Component</th><th>Planned</th><th>Completed</th><th></th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </section>
+
+      <section class="pending">
+        <div class="section-head">
+          <h2>Still to be built</h2>
+          <span class="legend-inline" id="pending-count"></span>
+        </div>
+        <p class="summary">Dams, reservoirs, barrages, pump houses, tunnels, water links and canals that are under construction or only proposed, grouped by scheme with the years a source gives and the last announced target. Click an item to fly to it and open its details; grey items have no published location. Statuses are as reported up to October 2026 and change often.</p>
+        <ol id="pending-list" class="link-list pending-list"></ol>
+      </section>
+    </div>
+  </details>
+
+  <details class="card" open id="proposal-card">
+    <summary class="card-head"><span class="card-title">Proposal</span><span class="legend-inline" id="prop-count"></span><svg class="chev" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></summary>
+    <div class="card-body">
+      <section class="proposal">
+        <p class="summary" id="prop-summary">Loading…</p>
+        <p class="hint">A planning sketch, not a design: computed by <code>propose_water.py</code> from the 200 m terrain model, HydroRIVERS mean flows, ESA WorldCover land cover and the works already on the map, under norms and trunk systems set by a lift-irrigation engineering review (listed at the end). Surveys, real hydrology and inter-state awards would change every number.</p>
+        <div class="section-head">
+          <h2>Water budget</h2>
+          <span class="legend-inline">TMC a year</span>
+        </div>
+        <table class="official prop-budget" id="prop-envelopes">
+          <thead><tr><th>River</th><th>Share</th><th>Committed</th><th>Free now</th><th>Free if 2025 ask granted</th><th>Proposal draws</th></tr></thead>
+          <tbody></tbody>
+        </table>
+        <p class="hint" id="prop-envelope-note"></p>
+        <div class="section-head">
+          <h2>Multi-stage trunk systems</h2>
+          <span class="legend-inline" id="prop-systems-count"></span>
+        </div>
+        <p class="hint">Water climbs the plateau the way Kaleshwaram does: intake, pump, pool, canal or tunnel, pump again. Existing stages are reused; new stage reservoirs and lifts are added. Open a system for its stages; click one to fly to its intake.</p>
+        <div id="prop-systems"></div>
+        <div class="section-head">
+          <h2>Works</h2>
+          <span class="legend-inline" id="prop-works-count"></span>
+        </div>
+        <p class="hint">Reservoirs where the terrain allows a dam, lift deliveries where it does not. Lift is new pumping; water routed through a reservoir that an existing scheme fills also pays that scheme's lift. Click a row to fly there.</p>
+        <table class="crop-table prop-table" id="prop-works">
+          <thead><tr><th>Work</th><th>TMC<br><small>a year</small></th><th>Lift<br><small>m</small></th><th>Feed</th><th>Tunnel<br><small>km</small></th><th>₹<br><small>crore</small></th></tr></thead>
+          <tbody></tbody>
+        </table>
+        <div class="section-head">
+          <h2>Districts</h2>
+          <span class="legend-inline">share of cultivable land</span>
+        </div>
+        <table class="crop-table prop-table" id="prop-districts">
+          <thead><tr><th>District</th><th>Cropped<br><small>% now</small></th><th>Add<br><small>lakh acres</small></th><th>Need<br><small>TMC</small></th><th>Gravity<br><small>% served</small></th></tr></thead>
+          <tbody></tbody>
+        </table>
+        <div class="section-head">
+          <h2>Engineering caveats</h2>
+        </div>
+        <ul class="hint prop-norms" id="prop-caveats"></ul>
+        <div class="section-head">
+          <h2>Norms and sources</h2>
+        </div>
+        <ul class="hint prop-norms" id="prop-norms"></ul>
+      </section>
+    </div>
+  </details>
+
+  <details class="card" open id="tank-card">
+    <summary class="card-head"><span class="card-title">Tanks</span><span class="legend-inline" id="tank-count"></span><svg class="chev" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></summary>
+    <div class="card-body">
+      <section class="tanks">
+        <p class="summary" id="tank-summary">Loading…</p>
+        <div class="section-head">
+          <h2>Mission Kakatiya</h2>
+          <span class="legend-inline">restoration, 2015–18</span>
+        </div>
+        <p class="summary" id="mk-summary"></p>
+        <table class="official" id="mk-phases">
+          <thead><tr><th>Phase</th><th>Taken up</th><th>Completed</th><th>₹ crore</th></tr></thead>
+          <tbody></tbody>
+        </table>
+        <p class="hint">Tanks taken up by district (2016 districts: Mulugu and Narayanpet are counted inside Jayashankar and Mahabubnagar) next to the tanks OpenStreetMap has mapped there. Click a row to fly to the district.</p>
+        <table class="crop-table tank-table" id="tank-table">
+          <thead><tr><th>District</th><th>OSM<br><small>tanks</small></th><th>Restored<br><small>2015–18</small></th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </section>
+    </div>
+  </details>
+
+  <details class="card" open id="gw-card">
+    <summary class="card-head"><span class="card-title">Groundwater</span><span class="legend-inline" id="gw-count"></span><svg class="chev" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></summary>
+    <div class="card-body">
+      <section class="groundwater">
+        <p class="summary" id="gw-summary">Loading…</p>
+        <div class="crop-legend gw-legend" id="gw-legend"></div>
+        <div class="section-head">
+          <h2>Depth to water, May</h2>
+          <span class="legend-inline">state mean · m below ground</span>
+        </div>
+        <div class="gw-chart" id="gw-chart"></div>
+        <p class="hint" id="gw-chart-hint"></p>
+        <p class="hint">Levels follow the monsoon: 2015–18 were drought years, 2020–22 very wet. The state's 2023 resource assessment reports a rise of “more than 4 metres” between 2013 and 2023 against this network's deepest point in 2016 and 2019; the public well data stop in May 2023. Click a district row to fly there.</p>
+        <table class="crop-table gw-table" id="gw-table">
+          <thead><tr><th>District</th><th>Wells</th><th>Before<br><small id="gw-before-years"></small></th><th>After<br><small id="gw-after-years"></small></th><th>Change<br><small>m</small></th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </section>
+    </div>
+  </details>
+
+  <details class="card" open>
+    <summary class="card-head"><span class="card-title">Cities</span><span class="legend-inline"><i class="key city"></i>city<i class="key river"></i>lowest river bed</span><svg class="chev" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></summary>
+    <div class="card-body">
+      <ol id="city-list"></ol>
+    </div>
+  </details>
+
+  <footer class="credits">Copernicus DEM (ESA) · HydroRIVERS (HydroSHEDS, Lehner &amp; Grill 2013) · GLAD cropland (Potapov et al. 2021) · geoBoundaries · Natural Earth · India-WRIS groundwater levels (CGWB, Telangana GWD) · © OpenStreetMap contributors</footer>
+</aside>
+
+<div class="right-stack">
+<aside class="filters" id="filters" aria-label="View and filters">
+  <header class="filters-head card">
+    <h2>View &amp; filters</h2>
+    <button id="filters-collapse" class="icon-btn" type="button" aria-label="Hide filters" title="Hide filters">
+      <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M9 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
+  </header>
+
+  <details class="card" open>
+    <summary class="card-head"><span class="card-title">Terrain</span><svg class="chev" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></summary>
+    <div class="card-body">
+      <label class="slider">
+      <span>Vertical exaggeration</span>
+      <input type="range" id="exag" min="1" max="6" step="0.5" value="3">
+      <output id="exag-out" for="exag">3×</output>
+      </label>
+      <div class="chips">
+      <button class="chip" type="button" data-toggle="hillshade" aria-pressed="true">Hillshade</button>
+      <button class="chip" type="button" data-toggle="contours" aria-pressed="false">Contours 100 m</button>
+    </div>
+    </div>
+  </details>
+
+  <details class="card" open>
+    <summary class="card-head"><span class="card-title">Layers</span><svg class="chev" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></summary>
+    <div class="card-body">
+      <div class="fgroup">
+        <div class="chips">
+          <button class="chip" type="button" data-toggle="districts" aria-pressed="true">Districts</button>
+          <button class="chip" type="button" data-toggle="labels" aria-pressed="true">Place labels</button>
+          <button class="chip" type="button" data-toggle="flow" aria-pressed="true">Flow animation</button>
+          <button class="chip" type="button" data-toggle="dams" aria-pressed="true">Dams &amp; reservoirs</button>
+          <button class="chip" type="button" data-toggle="links" aria-pressed="true">Water links</button>
+        </div>
+    </div>
+    <div class="fgroup">
+        <p class="eyebrow">Canals (OpenStreetMap)</p>
+        <div class="tabs" role="group" aria-label="Canal layer">
+          <button type="button" data-canal="off" aria-pressed="false">Off</button>
+          <button type="button" data-canal="after" aria-pressed="true">Dug after 2014</button>
+          <button type="button" data-canal="all" aria-pressed="false">All canals</button>
+        </div>
+        <p class="hint"><span class="key canal"></span> canal · <span class="key canal tunnel"></span> canal tunnel · <span class="key canal main"></span> pressurised tunnel or pipe; dashes move with the flow · <span class="key canal old"></span> older or undated. “After 2014” = Kaleshwaram, Palamuru-Rangareddy and Sitarama works; OSM records no dig dates, so the project decides the era.</p>
+    </div>
+    <div class="fgroup">
+        <p class="eyebrow">Tanks (OpenStreetMap) · Mission Kakatiya</p>
+        <div class="tabs" role="group" aria-label="Tank layer">
+          <button type="button" data-tank="off" aria-pressed="false">Off</button>
+          <button type="button" data-tank="tanks" aria-pressed="true">Tanks</button>
+          <button type="button" data-tank="kakatiya" aria-pressed="false">Restored 2015–18</button>
+        </div>
+        <p class="hint"><span class="key tank"></span> village tanks, lakes and reservoirs mapped in OpenStreetMap: dots sized by water spread, the real outlines when zoomed in. “Restored 2015–18” shades each district by the tanks taken up under Mission Kakatiya. No source publishes which tanks were restored with their locations, so the before / after 2014 view is per district, not per tank.</p>
+      </div>
+      <div class="fgroup">
+        <p class="eyebrow">Groundwater · depth to water in May (India-WRIS)</p>
+        <div class="tabs" role="group" aria-label="Groundwater layer">
+          <button type="button" data-gw="off" aria-pressed="true">Off</button>
+          <button type="button" data-gw="before" aria-pressed="false">Before 2014</button>
+          <button type="button" data-gw="after" aria-pressed="false">After 2014</button>
+          <button type="button" data-gw="change" aria-pressed="false">Change</button>
+        </div>
+        <p class="hint">Monitoring wells of the Central Ground Water Board and the state Ground Water Department, each averaged over its May readings of 2010–14 and of 2015–23; districts take the mean of their wells. Depth: <span class="key gw shallow"></span> near the surface · <span class="key gw deep"></span> 40 m down. Change: <span class="key gw rose"></span> water table rose · <span class="key gw fell"></span> fell. Click a well for its year-by-year readings.</p>
+      </div>
+      <div class="fgroup">
+        <p class="eyebrow">Cropland cover</p>
+        <div class="tabs" role="group" aria-label="Cropland layer">
+          <button type="button" data-crop="off" aria-pressed="true">Off</button>
+          <button type="button" data-crop="before" aria-pressed="false">Before 2014</button>
+          <button type="button" data-crop="after" aria-pressed="false">After 2014</button>
+          <button type="button" data-crop="change" aria-pressed="false">Change</button>
+        </div>
+        <p class="hint" id="crop-hint">Share of each 3 km cell under crops (GLAD, Potapov et al. 2021): 2008–2011 vs 2016–2019. Opens the Cropland panel with the acreage table.</p>
+    </div>
+    </div>
+  </details>
+
+  <details class="card" open>
+    <summary class="card-head"><span class="card-title">Filters</span><svg class="chev" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></summary>
+    <div class="card-body">
+      <div class="fgroup">
+        <p class="eyebrow">Works · status</p>
+        <div class="tabs" role="group" aria-label="Status of the works">
+          <button type="button" data-status="all" aria-pressed="true">All</button>
+          <button type="button" data-status="built" aria-pressed="false">Operating</button>
+          <button type="button" data-status="pending" aria-pressed="false">Still to build</button>
+        </div>
+        <p class="hint">Applies to dams, reservoirs, barrages, pump houses, tunnels, water links and canals. Dashed outline with a <span class="ic wip"><svg viewBox="0 0 16 16" aria-hidden="true"><use href="#ic-wip"/></svg></span> cone = under construction or proposed; a dotted ring = position approximate (village, not the structure). The list “Still to be built” in the left panel names them all.</p>
+    </div>
+    <div class="fgroup">
+        <p class="eyebrow">Dams &amp; reservoirs · opening year</p>
+        <div class="tabs" role="group" aria-label="Opening year">
+          <button type="button" data-era="all" aria-pressed="true">All</button>
+          <button type="button" data-era="before" aria-pressed="false">Before 2014</button>
+          <button type="button" data-era="after" aria-pressed="false">2014 onwards</button>
+        </div>
+        <p class="hint">Construction start is used when the opening year is unknown</p>
+    </div>
+      <div class="fgroup">
+        <p class="eyebrow">Proposal · river water for 85 % of farmland</p>
+        <div class="tabs" role="group" aria-label="Proposal view">
+          <button type="button" data-proposal="off" aria-pressed="true">Off</button>
+          <button type="button" data-proposal="on" aria-pressed="false">Show proposal</button>
+        </div>
+        <p class="hint">A planning sketch computed from this map's terrain, river-flow and land-cover data, not a design. Everything drawn is new and marked “new”: <span class="key-ic"><svg viewBox="0 0 16 16" aria-hidden="true"><use href="#ic-dam"/></svg></span> reservoir with its storage in TMC, <span class="key-ic"><svg viewBox="0 0 16 16" aria-hidden="true"><use href="#ic-tank"/></svg></span> lift delivery (balancing tank) with TMC a year, <span class="key-ic"><svg viewBox="0 0 16 16" aria-hidden="true"><use href="#ic-pump"/></svg></span> pump house with MW and lift, <span class="key-ic"><svg viewBox="0 0 16 16" aria-hidden="true"><use href="#ic-canal"/></svg></span> canal and <span class="key-ic"><svg viewBox="0 0 16 16" aria-hidden="true"><use href="#ic-tunnel"/></svg></span> tunnel with km and TMC a year, <span class="key prop cmd"></span> land that gravity can serve from them; <span class="key prop trunk"></span> new and <span class="key prop trunk old"></span> existing stages of the six multi-stage trunk systems. Each work takes water from the cheapest source with spare flow: a river intake, a reservoir or canal an existing scheme already fills, or a reservoir proposed here, so lifts cascade in stages as Kaleshwaram's do. Opens the Proposal card.</p>
+      </div>
+    </div>
+  </details>
+
+  <details class="card" open>
+    <summary class="card-head"><span class="card-title">Navigation</span><svg class="chev" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></summary>
+    <div class="card-body">
+      <div class="drag-mode">
+      <span>Left-drag</span>
+      <div class="tabs" role="group" aria-label="Left mouse drag">
+        <button type="button" data-drag="pan" aria-pressed="true">Pans</button>
+        <button type="button" data-drag="rotate" aria-pressed="false">Rotates</button>
+      </div>
+    </div>
+    <div class="chips">
+      <button class="chip" type="button" data-toggle="orbit" aria-pressed="false">Orbit</button>
+      <button class="chip" type="button" id="reset">Reset view</button>
+    </div>
+    <p class="hint">Right-drag or Ctrl-drag always rotates and tilts · scroll zooms · two fingers rotate on touch</p>
+    </div>
+  </details>
+</aside>
+
+<aside class="crop-card" id="crop-card" aria-label="Cropland statistics">
+  <header class="filters-head">
+    <div>
+      <h2>Cropland</h2>
+      <span class="legend-inline" id="crop-mode-label">layer off</span>
+    </div>
+    <button id="crop-close" class="icon-btn" type="button" aria-label="Hide cropland panel and layer" title="Hide">
+      <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    </button>
+  </header>
+  <div class="crop-body">
+    <p class="summary" id="crop-summary">Loading…</p>
+    <div class="crop-legend" id="crop-legend"></div>
+    <p class="hint">Water projects are one reason; groundwater recovery, rainfall and the Mission Kakatiya tank restoration also contributed, so the map shows change, not cause.</p>
+    <table class="official" id="crop-official"><thead><tr><th>Official figure</th><th>Before</th><th>After</th></tr></thead><tbody></tbody></table>
+    <div class="section-head">
+      <p class="hint">Cultivated area by district (GLAD): before = 2008–2011, after = 2016–2019. Click a row to fly there.</p>
+      <a id="crop-csv" class="dl" href="#" download="telangana_cropland_before_after_2014.csv">CSV ↓</a>
+    </div>
+    <table class="crop-table" id="crop-table">
+      <thead><tr><th>District</th><th>Before<br><small>lakh acres</small></th><th>After<br><small>lakh acres</small></th><th>Change<br><small>acres</small></th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</aside>
+</div>
+<button id="filters-expand" class="icon-btn fab fab-right" type="button" aria-label="Show filters" hidden>
+  <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M4 6h16M7 12h10M10 18h4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+</button>
+
+<button id="expand" class="icon-btn fab" type="button" aria-label="Show panel" hidden>
+  <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M9 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+</button>
+
+<div id="toast" class="toast" role="status">Loading terrain…</div>
+
+<!-- Landmark silhouettes for the elevation comparison (24 x 32 units, fill = currentColor) -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="lm-gateway" viewBox="0 0 24 32"><path fill-rule="evenodd" d="M1 31V11h2V8l1.5-1.5L6 8v3h2a4 4 0 0 1 8 0h2V8l1.5-1.5L21 8v3h2v20zM8.5 31V21a3.5 3.5 0 0 1 7 0v10z"/></symbol>
+  <symbol id="lm-charminar" viewBox="0 0 24 32"><path fill-rule="evenodd" d="M1 31V13h2V4l1.5-2L6 4v9h2V8l1-1 1 1v5h4V8l1-1 1 1v5h2V4l1.5-2L21 4v9h2v18zM9 31v-7a3 3 0 0 1 6 0v7z"/></symbol>
+  <symbol id="lm-qutub" viewBox="0 0 24 32"><path d="M9.5 31 10.5 2h3l1 29zM8 25h8v1.5H8zM8.6 18h6.8v1.5H8.6zM9.2 11h5.6v1.5H9.2zM10.8 2.2a1.2 1.2 0 0 1 2.4 0z"/></symbol>
+  <symbol id="lm-statue" viewBox="0 0 24 32"><path d="M12 1.5a2.4 2.4 0 1 1 0 4.8 2.4 2.4 0 0 1 0-4.8zM8.5 7.5h7l1.5 5.5v15h-10V13zM5 28h14v3H5z"/></symbol>
+  <!-- Dam: an arch wall holding water back; barrage: a deck on piers with gates -->
+  <symbol id="ic-dam" viewBox="0 0 16 16"><path d="M2 12.5A6.5 6.5 0 0 1 14 12.5" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><path d="M4 14.5h8" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
+  <symbol id="ic-wip" viewBox="0 0 16 16"><path d="M8 1.5 11.6 13H4.4z"/><path d="M5.6 9.2h4.8M6.5 6.1h3" fill="none" stroke="#fff" stroke-width="1.4"/><path d="M2.5 13.2h11v1.6h-11z"/></symbol>
+  <symbol id="ic-pump" viewBox="0 0 16 16"><path d="M3 14.5h10M4.5 14.5V8.5h7v6M6 8.5V5a2 2 0 0 1 4 0v3.5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 1.5v2M11.5 2.6l-1 1.7M4.5 2.6l1 1.7" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
+  <symbol id="ic-tunnel" viewBox="0 0 16 16"><path d="M2.5 14V8.5a5.5 5.5 0 0 1 11 0V14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M5.5 14V9a2.5 2.5 0 0 1 5 0v5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-dasharray="1.6 1.4"/><path d="M1.5 14.5h13" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
+  <symbol id="ic-barrage" viewBox="0 0 16 16"><path d="M1 3h14v2.5H1zM2.5 5.5h2.2v7H2.5zM6.9 5.5h2.2v7H6.9zM11.3 5.5h2.2v7h-2.2z"/><path d="M1.5 14.5h13" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
+  <symbol id="ic-canal" viewBox="0 0 16 16"><path d="M1.5 5.5c2-1.6 4-1.6 6 0s4 1.6 6 0M1.5 10.5c2-1.6 4-1.6 6 0s4 1.6 6 0" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M2 14h12" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></symbol>
+  <symbol id="ic-tank" viewBox="0 0 16 16"><path d="M2.5 4.5h11v8a1.5 1.5 0 0 1-1.5 1.5H4a1.5 1.5 0 0 1-1.5-1.5z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M4.5 8.2c1.2-.9 2.3-.9 3.5 0s2.3.9 3.5 0" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M5 2.5h6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
+</svg>
+<pre id="debug" hidden></pre>
+
+<script src="app.js"></script>
+</body>
+</html>

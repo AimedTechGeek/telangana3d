@@ -1,0 +1,44 @@
+{
+ "osm_km": {
+  "unknown_canal": 4732,
+  "before_canal": 831,
+  "unknown_tunnel": 17,
+  "before_tunnel": 0,
+  "after_tunnel": 36,
+  "after_canal": 312,
+  "after_main": 297,
+  "unknown_main": 191
+ },
+ "osm_ways": 1813,
+ "network": {
+  "planned": [
+   [
+    "Gravity canals",
+    1531
+   ],
+   [
+    "Tunnels",
+    203
+   ],
+   [
+    "Pressure / delivery mains",
+    98
+   ]
+  ],
+  "planned_source": "https://irrigation.telangana.gov.in/",
+  "cag": [
+   [
+    "Main canals",
+    1566.04,
+    897.0
+   ],
+   [
+    "Distributary canals",
+    9564.35,
+    690.18
+   ]
+  ],
+  "cag_asof": "March 2022",
+  "cag_source": "https://cag.gov.in/en/audit-report/details/119583"
+ }
+}

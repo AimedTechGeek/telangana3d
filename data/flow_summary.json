@@ -1,0 +1,160 @@
+{
+ "peaks": {
+  "Godavari": {
+   "q": 3291,
+   "up": 305135,
+   "entry_q": 294,
+   "lon": 81.44375,
+   "lat": 17.46458
+  },
+  "Krishna": {
+   "q": 1888,
+   "up": 243699,
+   "entry_q": 816,
+   "lon": 80.16042,
+   "lat": 16.64792
+  }
+ },
+ "districts": [
+  {
+   "district": "Nizamabad",
+   "river": "Godavari",
+   "mean_q": 454,
+   "max_q": 499,
+   "length_km": 44,
+   "dist_dn_km": 689.0,
+   "lon": 78.08958,
+   "lat": 18.93958
+  },
+  {
+   "district": "Nirmal",
+   "river": "Godavari",
+   "mean_q": 512,
+   "max_q": 616,
+   "length_km": 88,
+   "dist_dn_km": 619.7,
+   "lon": 78.48542,
+   "lat": 18.97292
+  },
+  {
+   "district": "Jagtial",
+   "river": "Godavari",
+   "mean_q": 605,
+   "max_q": 646,
+   "length_km": 60,
+   "dist_dn_km": 564.1,
+   "lon": 79.10208,
+   "lat": 18.95208
+  },
+  {
+   "district": "Peddapalli",
+   "river": "Godavari",
+   "mean_q": 665,
+   "max_q": 796,
+   "length_km": 67,
+   "dist_dn_km": 492.9,
+   "lon": 79.57708,
+   "lat": 18.76458
+  },
+  {
+   "district": "Mancherial",
+   "river": "Godavari",
+   "mean_q": 690,
+   "max_q": 799,
+   "length_km": 38,
+   "dist_dn_km": 472.3,
+   "lon": 79.37708,
+   "lat": 18.85625
+  },
+  {
+   "district": "Jayashankar",
+   "river": "Godavari",
+   "mean_q": 1756,
+   "max_q": 2631,
+   "length_km": 55,
+   "dist_dn_km": 394.7,
+   "lon": 80.02292,
+   "lat": 18.76042
+  },
+  {
+   "district": "Mulugu",
+   "river": "Godavari",
+   "mean_q": 2650,
+   "max_q": 2672,
+   "length_km": 43,
+   "dist_dn_km": 315.1,
+   "lon": 80.45625,
+   "lat": 18.39375
+  },
+  {
+   "district": "Bhadradri",
+   "river": "Godavari",
+   "mean_q": 2753,
+   "max_q": 3291,
+   "length_km": 192,
+   "dist_dn_km": 156.4,
+   "lon": 80.89375,
+   "lat": 17.86042
+  },
+  {
+   "district": "Narayanpet",
+   "river": "Krishna",
+   "mean_q": 1274,
+   "max_q": 1281,
+   "length_km": 26,
+   "dist_dn_km": 592.5,
+   "lon": 77.40625,
+   "lat": 16.37292
+  },
+  {
+   "district": "Jogulamba",
+   "river": "Krishna",
+   "mean_q": 1301,
+   "max_q": 1310,
+   "length_km": 30,
+   "dist_dn_km": 507.2,
+   "lon": 78.06042,
+   "lat": 16.02708
+  },
+  {
+   "district": "Wanaparthy",
+   "river": "Krishna",
+   "mean_q": 1327,
+   "max_q": 1687,
+   "length_km": 63,
+   "dist_dn_km": 500.6,
+   "lon": 77.93125,
+   "lat": 16.16458
+  },
+  {
+   "district": "Nagarkurnool",
+   "river": "Krishna",
+   "mean_q": 1708,
+   "max_q": 1742,
+   "length_km": 30,
+   "dist_dn_km": 326.8,
+   "lon": 78.91042,
+   "lat": 16.18958
+  },
+  {
+   "district": "Nalgonda",
+   "river": "Krishna",
+   "mean_q": 1757,
+   "max_q": 1849,
+   "length_km": 44,
+   "dist_dn_km": 250.9,
+   "lon": 79.43542,
+   "lat": 16.59375
+  },
+  {
+   "district": "Suryapet",
+   "river": "Krishna",
+   "mean_q": 1860,
+   "max_q": 1864,
+   "length_km": 21,
+   "dist_dn_km": 186.9,
+   "lon": 79.98958,
+   "lat": 16.68958
+  }
+ ]
+}

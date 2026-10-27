@@ -1,0 +1,245 @@
+[
+ {
+  "name": "Shadnagar",
+  "lon": 78.20459,
+  "lat": 17.06717,
+  "population": 45000,
+  "place": "town",
+  "elev": 647,
+  "district": "Rangareddy"
+ },
+ {
+  "name": "Sadasivpet",
+  "lon": 77.95033,
+  "lat": 17.62119,
+  "population": 80000,
+  "place": "town",
+  "elev": 538,
+  "district": "Sangareddy"
+ },
+ {
+  "name": "Hyderabad",
+  "lon": 78.47406,
+  "lat": 17.36059,
+  "population": 6809970,
+  "place": "city",
+  "elev": 508,
+  "district": "Hyderabad"
+ },
+ {
+  "name": "Mahbubnagar",
+  "lon": 77.99232,
+  "lat": 16.74345,
+  "population": 157700,
+  "place": "city",
+  "elev": 495,
+  "district": "Mahabubnagar"
+ },
+ {
+  "name": "Siddipet",
+  "lon": 78.85201,
+  "lat": 18.10177,
+  "population": 10000,
+  "place": "city",
+  "elev": 480,
+  "district": "Siddipet"
+ },
+ {
+  "name": "Medak",
+  "lon": 78.2652,
+  "lat": 18.04588,
+  "population": 46000,
+  "place": "town",
+  "elev": 464,
+  "district": "Medak"
+ },
+ {
+  "name": "Tanduru",
+  "lon": 77.58741,
+  "lat": 17.25751,
+  "population": 55000,
+  "place": "town",
+  "elev": 457,
+  "district": "Vikarabad"
+ },
+ {
+  "name": "Bhongir",
+  "lon": 78.88634,
+  "lat": 17.51728,
+  "population": 50000,
+  "place": "town",
+  "elev": 452,
+  "district": "Yadadri Bhongiri"
+ },
+ {
+  "name": "Nizamabad",
+  "lon": 78.09782,
+  "lat": 18.67319,
+  "population": 100000,
+  "place": "city",
+  "elev": 385,
+  "district": "Nizamabad"
+ },
+ {
+  "name": "Jangaon",
+  "lon": 79.15708,
+  "lat": 17.72438,
+  "population": 90000,
+  "place": "town",
+  "elev": 376,
+  "district": "Jangaon"
+ },
+ {
+  "name": "Aija",
+  "lon": 77.66657,
+  "lat": 16.0155,
+  "population": 70689,
+  "place": "town",
+  "elev": 330,
+  "district": "Jogulamba"
+ },
+ {
+  "name": "Sircilla",
+  "lon": 78.8086,
+  "lat": 18.38976,
+  "population": 92910,
+  "place": "town",
+  "elev": 328,
+  "district": "Rajanna Sircilla"
+ },
+ {
+  "name": "Gadwal",
+  "lon": 77.79464,
+  "lat": 16.2347,
+  "population": 50000,
+  "place": "town",
+  "elev": 325,
+  "district": "Jogulamba"
+ },
+ {
+  "name": "Jagtial",
+  "lon": 78.9162,
+  "lat": 18.79571,
+  "population": 171825,
+  "place": "town",
+  "elev": 279,
+  "district": "Jagtial"
+ },
+ {
+  "name": "Karimnagar",
+  "lon": 79.1328,
+  "lat": 18.43481,
+  "population": 0,
+  "place": "city",
+  "elev": 271,
+  "district": "Karimnagar"
+ },
+ {
+  "name": "Warangal",
+  "lon": 79.5971,
+  "lat": 17.98206,
+  "population": 811844,
+  "place": "city",
+  "elev": 267,
+  "district": "Warangal (U)"
+ },
+ {
+  "name": "Huzurabad",
+  "lon": 79.3957,
+  "lat": 18.20185,
+  "population": 50000,
+  "place": "town",
+  "elev": 265,
+  "district": "Karimnagar"
+ },
+ {
+  "name": "Adilabad",
+  "lon": 78.53399,
+  "lat": 19.67595,
+  "population": 117200,
+  "place": "city",
+  "elev": 253,
+  "district": "Adilabad"
+ },
+ {
+  "name": "Nalgonda",
+  "lon": 79.26692,
+  "lat": 17.05044,
+  "population": 135163,
+  "place": "city",
+  "elev": 239,
+  "district": "Nalgonda"
+ },
+ {
+  "name": "Jammikunta",
+  "lon": 79.47394,
+  "lat": 18.28973,
+  "population": 50000,
+  "place": "town",
+  "elev": 233,
+  "district": "Karimnagar"
+ },
+ {
+  "name": "Yellandu",
+  "lon": 80.32169,
+  "lat": 17.59156,
+  "population": 42421,
+  "place": "town",
+  "elev": 215,
+  "district": "Bhadradri"
+ },
+ {
+  "name": "Suryapet",
+  "lon": 79.62251,
+  "lat": 17.14053,
+  "population": 105500,
+  "place": "city",
+  "elev": 175,
+  "district": "Suryapet"
+ },
+ {
+  "name": "Ramagundam",
+  "lon": 79.47878,
+  "lat": 18.76152,
+  "population": 0,
+  "place": "city",
+  "elev": 150,
+  "district": "Peddapalli"
+ },
+ {
+  "name": "Miryalaguda",
+  "lon": 79.56174,
+  "lat": 16.87101,
+  "population": 103900,
+  "place": "city",
+  "elev": 130,
+  "district": "Nalgonda"
+ },
+ {
+  "name": "Khammam",
+  "lon": 80.15003,
+  "lat": 17.24654,
+  "population": 184200,
+  "place": "city",
+  "elev": 123,
+  "district": "Khammam"
+ },
+ {
+  "name": "Palwancha",
+  "lon": 80.70571,
+  "lat": 17.59767,
+  "population": 69088,
+  "place": "town",
+  "elev": 101,
+  "district": "Bhadradri"
+ },
+ {
+  "name": "Bhadrachalam",
+  "lon": 80.89401,
+  "lat": 17.6688,
+  "population": 42650,
+  "place": "town",
+  "elev": 57,
+  "district": "Bhadradri"
+ }
+]

@@ -1,0 +1,502 @@
+{
+ "osm_tanks": 4835,
+ "osm_area_ha": 131364,
+ "osm_named": 325,
+ "osm_min_ha": 0.5,
+ "osm_asof": "October 2026",
+ "mission_kakatiya": {
+  "url": "https://pmksy.mowr.gov.in/aibp-mis/Manual/Mission%20Kakatiya,%20Telangana.pdf",
+  "phases": [
+   {
+    "phase": "I",
+    "years": "2015-16",
+    "taken_up": 8043,
+    "completed": 8003,
+    "crore": 1568.4,
+    "ayacut_lakh_acres": 6.71
+   },
+   {
+    "phase": "II",
+    "years": "2016-17",
+    "taken_up": 9015,
+    "completed": 7060,
+    "crore": 1152.2,
+    "ayacut_lakh_acres": 3.8
+   },
+   {
+    "phase": "III",
+    "years": "2017-18",
+    "taken_up": 6152,
+    "completed": 1521,
+    "crore": 224.57,
+    "ayacut_lakh_acres": 1.1
+   },
+   {
+    "phase": "IV",
+    "years": "2018-19",
+    "taken_up": 4108,
+    "completed": null,
+    "crore": null,
+    "ayacut_lakh_acres": null
+   }
+  ],
+  "taken_up": 27318,
+  "completed_by_report": 16584,
+  "tanks_enumerated": 46531,
+  "target_crore": 20000,
+  "asof": "August 2018",
+  "launched": "12 March 2015",
+  "wikipedia_completed": 27713,
+  "wikipedia_crore": 8700,
+  "wikipedia_url": "https://en.wikipedia.org/wiki/Mission_Kakatiya"
+ },
+ "districts": [
+  {
+   "district": "Adilabad",
+   "osm_tanks": 76,
+   "osm_area_ha": 2079,
+   "osm_named": 2,
+   "mk_phases": [
+    103,
+    70,
+    22,
+    38
+   ],
+   "mk_total": 233,
+   "mk_counted_in": null
+  },
+  {
+   "district": "Bhadradri",
+   "osm_tanks": 403,
+   "osm_area_ha": 3834,
+   "osm_named": 18,
+   "mk_phases": [
+    431,
+    516,
+    219,
+    164
+   ],
+   "mk_total": 1330,
+   "mk_counted_in": null
+  },
+  {
+   "district": "Hyderabad",
+   "osm_tanks": 45,
+   "osm_area_ha": 202,
+   "osm_named": 19,
+   "mk_phases": null,
+   "mk_total": null,
+   "mk_counted_in": null
+  },
+  {
+   "district": "Jagtial",
+   "osm_tanks": 119,
+   "osm_area_ha": 9368,
+   "osm_named": 2,
+   "mk_phases": [
+    199,
+    218,
+    162,
+    133
+   ],
+   "mk_total": 712,
+   "mk_counted_in": null
+  },
+  {
+   "district": "Jangaon",
+   "osm_tanks": 87,
+   "osm_area_ha": 2936,
+   "osm_named": 10,
+   "mk_phases": [
+    180,
+    159,
+    147,
+    100
+   ],
+   "mk_total": 586,
+   "mk_counted_in": null
+  },
+  {
+   "district": "Jayashankar",
+   "osm_tanks": 91,
+   "osm_area_ha": 4909,
+   "osm_named": 3,
+   "mk_phases": [
+    415,
+    434,
+    191,
+    90
+   ],
+   "mk_total": 1130,
+   "mk_counted_in": null
+  },
+  {
+   "district": "Jogulamba",
+   "osm_tanks": 64,
+   "osm_area_ha": 1985,
+   "osm_named": 1,
+   "mk_phases": [
+    111,
+    93,
+    99,
+    42
+   ],
+   "mk_total": 345,
+   "mk_counted_in": null
+  },
+  {
+   "district": "Kamareddy",
+   "osm_tanks": 197,
+   "osm_area_ha": 4280,
+   "osm_named": 6,
+   "mk_phases": [
+    381,
+    367,
+    185,
+    158
+   ],
+   "mk_total": 1091,
+   "mk_counted_in": null
+  },
+  {
+   "district": "Karimnagar",
+   "osm_tanks": 78,
+   "osm_area_ha": 1767,
+   "osm_named": 3,
+   "mk_phases": [
+    223,
+    290,
+    299,
+    148
+   ],
+   "mk_total": 960,
+   "mk_counted_in": null
+  },
+  {
+   "district": "Khammam",
+   "osm_tanks": 136,
+   "osm_area_ha": 3668,
+   "osm_named": 17,
+   "mk_phases": [
+    292,
+    304,
+    172,
+    119
+   ],
+   "mk_total": 887,
+   "mk_counted_in": null
+  },
+  {
+   "district": "Komaram Bheem",
+   "osm_tanks": 38,
+   "osm_area_ha": 1879,
+   "osm_named": 1,
+   "mk_phases": [
+    184,
+    123,
+    54,
+    66
+   ],
+   "mk_total": 427,
+   "mk_counted_in": null
+  },
+  {
+   "district": "Mahabubabad",
+   "osm_tanks": 168,
+   "osm_area_ha": 4077,
+   "osm_named": 6,
+   "mk_phases": [
+    335,
+    388,
+    188,
+    158
+   ],
+   "mk_total": 1069,
+   "mk_counted_in": null
+  },
+  {
+   "district": "Mahabubnagar",
+   "osm_tanks": 126,
+   "osm_area_ha": 2431,
+   "osm_named": 6,
+   "mk_phases": [
+    406,
+    523,
+    431,
+    167
+   ],
+   "mk_total": 1527,
+   "mk_counted_in": null
+  },
+  {
+   "district": "Mancherial",
+   "osm_tanks": 64,
+   "osm_area_ha": 1977,
+   "osm_named": 3,
+   "mk_phases": [
+    150,
+    155,
+    113,
+    51
+   ],
+   "mk_total": 469,
+   "mk_counted_in": null
+  },
+  {
+   "district": "Medak",
+   "osm_tanks": 180,
+   "osm_area_ha": 3074,
+   "osm_named": 6,
+   "mk_phases": [
+    560,
+    665,
+    393,
+    182
+   ],
+   "mk_total": 1800,
+   "mk_counted_in": null
+  },
+  {
+   "district": "Medchal",
+   "osm_tanks": 153,
+   "osm_area_ha": 1599,
+   "osm_named": 34,
+   "mk_phases": [
+    88,
+    67,
+    23,
+    23
+   ],
+   "mk_total": 201,
+   "mk_counted_in": null
+  },
+  {
+   "district": "Mulugu",
+   "osm_tanks": 177,
+   "osm_area_ha": 1654,
+   "osm_named": 3,
+   "mk_phases": null,
+   "mk_total": null,
+   "mk_counted_in": "Jayashankar"
+  },
+  {
+   "district": "Nagarkurnool",
+   "osm_tanks": 232,
+   "osm_area_ha": 4811,
+   "osm_named": 1,
+   "mk_phases": [
+    277,
+    428,
+    515,
+    255
+   ],
+   "mk_total": 1475,
+   "mk_counted_in": null
+  },
+  {
+   "district": "Nalgonda",
+   "osm_tanks": 161,
+   "osm_area_ha": 8137,
+   "osm_named": 6,
+   "mk_phases": [
+    377,
+    499,
+    330,
+    165
+   ],
+   "mk_total": 1371,
+   "mk_counted_in": null
+  },
+  {
+   "district": "Narayanpet",
+   "osm_tanks": 79,
+   "osm_area_ha": 4232,
+   "osm_named": 2,
+   "mk_phases": null,
+   "mk_total": null,
+   "mk_counted_in": "Mahabubnagar"
+  },
+  {
+   "district": "Nirmal",
+   "osm_tanks": 177,
+   "osm_area_ha": 5749,
+   "osm_named": 5,
+   "mk_phases": [
+    121,
+    120,
+    63,
+    100
+   ],
+   "mk_total": 404,
+   "mk_counted_in": null
+  },
+  {
+   "district": "Nizamabad",
+   "osm_tanks": 432,
+   "osm_area_ha": 8277,
+   "osm_named": 6,
+   "mk_phases": [
+    275,
+    279,
+    192,
+    95
+   ],
+   "mk_total": 841,
+   "mk_counted_in": null
+  },
+  {
+   "district": "Peddapalli",
+   "osm_tanks": 92,
+   "osm_area_ha": 4162,
+   "osm_named": 14,
+   "mk_phases": [
+    118,
+    235,
+    134,
+    174
+   ],
+   "mk_total": 661,
+   "mk_counted_in": null
+  },
+  {
+   "district": "Rajanna Sircilla",
+   "osm_tanks": 118,
+   "osm_area_ha": 6538,
+   "osm_named": 9,
+   "mk_phases": [
+    103,
+    120,
+    69,
+    45
+   ],
+   "mk_total": 337,
+   "mk_counted_in": null
+  },
+  {
+   "district": "Rangareddy",
+   "osm_tanks": 258,
+   "osm_area_ha": 5194,
+   "osm_named": 65,
+   "mk_phases": [
+    310,
+    384,
+    217,
+    96
+   ],
+   "mk_total": 1007,
+   "mk_counted_in": null
+  },
+  {
+   "district": "Sangareddy",
+   "osm_tanks": 204,
+   "osm_area_ha": 4195,
+   "osm_named": 14,
+   "mk_phases": [
+    359,
+    426,
+    450,
+    496
+   ],
+   "mk_total": 1731,
+   "mk_counted_in": null
+  },
+  {
+   "district": "Siddipet",
+   "osm_tanks": 243,
+   "osm_area_ha": 10129,
+   "osm_named": 13,
+   "mk_phases": [
+    858,
+    682,
+    338,
+    221
+   ],
+   "mk_total": 2099,
+   "mk_counted_in": null
+  },
+  {
+   "district": "Suryapet",
+   "osm_tanks": 93,
+   "osm_area_ha": 4861,
+   "osm_named": 6,
+   "mk_phases": [
+    236,
+    297,
+    220,
+    130
+   ],
+   "mk_total": 883,
+   "mk_counted_in": null
+  },
+  {
+   "district": "Vikarabad",
+   "osm_tanks": 123,
+   "osm_area_ha": 2795,
+   "osm_named": 2,
+   "mk_phases": [
+    243,
+    267,
+    129,
+    98
+   ],
+   "mk_total": 737,
+   "mk_counted_in": null
+  },
+  {
+   "district": "Wanaparthy",
+   "osm_tanks": 134,
+   "osm_area_ha": 3047,
+   "osm_named": 11,
+   "mk_phases": [
+    163,
+    296,
+    249,
+    241
+   ],
+   "mk_total": 949,
+   "mk_counted_in": null
+  },
+  {
+   "district": "Warangal (R)",
+   "osm_tanks": 128,
+   "osm_area_ha": 3737,
+   "osm_named": 5,
+   "mk_phases": [
+    224,
+    200,
+    162,
+    159
+   ],
+   "mk_total": 745,
+   "mk_counted_in": null
+  },
+  {
+   "district": "Warangal (U)",
+   "osm_tanks": 71,
+   "osm_area_ha": 1396,
+   "osm_named": 11,
+   "mk_phases": [
+    126,
+    137,
+    70,
+    58
+   ],
+   "mk_total": 391,
+   "mk_counted_in": null
+  },
+  {
+   "district": "Yadadri Bhongiri",
+   "osm_tanks": 88,
+   "osm_area_ha": 2387,
+   "osm_named": 15,
+   "mk_phases": [
+    195,
+    273,
+    316,
+    136
+   ],
+   "mk_total": 920,
+   "mk_counted_in": null
+  }
+ ]
+}

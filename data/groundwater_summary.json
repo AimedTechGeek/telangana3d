@@ -1,0 +1,452 @@
+{
+ "source": {
+  "name": "India-WRIS, Groundwater Level Collected Manually (India Data Portal mirror of the May 2025 export)",
+  "url": "https://ckandev.indiadataportal.com/dataset/groundwater-level/resource/06d6e79c-61ac-46bb-9e03-c7138911c619",
+  "wris_url": "https://indiawris.gov.in/wris/#/groundWater"
+ },
+ "before": {
+  "years": [
+   2010,
+   2014
+  ]
+ },
+ "after": {
+  "years": [
+   2015,
+   2023
+  ]
+ },
+ "min_seasons": 2,
+ "state": {
+  "wells": 1605,
+  "wells_both": 748,
+  "cgwb": 945,
+  "before": 10.98,
+  "after": 12.5,
+  "change": -0.95,
+  "rising": 217,
+  "tgwd_last_year": 2023,
+  "cgwb_last_year": 2023
+ },
+ "chart": [
+  {
+   "year": 2005,
+   "depth": 13.64,
+   "wells": 251
+  },
+  {
+   "year": 2006,
+   "depth": 10.64,
+   "wells": 276
+  },
+  {
+   "year": 2007,
+   "depth": 10.72,
+   "wells": 481
+  },
+  {
+   "year": 2008,
+   "depth": 10.12,
+   "wells": 491
+  },
+  {
+   "year": 2009,
+   "depth": 10.89,
+   "wells": 498
+  },
+  {
+   "year": 2010,
+   "depth": 12.16,
+   "wells": 449
+  },
+  {
+   "year": 2011,
+   "depth": 10.08,
+   "wells": 516
+  },
+  {
+   "year": 2012,
+   "depth": 13.04,
+   "wells": 520
+  },
+  {
+   "year": 2013,
+   "depth": 12.17,
+   "wells": 520
+  },
+  {
+   "year": 2014,
+   "depth": 9.62,
+   "wells": 524
+  },
+  {
+   "year": 2015,
+   "depth": 12.81,
+   "wells": 525
+  },
+  {
+   "year": 2016,
+   "depth": 14.9,
+   "wells": 421
+  },
+  {
+   "year": 2017,
+   "depth": 12.22,
+   "wells": 489
+  },
+  {
+   "year": 2018,
+   "depth": 12.21,
+   "wells": 479
+  },
+  {
+   "year": 2019,
+   "depth": 14.55,
+   "wells": 471
+  },
+  {
+   "year": 2022,
+   "depth": 8.97,
+   "wells": 241
+  },
+  {
+   "year": 2023,
+   "depth": 9.01,
+   "wells": 199
+  }
+ ],
+ "chart_wells": 563,
+ "chart_min_seasons": 10,
+ "districts": [
+  {
+   "district": "Adilabad",
+   "wells": 44,
+   "wells_both": 28,
+   "cgwb": 34,
+   "before": 8.91,
+   "after": 10.73,
+   "change": -0.57,
+   "rising": 7
+  },
+  {
+   "district": "Bhadradri",
+   "wells": 71,
+   "wells_both": 32,
+   "cgwb": 47,
+   "before": 9.12,
+   "after": 9.64,
+   "change": -0.44,
+   "rising": 14
+  },
+  {
+   "district": "Hyderabad",
+   "wells": 35,
+   "wells_both": 24,
+   "cgwb": 31,
+   "before": 14.12,
+   "after": 15.36,
+   "change": 0.43,
+   "rising": 14
+  },
+  {
+   "district": "Jagtial",
+   "wells": 46,
+   "wells_both": 28,
+   "cgwb": 22,
+   "before": 7.11,
+   "after": 8.24,
+   "change": -1.2,
+   "rising": 7
+  },
+  {
+   "district": "Jangaon",
+   "wells": 60,
+   "wells_both": 33,
+   "cgwb": 37,
+   "before": 11.02,
+   "after": 13.04,
+   "change": -1.41,
+   "rising": 9
+  },
+  {
+   "district": "Jayashankar",
+   "wells": 35,
+   "wells_both": 20,
+   "cgwb": 18,
+   "before": 10.48,
+   "after": 12.3,
+   "change": -1.65,
+   "rising": 3
+  },
+  {
+   "district": "Jogulamba",
+   "wells": 21,
+   "wells_both": 9,
+   "cgwb": 9,
+   "before": 10.52,
+   "after": 9.71,
+   "change": -0.94,
+   "rising": 4
+  },
+  {
+   "district": "Kamareddy",
+   "wells": 49,
+   "wells_both": 27,
+   "cgwb": 31,
+   "before": 11.48,
+   "after": 13.57,
+   "change": -1.43,
+   "rising": 8
+  },
+  {
+   "district": "Karimnagar",
+   "wells": 34,
+   "wells_both": 21,
+   "cgwb": 20,
+   "before": 9.93,
+   "after": 10.71,
+   "change": -0.77,
+   "rising": 6
+  },
+  {
+   "district": "Khammam",
+   "wells": 69,
+   "wells_both": 18,
+   "cgwb": 38,
+   "before": 6.57,
+   "after": 7.43,
+   "change": -0.76,
+   "rising": 5
+  },
+  {
+   "district": "Komaram Bheem",
+   "wells": 25,
+   "wells_both": 19,
+   "cgwb": 11,
+   "before": 7.91,
+   "after": 8.14,
+   "change": -0.19,
+   "rising": 6
+  },
+  {
+   "district": "Mahabubabad",
+   "wells": 43,
+   "wells_both": 22,
+   "cgwb": 17,
+   "before": 6.94,
+   "after": 6.96,
+   "change": -0.18,
+   "rising": 10
+  },
+  {
+   "district": "Mahabubnagar",
+   "wells": 34,
+   "wells_both": 17,
+   "cgwb": 16,
+   "before": 16.1,
+   "after": 20.34,
+   "change": -2.31,
+   "rising": 2
+  },
+  {
+   "district": "Mancherial",
+   "wells": 30,
+   "wells_both": 22,
+   "cgwb": 18,
+   "before": 6.58,
+   "after": 7.51,
+   "change": -0.59,
+   "rising": 6
+  },
+  {
+   "district": "Medak",
+   "wells": 50,
+   "wells_both": 21,
+   "cgwb": 23,
+   "before": 15.39,
+   "after": 17.65,
+   "change": -0.84,
+   "rising": 5
+  },
+  {
+   "district": "Medchal",
+   "wells": 40,
+   "wells_both": 19,
+   "cgwb": 20,
+   "before": 10.35,
+   "after": 11.45,
+   "change": -0.25,
+   "rising": 8
+  },
+  {
+   "district": "Mulugu",
+   "wells": 35,
+   "wells_both": 17,
+   "cgwb": 23,
+   "before": 7.6,
+   "after": 9.05,
+   "change": -1.15,
+   "rising": 4
+  },
+  {
+   "district": "Nagarkurnool",
+   "wells": 59,
+   "wells_both": 17,
+   "cgwb": 37,
+   "before": 19.49,
+   "after": 18.44,
+   "change": -1.61,
+   "rising": 7
+  },
+  {
+   "district": "Nalgonda",
+   "wells": 123,
+   "wells_both": 29,
+   "cgwb": 55,
+   "before": 8.34,
+   "after": 8.68,
+   "change": -0.51,
+   "rising": 7
+  },
+  {
+   "district": "Narayanpet",
+   "wells": 15,
+   "wells_both": 7,
+   "cgwb": 5,
+   "before": 11.37,
+   "after": 13.5,
+   "change": -1.26,
+   "rising": 1
+  },
+  {
+   "district": "Nirmal",
+   "wells": 49,
+   "wells_both": 28,
+   "cgwb": 42,
+   "before": 8.77,
+   "after": 10.69,
+   "change": -1.54,
+   "rising": 4
+  },
+  {
+   "district": "Nizamabad",
+   "wells": 80,
+   "wells_both": 45,
+   "cgwb": 37,
+   "before": 10.97,
+   "after": 13.52,
+   "change": -2.54,
+   "rising": 8
+  },
+  {
+   "district": "Peddapalli",
+   "wells": 27,
+   "wells_both": 16,
+   "cgwb": 14,
+   "before": 7.92,
+   "after": 10.42,
+   "change": -1.68,
+   "rising": 3
+  },
+  {
+   "district": "Rajanna Sircilla",
+   "wells": 31,
+   "wells_both": 10,
+   "cgwb": 11,
+   "before": 13.06,
+   "after": 14.94,
+   "change": -1.31,
+   "rising": 3
+  },
+  {
+   "district": "Rangareddy",
+   "wells": 103,
+   "wells_both": 52,
+   "cgwb": 71,
+   "before": 14.8,
+   "after": 16.3,
+   "change": -0.79,
+   "rising": 22
+  },
+  {
+   "district": "Sangareddy",
+   "wells": 81,
+   "wells_both": 32,
+   "cgwb": 52,
+   "before": 15.57,
+   "after": 19.11,
+   "change": -2.33,
+   "rising": 3
+  },
+  {
+   "district": "Siddipet",
+   "wells": 56,
+   "wells_both": 21,
+   "cgwb": 28,
+   "before": 16.01,
+   "after": 17.99,
+   "change": -0.81,
+   "rising": 7
+  },
+  {
+   "district": "Suryapet",
+   "wells": 64,
+   "wells_both": 15,
+   "cgwb": 39,
+   "before": 7.78,
+   "after": 8.32,
+   "change": -0.96,
+   "rising": 5
+  },
+  {
+   "district": "Vikarabad",
+   "wells": 72,
+   "wells_both": 49,
+   "cgwb": 47,
+   "before": 12.5,
+   "after": 14.93,
+   "change": -1.87,
+   "rising": 9
+  },
+  {
+   "district": "Wanaparthy",
+   "wells": 24,
+   "wells_both": 7,
+   "cgwb": 15,
+   "before": 12.21,
+   "after": 11.62,
+   "change": 0.92,
+   "rising": 4
+  },
+  {
+   "district": "Warangal (R)",
+   "wells": 35,
+   "wells_both": 20,
+   "cgwb": 21,
+   "before": 7.89,
+   "after": 9.08,
+   "change": -0.38,
+   "rising": 6
+  },
+  {
+   "district": "Warangal (U)",
+   "wells": 23,
+   "wells_both": 14,
+   "cgwb": 15,
+   "before": 9.04,
+   "after": 11.15,
+   "change": -0.93,
+   "rising": 4
+  },
+  {
+   "district": "Yadadri Bhongiri",
+   "wells": 42,
+   "wells_both": 9,
+   "cgwb": 41,
+   "before": 11.41,
+   "after": 10.33,
+   "change": 0.41,
+   "rising": 6
+  }
+ ]
+}

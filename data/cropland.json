@@ -1,0 +1,434 @@
+{
+ "bounds": [
+  77.0,
+  14.99853,
+  82.0126,
+  20.0
+ ],
+ "before": {
+  "year": 2011,
+  "epoch": "2008–2011"
+ },
+ "after": {
+  "year": 2019,
+  "epoch": "2016–2019"
+ },
+ "state": {
+  "2003": {
+   "epoch": "2000–2003",
+   "pct": 41.6,
+   "km2": 51739
+  },
+  "2007": {
+   "epoch": "2004–2007",
+   "pct": 45.3,
+   "km2": 56323
+  },
+  "2011": {
+   "epoch": "2008–2011",
+   "pct": 47.7,
+   "km2": 59334
+  },
+  "2015": {
+   "epoch": "2012–2015",
+   "pct": 51.6,
+   "km2": 64167
+  },
+  "2019": {
+   "epoch": "2016–2019",
+   "pct": 54.8,
+   "km2": 68185
+  }
+ },
+ "districts": [
+  {
+   "district": "Yadadri Bhongiri",
+   "pct_before": 43.6,
+   "pct_after": 60.5,
+   "change_pp": 16.9,
+   "km2_before": 1654,
+   "km2_after": 2296,
+   "lon": 79.0907,
+   "lat": 17.4261
+  },
+  {
+   "district": "Nalgonda",
+   "pct_before": 51.5,
+   "pct_after": 64.6,
+   "change_pp": 13.1,
+   "km2_before": 4060,
+   "km2_after": 5089,
+   "lon": 79.2256,
+   "lat": 16.8659
+  },
+  {
+   "district": "Narayanpet",
+   "pct_before": 59.6,
+   "pct_after": 71.9,
+   "change_pp": 12.3,
+   "km2_before": 1497,
+   "km2_after": 1806,
+   "lon": 77.6164,
+   "lat": 16.6878
+  },
+  {
+   "district": "Jangaon",
+   "pct_before": 58.6,
+   "pct_after": 70.1,
+   "change_pp": 11.5,
+   "km2_before": 1555,
+   "km2_after": 1861,
+   "lon": 79.2112,
+   "lat": 17.8282
+  },
+  {
+   "district": "Rangareddy",
+   "pct_before": 43.7,
+   "pct_after": 53.6,
+   "change_pp": 9.9,
+   "km2_before": 2440,
+   "km2_after": 2994,
+   "lon": 78.4049,
+   "lat": 17.1384
+  },
+  {
+   "district": "Komaram Bheem",
+   "pct_before": 23.8,
+   "pct_after": 33.1,
+   "change_pp": 9.3,
+   "km2_before": 1208,
+   "km2_after": 1677,
+   "lon": 79.4217,
+   "lat": 19.3348
+  },
+  {
+   "district": "Jogulamba",
+   "pct_before": 64.5,
+   "pct_after": 73.4,
+   "change_pp": 9.0,
+   "km2_before": 1766,
+   "km2_after": 2012,
+   "lon": 77.7319,
+   "lat": 16.0868
+  },
+  {
+   "district": "Siddipet",
+   "pct_before": 59.2,
+   "pct_after": 67.7,
+   "change_pp": 8.6,
+   "km2_before": 2443,
+   "km2_after": 2798,
+   "lon": 78.9063,
+   "lat": 18.037
+  },
+  {
+   "district": "Mahabubabad",
+   "pct_before": 46.7,
+   "pct_after": 55.1,
+   "change_pp": 8.3,
+   "km2_before": 1852,
+   "km2_after": 2181,
+   "lon": 80.0594,
+   "lat": 17.729
+  },
+  {
+   "district": "Mancherial",
+   "pct_before": 26.7,
+   "pct_after": 34.7,
+   "change_pp": 8.0,
+   "km2_before": 1127,
+   "km2_after": 1462,
+   "lon": 79.5192,
+   "lat": 18.988
+  },
+  {
+   "district": "Bhadradri",
+   "pct_before": 21.5,
+   "pct_after": 29.0,
+   "change_pp": 7.6,
+   "km2_before": 2611,
+   "km2_after": 3530,
+   "lon": 80.643,
+   "lat": 17.913
+  },
+  {
+   "district": "Mahabubnagar",
+   "pct_before": 58.6,
+   "pct_after": 65.8,
+   "change_pp": 7.3,
+   "km2_before": 1825,
+   "km2_after": 2052,
+   "lon": 78.0588,
+   "lat": 16.7251
+  },
+  {
+   "district": "Kamareddy",
+   "pct_before": 52.4,
+   "pct_after": 59.3,
+   "change_pp": 6.9,
+   "km2_before": 2102,
+   "km2_after": 2378,
+   "lon": 78.0578,
+   "lat": 18.3168
+  },
+  {
+   "district": "Rajanna Sircilla",
+   "pct_before": 49.7,
+   "pct_after": 56.6,
+   "change_pp": 6.9,
+   "km2_before": 1005,
+   "km2_after": 1144,
+   "lon": 78.7674,
+   "lat": 18.4347
+  },
+  {
+   "district": "Sangareddy",
+   "pct_before": 57.4,
+   "pct_after": 64.0,
+   "change_pp": 6.6,
+   "km2_before": 2800,
+   "km2_after": 3122,
+   "lon": 77.8273,
+   "lat": 17.8555
+  },
+  {
+   "district": "Vikarabad",
+   "pct_before": 57.7,
+   "pct_after": 63.9,
+   "change_pp": 6.2,
+   "km2_before": 2292,
+   "km2_after": 2540,
+   "lon": 77.739,
+   "lat": 17.271
+  },
+  {
+   "district": "Wanaparthy",
+   "pct_before": 65.5,
+   "pct_after": 71.5,
+   "change_pp": 5.9,
+   "km2_before": 1624,
+   "km2_after": 1771,
+   "lon": 78.0027,
+   "lat": 16.2737
+  },
+  {
+   "district": "Warangal (R)",
+   "pct_before": 70.8,
+   "pct_after": 76.5,
+   "change_pp": 5.7,
+   "km2_before": 1605,
+   "km2_after": 1735,
+   "lon": 79.8223,
+   "lat": 17.9274
+  },
+  {
+   "district": "Khammam",
+   "pct_before": 59.3,
+   "pct_after": 64.9,
+   "change_pp": 5.6,
+   "km2_before": 3050,
+   "km2_after": 3335,
+   "lon": 80.3966,
+   "lat": 17.1888
+  },
+  {
+   "district": "Warangal (U)",
+   "pct_before": 65.2,
+   "pct_after": 70.5,
+   "change_pp": 5.3,
+   "km2_before": 732,
+   "km2_after": 791,
+   "lon": 79.5324,
+   "lat": 18.0284
+  },
+  {
+   "district": "Nagarkurnool",
+   "pct_before": 42.8,
+   "pct_after": 47.9,
+   "change_pp": 5.2,
+   "km2_before": 2884,
+   "km2_after": 3233,
+   "lon": 78.6839,
+   "lat": 16.4156
+  },
+  {
+   "district": "Medak",
+   "pct_before": 51.5,
+   "pct_after": 56.3,
+   "change_pp": 4.8,
+   "km2_before": 1610,
+   "km2_after": 1758,
+   "lon": 78.1607,
+   "lat": 17.9496
+  },
+  {
+   "district": "Suryapet",
+   "pct_before": 73.9,
+   "pct_after": 78.6,
+   "change_pp": 4.7,
+   "km2_before": 2826,
+   "km2_after": 3006,
+   "lon": 79.7988,
+   "lat": 17.0821
+  },
+  {
+   "district": "Nizamabad",
+   "pct_before": 54.6,
+   "pct_after": 58.7,
+   "change_pp": 4.2,
+   "km2_before": 2629,
+   "km2_after": 2832,
+   "lon": 78.2241,
+   "lat": 18.7133
+  },
+  {
+   "district": "Nirmal",
+   "pct_before": 42.2,
+   "pct_after": 46.0,
+   "change_pp": 3.8,
+   "km2_before": 1773,
+   "km2_after": 1933,
+   "lon": 78.3733,
+   "lat": 19.0949
+  },
+  {
+   "district": "Medchal",
+   "pct_before": 25.7,
+   "pct_after": 29.5,
+   "change_pp": 3.8,
+   "km2_before": 301,
+   "km2_after": 346,
+   "lon": 78.5333,
+   "lat": 17.5288
+  },
+  {
+   "district": "Jagtial",
+   "pct_before": 50.0,
+   "pct_after": 53.7,
+   "change_pp": 3.7,
+   "km2_before": 1580,
+   "km2_after": 1697,
+   "lon": 78.9346,
+   "lat": 18.8085
+  },
+  {
+   "district": "Jayashankar",
+   "pct_before": 35.6,
+   "pct_after": 39.2,
+   "change_pp": 3.6,
+   "km2_before": 1142,
+   "km2_after": 1258,
+   "lon": 79.9624,
+   "lat": 18.5078
+  },
+  {
+   "district": "Mulugu",
+   "pct_before": 22.8,
+   "pct_after": 26.4,
+   "change_pp": 3.6,
+   "km2_before": 768,
+   "km2_after": 889,
+   "lon": 80.2022,
+   "lat": 18.3115
+  },
+  {
+   "district": "Peddapalli",
+   "pct_before": 56.2,
+   "pct_after": 58.8,
+   "change_pp": 2.6,
+   "km2_before": 1461,
+   "km2_after": 1528,
+   "lon": 79.4983,
+   "lat": 18.6274
+  },
+  {
+   "district": "Karimnagar",
+   "pct_before": 74.5,
+   "pct_after": 77.0,
+   "change_pp": 2.5,
+   "km2_before": 1766,
+   "km2_after": 1825,
+   "lon": 79.2134,
+   "lat": 18.4066
+  },
+  {
+   "district": "Adilabad",
+   "pct_before": 36.2,
+   "pct_after": 37.9,
+   "change_pp": 1.6,
+   "km2_before": 1668,
+   "km2_after": 1744,
+   "lon": 78.6238,
+   "lat": 19.5343
+  },
+  {
+   "district": "Hyderabad",
+   "pct_before": 6.5,
+   "pct_after": 7.4,
+   "change_pp": 1.0,
+   "km2_before": 20,
+   "km2_after": 23,
+   "lon": 78.4672,
+   "lat": 17.4143
+  }
+ ],
+ "official": [
+  {
+   "label": "Gross irrigated area",
+   "before": "62.5 lakh acres (2014-15)",
+   "after": "135 lakh acres (2021-22)",
+   "source": "https://www.nitiforstates.gov.in/public-assets/Policy/policy_files/RSSNAM000500.pdf"
+  },
+  {
+   "label": "Paddy sown, kharif",
+   "before": "22.7 lakh acres (2014)",
+   "after": "65.0 lakh acres (2022)",
+   "source": "https://thenewsminute.com/telangana/telanganas-irrigated-area-has-increased-what-role-have-irrigation-projects-played"
+  },
+  {
+   "label": "Gross cropped area",
+   "before": "129 lakh acres (2014-15)",
+   "after": "233 lakh acres (2022-23)",
+   "source": "https://thenewsminute.com/telangana/telanganas-irrigated-area-has-increased-what-role-have-irrigation-projects-played"
+  }
+ ],
+ "legend": {
+  "ramp": [
+   [
+    0,
+    [
+     236,
+     245,
+     210
+    ]
+   ],
+   [
+    50,
+    [
+     104,
+     174,
+     92
+    ]
+   ],
+   [
+    100,
+    [
+     18,
+     94,
+     46
+    ]
+   ]
+  ],
+  "loss": [
+   196,
+   60,
+   57
+  ],
+  "gain": [
+   43,
+   108,
+   176
+  ],
+  "change_full": 40
+ }
+}
