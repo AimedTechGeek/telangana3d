@@ -247,6 +247,33 @@ cd ../telangana3d-pages && git add -A && git commit -m "Deploy the built map fro
 Every URL in `web/` is relative, so the same files work locally and under the
 project path.
 
+### Hosted tiles
+
+By default the map fetches about 18 MB of GeoJSON at boot. `publish_tilesets.py`
+instead uploads the static layers to Mapbox as vector tilesets (Mapbox Tiling
+Service) so the map loads only the tiles in view:
+
+```bash
+export MAPBOX_SECRET_TOKEN=sk....        # secret token with tilesets:read, tilesets:write, tilesets:list
+uv run python publish_tilesets.py        # or name layers: publish_tilesets.py flow tanks
+```
+
+It covers `flow`, `tanks`, `tank_points`, `canals`, `contours`, `districts`,
+`mask`, `state` and `groundwater` (zoom 5 to 12, simplified harder at low
+zoom), publishes each as `<username>.tg-<layer>`, waits for the job and writes
+`web/data/tilesets.json` (layer to `mapbox://` url and source layer). The user
+name is read from the public token (`MAPBOX_TOKEN`, JWT field `u`) or given
+with `--username`. Without the secret token the script exits with code 2.
+
+The map reads `data/tilesets.json` at boot: present, the mapped layers become
+`vector` sources; absent, everything loads from GeoJSON exactly as before, so
+deleting the file switches back. `links` and `proposal` always stay GeoJSON
+(they need `lineMetrics` and change often); flow, tank counts, district label
+points and the proposal are still fetched as small JSON where the panels
+need them. `web/data/` is git-ignored, so copy `tilesets.json` along with the
+rest when you redeploy. Re-run the script after rebuilding the data. Free tier
+and terms: DATA_SOURCES.md, section 1c.
+
 ## Data and choices
 
 Full provenance, licences, access dates and processing notes for every dataset
