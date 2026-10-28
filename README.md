@@ -187,6 +187,8 @@ empty `{}` while they do not exist, so the default page load logs no console err
 static host without that fallback (GitHub Pages) logs a harmless 404 for each file.
 `tilesets.json` is read once, by a synchronous request at load (the style needs it at once).
 
+Not yet run against a real account: `upload_font.py` has not been executed against a real Mapbox account, so the upload and the `fonts.json` it writes are untested.
+
 ### Camera
 
 During a river flight the field of view narrows to 28 degrees (the `fov` camera
@@ -254,6 +256,8 @@ Every URL in `web/` is relative, so the same files work locally and under the
 project path.
 
 ### Hosted tiles
+
+Not yet run against a real account: `publish_tilesets.py` and `publish_flow_raster.py` have not been executed against a real Mapbox account, so the upload, the status polling and the `tilesets.json` they write are untested.
 
 By default the map fetches about 18 MB of GeoJSON at boot. `publish_tilesets.py`
 instead uploads the static layers to Mapbox as vector tilesets (Mapbox Tiling
