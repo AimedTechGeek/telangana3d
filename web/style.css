@@ -192,7 +192,6 @@ header.filters-head.card { flex-direction: row; padding: 8px 10px 8px 16px; }
 .filters .tabs button b { font-family: var(--mono); font-weight: 500; font-size: 10.5px; color: var(--muted); margin-left: 4px; }
 .filters .tabs [aria-pressed="true"] b { color: var(--ink-2); }
 .fab-right { left: auto; right: 16px; }
-.mk-dam.era-hidden { display: none; }
 
 /* ---------- readout ---------- */
 .readout { display: flex; flex-direction: column; gap: 2px; }
@@ -289,25 +288,12 @@ section { display: flex; flex-direction: column; gap: 8px; }
 .key.prop.tunnel { width: 22px; height: 0; border-top: 4px dotted var(--prop); border-radius: 0; }
 .key.prop.cmd { background: rgba(20,184,166,.4); border-radius: 2px; }
 .dam-popup .kind.prop { color: var(--prop); }
-body.proposal-off #proposal-card, body.proposal-off .mk-new { display: none; }
-.mk-new { display: flex; align-items: center; gap: 5px; cursor: pointer; --mk: var(--prop-pool); }
-.mk-new.delivery, .mk-new.canal, .mk-new.tunnel { --mk: var(--prop); }
-.mk-new.pump { --mk: var(--prop-pump); }
-.mk-new .ic { display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: var(--panel-solid); border: 1.5px dashed var(--mk); color: var(--mk); box-shadow: 0 1px 4px rgba(0,0,0,.3); }
-.mk-new .ic svg { width: 13px; height: 13px; }
-.mk-new .lbl { padding: 2px 7px; border-radius: 7px; white-space: nowrap; font-size: 11px; font-weight: 600; background: var(--panel); backdrop-filter: blur(6px); border: 1px dashed var(--mk); box-shadow: 0 2px 8px rgba(0,0,0,.18); }
-.mk-new .lbl .e { font-family: var(--mono); font-weight: 500; color: var(--ink-2); margin-left: 4px; }
-.mk-new .lbl .st { margin-left: 5px; padding: 0 4px; border-radius: 4px; font-size: 9px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--panel-solid); background: var(--mk); }
-.mk-new.pump .lbl, .mk-new.canal .lbl, .mk-new.tunnel .lbl, .mk-new.main .lbl { font-size: 10.5px; font-weight: 500; }
-.mk-new.main { --mk: var(--prop); }
-body.z-far .mk-new.pump, body.z-far .mk-new.canal, body.z-far .mk-new.tunnel, body.z-far .mk-new.main { display: none; }
-body.labels-off .mk-new { display: none; }
+body.proposal-off #proposal-card { display: none; }
 .key-ic { display: inline-grid; place-items: center; width: 15px; height: 15px; border-radius: 50%; border: 1px dashed var(--prop); color: var(--prop); vertical-align: middle; margin: 0 1px; }
 .key-ic svg { width: 10px; height: 10px; }
 .prop-table td.feed { font-family: var(--font); font-size: 10.5px; color: var(--ink-2); text-align: left; }
 .key.prop.trunk { width: 22px; height: 0; border-top: 4px solid var(--prop-trunk); border-radius: 0; }
 .key.prop.trunk.old { border-top: 2px dashed var(--prop-trunk); }
-.mk-new.trunk { --mk: var(--prop-trunk); }
 .dam-popup .kind.trunk { color: var(--prop-trunk); }
 .prop-system summary { display: flex; flex-direction: column; gap: 2px; cursor: pointer; padding: 4px 0; }
 .prop-system summary b { font-size: 12px; }
@@ -373,17 +359,14 @@ body.labels-off .mk-new { display: none; }
 
 /* Kaleshwaram links */
 .legend-inline .key.link { height: 3px; background: var(--link); margin-left: 0; }
-.legend-inline .ic.wip, .hint .ic.wip, .mk-wip .ic {
+.legend-inline .ic.wip, .hint .ic.wip{
   display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; color: var(--link);
   background: var(--panel-solid); border: 1px solid var(--border); box-shadow: 0 1px 4px rgba(0,0,0,.3);
 }
 .legend-inline .ic.wip { margin-left: 8px; margin-right: 2px; }
 .hint .ic.wip { width: 16px; height: 16px; vertical-align: middle; margin: 0 2px; }
-.legend-inline .ic.wip svg, .hint .ic.wip svg, .mk-wip .ic svg { width: 13px; height: 13px; }
+.legend-inline .ic.wip svg, .hint .ic.wip svg{ width: 13px; height: 13px; }
 .hint .ic.wip svg { width: 10px; height: 10px; }
-.mk-wip { display: flex; align-items: center; gap: 5px; cursor: default; }
-.mk-wip .lbl { padding: 2px 6px; border-radius: 6px; white-space: nowrap; font-size: 10.5px; font-weight: 500; color: var(--ink-2); background: var(--panel); backdrop-filter: blur(6px); border: 1px dashed var(--link); }
-body.links-off .mk-wip { display: none; }
 .link-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
 .link-list .group { padding: 8px 6px 3px; font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-2); display: flex; gap: 8px; align-items: center; }
 .link-list .group i { display: inline-block; width: 14px; height: 3px; border-radius: 2px; background: var(--link); }
@@ -396,38 +379,23 @@ body.links-off .mk-wip { display: none; }
 .link-list .row.planned .tag { color: var(--muted); }
 .link-list .chain { font-size: 12.5px; font-weight: 500; line-height: 1.3; }
 .link-list .chain small { display: block; font-size: 10.5px; font-weight: 400; color: var(--muted); margin-top: 1px; }
-.mk-pump .ic { color: var(--link); }
-.mk-pump { display: flex; align-items: center; gap: 5px; cursor: default; }
-.mk-pump .ic { display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: var(--panel-solid); border: 1px solid var(--border); box-shadow: 0 1px 4px rgba(0,0,0,.3); }
-.mk-pump .ic svg { width: 13px; height: 13px; }
-.mk-pump .lbl { padding: 2px 6px; border-radius: 6px; white-space: nowrap; font-size: 10.5px; font-weight: 500; background: var(--panel); backdrop-filter: blur(6px); border: 1px solid var(--border); }
-body.z-far .mk-pump .lbl, body.labels-off .mk-pump .lbl { display: none; }
-body.links-off .mk-pump { display: none; }
 
 /* dams and barrages */
 .dam-legend { display: flex; align-items: center; gap: 6px; margin: 0; font-size: 11px; color: var(--muted); }
-.dam-legend .ic, .mk-dam .ic {
+.dam-legend .ic{
   display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%;
   background: var(--panel-solid); border: 1px solid var(--border); box-shadow: 0 1px 4px rgba(0,0,0,.3);
 }
-.dam-legend .ic svg, .mk-dam .ic svg { width: 14px; height: 14px; }
-.dam-legend .ic.dam, .mk-dam.dam .ic { color: #b4532a; }
-.dam-legend .ic.barrage, .mk-dam.barrage .ic { color: #0f7f78; }
-:root[data-theme="dark"] .dam-legend .ic.dam, :root[data-theme="dark"] .mk-dam.dam .ic { color: #f2996b; }
-:root[data-theme="dark"] .dam-legend .ic.barrage, :root[data-theme="dark"] .mk-dam.barrage .ic { color: #4fd1c5; }
+.dam-legend .ic svg{ width: 14px; height: 14px; }
+.dam-legend .ic.dam{ color: #b4532a; }
+.dam-legend .ic.barrage{ color: #0f7f78; }
+:root[data-theme="dark"] .dam-legend .ic.dam{ color: #f2996b; }
+:root[data-theme="dark"] .dam-legend .ic.barrage{ color: #4fd1c5; }
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .dam-legend .ic.dam, :root:not([data-theme="light"]) .mk-dam.dam .ic { color: #f2996b; }
-  :root:not([data-theme="light"]) .dam-legend .ic.barrage, :root:not([data-theme="light"]) .mk-dam.barrage .ic { color: #4fd1c5; }
+  :root:not([data-theme="light"]) .dam-legend .ic.dam{ color: #f2996b; }
+  :root:not([data-theme="light"]) .dam-legend .ic.barrage{ color: #4fd1c5; }
 }
 .dam-legend .ic + .ic { margin-left: 6px; }
-.mk-dam { display: flex; align-items: center; gap: 5px; cursor: pointer; }
-.mk-dam .lbl {
-  padding: 2px 7px; border-radius: 7px; white-space: nowrap; font-size: 11px; font-weight: 600;
-  background: var(--panel); backdrop-filter: blur(6px); border: 1px solid var(--border); box-shadow: 0 2px 8px rgba(0,0,0,.18);
-}
-.mk-dam .lbl .e { font-family: var(--mono); font-weight: 500; color: var(--ink-2); margin-left: 4px; }
-.mk-dam.open .lbl .e { display: none; }            /* the popup carries the details */
-.mk-dam.open .ic { box-shadow: 0 0 0 3px var(--accent-soft), 0 1px 4px rgba(0,0,0,.3); }
 
 .dam-popup .mapboxgl-popup-content {
   background: var(--panel-solid); color: var(--ink); border: 1px solid var(--border); border-radius: 12px;
@@ -459,23 +427,7 @@ body.links-off .mk-pump { display: none; }
 .dam-popup.mapboxgl-popup-anchor-right .mapboxgl-popup-tip { border-left-color: var(--panel-solid); }
 :root[data-theme="dark"] .dam-popup .kind.dam { color: #f2996b; }
 :root[data-theme="dark"] .dam-popup .kind.barrage { color: #4fd1c5; }
-/* Dam labels follow only the Dams chip: visible at every zoom, unaffected by Labels. */
-body.dams-off .mk-dam { display: none; }
 
-/* Works still to be built: dashed outline, muted weight and a cone badge; approximate positions get a dotted ring. */
-.mk-dam .ic, .mk-pump .ic { position: relative; }
-.mk-dam.pending .ic, .mk-pump.pending .ic { border: 1.5px dashed currentColor; background: var(--panel); }
-.mk-dam.pending .lbl, .mk-pump.pending .lbl { border-style: dashed; font-weight: 500; }
-.mk-dam.proposed .ic, .mk-pump.proposed .ic { opacity: .8; }
-.mk-dam.approx .ic, .mk-pump.approx .ic { outline: 1.5px dotted currentColor; outline-offset: 2px; }
-.mk-dam .lbl .st, .mk-pump .lbl .st { font-family: var(--mono); font-weight: 500; font-size: 10px; color: var(--muted); margin-left: 4px; }
-.mk-dam.open .lbl .st { display: none; }
-.mk-dam .badge, .mk-pump .badge {
-  position: absolute; right: -7px; bottom: -6px; width: 14px; height: 14px; border-radius: 50%; display: grid; place-items: center;
-  color: var(--link); background: var(--panel-solid); border: 1px solid var(--border); opacity: 1;
-}
-.mk-dam .badge svg, .mk-pump .badge svg { width: 9px; height: 9px; }
-.mk-dam.status-hidden, .mk-pump.status-hidden, .mk-wip.status-hidden { display: none; }
 .dam-popup .kind.pending { color: var(--muted); }
 .pending-list .row .tag { color: var(--ink-2); }
 .pending-list .row.proposed .tag { color: var(--muted); }
@@ -485,18 +437,6 @@ body.dams-off .mk-dam { display: none; }
 .pending-list li.note .chain small { display: block; font-size: 10.5px; font-weight: 400; color: var(--muted); margin-top: 1px; }
 .pending-list .group i { background: var(--muted); }
 
-.mk-peak { position: relative; width: 18px; height: 18px; cursor: pointer; }
-.mk-peak .ring { position: absolute; inset: 0; border-radius: 50%; border: 2px solid var(--river); animation: pulse 1.8s ease-out infinite; }
-.mk-peak .core { position: absolute; inset: 5px; border-radius: 50%; background: var(--river); border: 2px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,.4); }
-.mk-peak .lbl {
-  position: absolute; left: 24px; top: -3px; padding: 3px 7px; border-radius: 7px; white-space: nowrap;
-  background: var(--panel); backdrop-filter: blur(6px); border: 1px solid var(--border); box-shadow: 0 2px 8px rgba(0,0,0,.18);
-  font-size: 11px; font-weight: 600;
-}
-.mk-peak .lbl .e { font-family: var(--mono); font-weight: 500; color: var(--ink-2); margin-left: 4px; }
-@keyframes pulse { 0% { transform: scale(.6); opacity: 1; } 100% { transform: scale(2.4); opacity: 0; } }
-body.labels-off .mk-peak .lbl { display: none; }   /* Labels governs city, district and peak labels */
-@media (prefers-reduced-motion: reduce) { .mk-peak .ring { animation: none; } }
 
 .flow-popup .mapboxgl-popup-content {
   background: var(--panel-solid); color: var(--ink); border: 1px solid var(--border); border-radius: 9px;
@@ -561,27 +501,8 @@ details.table td { padding: 2px 0; border-bottom: 1px solid var(--hair); }
 #city-list .val { font-family: var(--mono); font-size: 12px; font-variant-numeric: tabular-nums; text-align: right; }
 .credits { font-size: 10.5px; color: var(--muted); }
 
-/* ---------- map markers ---------- */
-.mk-city { display: flex; align-items: center; gap: 6px; cursor: pointer; transform: translateY(0); }
-.mk-city .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--ink); border: 2px solid var(--panel-solid); box-shadow: 0 1px 4px rgba(0,0,0,.4); flex: none; }
-.mk-city .lbl {
-  display: flex; align-items: baseline; gap: 5px; padding: 3px 7px; border-radius: 7px;
-  background: var(--panel); backdrop-filter: blur(6px); border: 1px solid var(--border);
-  font-size: 11.5px; font-weight: 600; white-space: nowrap; box-shadow: 0 2px 8px rgba(0,0,0,.18);
-}
-.mk-city .lbl .e { font-family: var(--mono); font-weight: 500; font-size: 10.5px; color: var(--ink-2); }
-.mk-city.town .lbl { font-size: 10.5px; font-weight: 500; }
-.mk-city.active .dot { background: var(--accent); }
-.mk-district { font-size: 10px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-2); opacity: .75; pointer-events: none; text-shadow: 0 0 4px var(--bg), 0 0 8px var(--bg); white-space: nowrap; }
-.mk-district .cnt, .mk-district.named-by-city { display: none; }     /* the city label already names the district */
-body.z-far .mk-city.town, body.z-far .mk-district { display: none; }
-/* Mission Kakatiya mode: every district shows its name and the tanks taken up, at any zoom. */
-body.tank-mk .mk-district, body.tank-mk.z-far .mk-district, body.tank-mk .mk-district.named-by-city { display: flex; flex-direction: column; align-items: center; gap: 1px; opacity: .95; }
-body.tank-mk .mk-district .cnt { display: block; font-family: var(--mono); font-size: 11px; font-weight: 600; letter-spacing: 0; text-transform: none; color: var(--ink); }
-body.labels-off .mk-city .lbl, body.labels-off .mk-district, body.labels-off.tank-mk .mk-district { display: none; }
-.mk-scrub { width: 14px; height: 14px; border-radius: 50%; background: var(--river); border: 3px solid #fff; box-shadow: 0 0 0 3px rgba(42,120,214,.35), 0 2px 6px rgba(0,0,0,.4); }
 
-/* ---------- maplibre chrome ---------- */
+/* ---------- mapbox chrome ---------- */
 .mapboxgl-ctrl-group { background: var(--panel) !important; backdrop-filter: blur(12px); border: 1px solid var(--border); border-radius: 12px !important; box-shadow: var(--shadow) !important; overflow: hidden; }
 .mapboxgl-ctrl-group button { width: 34px !important; height: 34px !important; background: transparent !important; }
 .mapboxgl-ctrl-group button + button { border-top: 1px solid var(--border) !important; }

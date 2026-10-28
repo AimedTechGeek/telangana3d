@@ -17,7 +17,7 @@ from playwright.sync_api import sync_playwright
 ROOT = Path(__file__).parent
 OUT = ROOT / "out"
 URL = "http://127.0.0.1:8765/?debug"
-ELEVATION_TOLERANCE_M = 15      # listed city value is a 1 km median; decoded is one pixel
+ELEVATION_TOLERANCE_M = 15      # listed city value is a Copernicus 1 km median; decoded is Mapbox Terrain-DEM under the map's surface
 
 
 def main() -> int:

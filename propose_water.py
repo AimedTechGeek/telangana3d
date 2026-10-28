@@ -490,13 +490,20 @@ def build_systems(grids: Grids, router: Router, dams: list[dict], sources: list[
             levels[to_name] = float(level)
             fx, fy, _ = sites[from_name]
             line = router.route((fx, fy), (to_site[0], to_site[1]))
+            # water above ground along the stage, sampled evenly: a lifted stage pumps at its start and runs at the upper pool's
+            # level, a gravity stage falls from pool to pool; the map lifts the line off the terrain by this much
+            height_above_ground = []
+            if line is not None:
+                _, _, _, ground = profile_along(grids, line, step_m=1000.0)
+                water = np.linspace(float(level) if lift else from_level, float(level), len(ground))
+                height_above_ground = np.maximum(0.0, water - ground).round(1).tolist()
             mw = q * lift * 9.81 / PUMP_EFFICIENCY / 1000 if lift else 0.0
             rate = {"tunnel": COST_TUNNEL_PER_KM(q), "canal": COST_CANAL_PER_KM(q) * CANAL_SINUOSITY, "gravity": COST_CANAL_PER_KM(q) * CANAL_SINUOSITY, "pressure main": COST_MAIN_PER_KM(q)}[conveyance]
             capex = 0.0 if existing else COST_PUMP_PER_MW * mw * STANDBY + rate * km
             stages.append({"from": from_name, "to": to_name, "to_level_m": level, "from_level_m": round(from_level), "lift_m": lift, "cumulative_lift_m": round(cumulative[to_name]), "existing": existing,
                            "conveyance": conveyance, "km": km, "mw": round(mw), "capex_cr": round(capex), "placed_by": to_site[2],
                            "lon": round(grids.to_wgs.transform(to_site[0], to_site[1])[0], 5), "lat": round(grids.to_wgs.transform(to_site[0], to_site[1])[1], 5),
-                           "line": line})
+                           "line": line, "_hg": height_above_ground})
             if lift or not existing:
                 stage_sources.append({"name": to_name, "kind": "existing reservoir" if to_site[2] == "map" else "new trunk stage", "basin": spec["basin"], "intake": spec["intake"],
                                       "scheme": spec["name"], "x": to_site[0], "y": to_site[1], "level_m": float(level), "base_lift_m": float(cumulative[to_name]),
@@ -785,9 +792,9 @@ def conveyance_for(grids: Grids, work: dict, src: dict, line: LineString) -> dic
     for i in range(len(xs) - 1):
         seg_kind = kinds[i + 1] if kinds[i + 1] == "pressure main" else kinds[i]
         if not segments or segments[-1]["kind"] != seg_kind:
-            segments.append({"kind": seg_kind, "xy": [(float(xs[i]), float(ys[i]))], "lv": [round(float(level[i]))]})
+            segments.append({"kind": seg_kind, "xy": [(float(xs[i]), float(ys[i]))], "hg": [round(max(0.0, float(level[i] - ground[i])), 1)]})
         segments[-1]["xy"].append((float(xs[i + 1]), float(ys[i + 1])))
-        segments[-1]["lv"].append(round(float(level[i + 1])))                  # water level at each vertex, for the 3D line on the map
+        segments[-1]["hg"].append(round(max(0.0, float(level[i + 1] - ground[i + 1])), 1))   # water above ground at each vertex: the map lifts the line by it
     lengths = {k: 0.0 for k in ("canal", "cut", "tunnel", "aqueduct", "pressure main")}
     for seg in segments:
         lengths[seg["kind"]] += LineString(seg["xy"]).length / 1000
@@ -1016,9 +1023,9 @@ def main() -> None:
                 features.append({"type": "Feature", "geometry": LineString(zip(lon, lat)).__geo_interface__,
                                  "properties": {"kind": "trunk", "system": s["name"], "stage": i + 1, "from": st["from"], "to": st["to"], "lift_m": st["lift_m"], "to_level_m": st["to_level_m"],
                                                 "existing": st["existing"], "conveyance": st["conveyance"], "km": st["km"], "mw": st["mw"], "tmc_per_year": s["tmc_per_year"], "design_cms": s["design_cms"],
-                                                # water level along the stage: a lifted stage pumps at its start and runs at the upper pool's level, a gravity stage falls between the pools
-                                                "lv": [st["to_level_m"] if st["lift_m"] else st["from_level_m"], st["to_level_m"]]}})
+                                                "hg": st["_hg"]}})
             st.pop("line", None)
+            st.pop("_hg", None)
     for r in works:
         if r["kind"] == "reservoir":
             features.append({"type": "Feature", "geometry": pool_polygon(grids, r["pool_rows"], r["pool_cols"]).__geo_interface__,
@@ -1031,7 +1038,7 @@ def main() -> None:
             features.append({"type": "Feature", "geometry": LineString(zip(lon, lat)).__geo_interface__,
                              "properties": {"kind": seg["kind"], "id": r["id"], "name": r["name"], "source": r["source"], "lift_m": r["lift_m"], "km": round(LineString(seg["xy"]).length / 1000, 1),
                                             "route_km": r["route_km"], "tunnel_km": r["tunnel_km"], "canal_km": r["canal_km"], "annual_tmc": r["annual_tmc"], "through_tmc": r["through_tmc"],
-                                            "lv": seg["lv"]}})
+                                            "hg": seg["hg"]}})
         for p in r["pumps"]:
             lon, lat = grids.to_wgs.transform(p["x"], p["y"])
             p["lon"], p["lat"] = round(lon, 5), round(lat, 5)

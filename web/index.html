@@ -100,7 +100,7 @@
           <h2>Water links</h2>
           <span class="legend-inline"><i class="key link"></i>operating<span class="ic wip"><svg viewBox="0 0 16 16" aria-hidden="true"><use href="#ic-wip"/></svg></span>in progress</span>
         </div>
-        <p class="summary">How water is moved between the structures: Kaleshwaram, the Sriram Sagar canals, the Srisailam Left Bank Canal, Kalwakurthy and Palamuru-Rangareddy. Moving chevrons show the direction of flow on operating links; dashed links with a cone are still being built. Click a link on the map or below for its years, terrain heights and distance. Lines are schematic, not the real canal and tunnel alignments.</p>
+        <p class="summary">How water is moved between the structures: Kaleshwaram, the Sriram Sagar canals, the Srisailam Left Bank Canal, Kalwakurthy and Palamuru-Rangareddy. A pulse of light travels along each operating link in the direction of pumping; dashed links with a cone are still being built. Click a link on the map or below for its years, terrain heights and distance. Lines are schematic, not the real canal and tunnel alignments.</p>
         <ol id="link-list" class="link-list"></ol>
         <div class="section-head"><h2>Kaleshwaram canal network</h2></div>
         <table class="official network" id="canal-network">
@@ -236,6 +236,14 @@
   <details class="card" open>
     <summary class="card-head"><span class="card-title">Terrain</span><svg class="chev" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></summary>
     <div class="card-body">
+      <div class="fgroup">
+        <p class="eyebrow">Basemap (Mapbox)</p>
+        <div class="tabs" role="group" aria-label="Basemap">
+          <button type="button" data-base="standard" aria-pressed="true">Standard</button>
+          <button type="button" data-base="satellite" aria-pressed="false">Satellite</button>
+        </div>
+        <p class="hint">Mapbox Standard (roads, towns, water, buildings in 3D when zoomed in; lit for day or night with the theme) or Mapbox Standard Satellite imagery. Switching to Satellite turns the relief colours off so the imagery shows.</p>
+      </div>
       <label class="slider">
       <span>Vertical exaggeration</span>
       <input type="range" id="exag" min="1" max="6" step="0.5" value="3">
@@ -277,7 +285,7 @@
           <button type="button" data-tank="tanks" aria-pressed="true">Tanks</button>
           <button type="button" data-tank="kakatiya" aria-pressed="false">Restored 2015–18</button>
         </div>
-        <p class="hint"><span class="key tank"></span> village tanks, lakes and reservoirs mapped in OpenStreetMap: dots sized by water spread, the real outlines when zoomed in. “Restored 2015–18” shades each district by the tanks taken up under Mission Kakatiya. No source publishes which tanks were restored with their locations, so the before / after 2014 view is per district, not per tank.</p>
+        <p class="hint"><span class="key tank"></span> village tanks, lakes and reservoirs mapped in OpenStreetMap: a glow of tank density at state level, dots sized by water spread closer in, the real outlines when zoomed in. “Restored 2015–18” shades each district by the tanks taken up under Mission Kakatiya. No source publishes which tanks were restored with their locations, so the before / after 2014 view is per district, not per tank.</p>
       </div>
       <div class="fgroup">
         <p class="eyebrow">Groundwater · depth to water in May (India-WRIS)</p>

@@ -4,6 +4,9 @@
 const DEM_TILESET = 'mapbox://mapbox.mapbox-terrain-dem-v1';   // 3D surface, hillshade, relief tint and the cursor readout
 const BASEMAPS = { standard: 'mapbox://styles/mapbox/standard', satellite: 'mapbox://styles/mapbox/standard-satellite' };
 let basemap = 'standard';          // standard | satellite
+let roadLabelsShown = false;       // the basemap's road shields and names, only once zoomed in (see updateLabelDensity)
+const labelData = {};              // label source id -> GeoJSON, built from the data at boot; the style picks them up (generateId gives feature ids)
+let scrubPoint = { type: 'FeatureCollection', features: [] };   // the river profile position on the map
 const TILE_PX = 256;               // Web Mercator tile width the metres-per-pixel formula is written for
 const HOME = { center: [79.35, 17.75], zoom: 7.05, pitch: 56, bearing: -18 };
 const RELIEF_STOPS = [              // metres above sea level -> colour (hypsometric tint)
@@ -32,9 +35,10 @@ const MAP_THEMES = {
     tank: '#3b95dc', tankEdge: '#1b5a93', tankRamp: ['#e6eef5', '#1d5f99'],
     gwDepth: [[0, '#0b5fa5'], [2, '#4f9bd8'], [5, '#a9d4ef'], [10, '#f2e2b8'], [20, '#d98b3c'], [40, '#7a2e0d']],   // metres below ground
     gwChange: [[-6, '#b2182b'], [-2, '#ef8a62'], [0, '#f4f1ea'], [2, '#67a9cf'], [6, '#2166ac']], gwStroke: '#ffffff',       // fell … rose
-    prop: '#0f766e', propPool: '#4f46e5', propPump: '#b45309', propTrunk: '#7c3aed', propCmdExisting: 'rgba(34,197,94,0.22)', propCmdNew: 'rgba(20,184,166,0.32)',
+    prop: '#0f766e', propPool: '#4f46e5', propPump: '#b45309', propTrunk: '#7c3aed', propPulse: '#ffffff', propCmdExisting: 'rgba(34,197,94,0.22)', propCmdNew: 'rgba(20,184,166,0.32)',
     flow: ['#86d9e3', '#36aee6', '#2566d8', '#1a3aa6', '#5f2aa8'],   // FLOW_CLASSES: cyan -> blue -> navy -> purple
     shadow: '#2b2016', highlight: '#fff4e2', accent: '#4e3d2e',
+    label: '#1f1d1a', labelMuted: '#6b6560', labelHalo: 'rgba(255,255,255,0.92)', labelActive: '#c2410c', iconBg: '#ffffff', damIcon: '#b4532a', barrageIcon: '#0f7f78', peakIcon: '#1a3aa6',
     lightPreset: 'day', reliefOpacity: 0.62, heat: ['#9fd0f0', '#3b95dc', '#1b5a93'],
   },
   dark: {
@@ -45,9 +49,10 @@ const MAP_THEMES = {
     tank: '#4fb3ff', tankEdge: '#bfe3ff', tankRamp: ['#161c26', '#3f8fd0'],
     gwDepth: [[0, '#9fd8ff'], [2, '#5eb0ea'], [5, '#2f6f9f'], [10, '#4a4238'], [20, '#b86b2a'], [40, '#ff9d5c']],
     gwChange: [[-6, '#ff6b6b'], [-2, '#c97a6a'], [0, '#2a2f38'], [2, '#5f9bd0'], [6, '#8fd0ff']], gwStroke: '#0b1a33',
-    prop: '#2dd4bf', propPool: '#818cf8', propPump: '#fbbf24', propTrunk: '#c4b5fd', propCmdExisting: 'rgba(74,222,128,0.20)', propCmdNew: 'rgba(45,212,191,0.30)',
+    prop: '#2dd4bf', propPool: '#818cf8', propPump: '#fbbf24', propTrunk: '#c4b5fd', propPulse: '#ffffff', propCmdExisting: 'rgba(74,222,128,0.20)', propCmdNew: 'rgba(45,212,191,0.30)',
     flow: ['#2f96a8', '#3cbbea', '#6a9cff', '#a9bdff', '#dcaaff'],   // FLOW_CLASSES: teal -> sky -> blue -> lilac on the dark surface
     shadow: '#000000', highlight: '#b9a68c', accent: '#000000',
+    label: '#f1efe9', labelMuted: '#b5b0a8', labelHalo: 'rgba(14,15,18,0.9)', labelActive: '#fb923c', iconBg: '#1b1e26', damIcon: '#f2996b', barrageIcon: '#4fd1c5', peakIcon: '#a9bdff',
     lightPreset: 'night', reliefOpacity: 0.55, heat: ['#1f3b55', '#3f8fd0', '#bfe3ff'],
   },
 };
@@ -68,7 +73,7 @@ function currentTheme() {
 function setTheme(theme) {
   document.documentElement.dataset.theme = theme;
   try { localStorage.setItem('theme', theme); } catch (_) { /* storage unavailable */ }
-  if (map && map.getLayer('background')) { applyMapTheme(); renderFlowLegend(); renderGwLegend(); syncArrowImage(); }
+  if (map && map.getLayer('relief')) ensureIcons(theme).then(() => { applyMapTheme(); renderFlowLegend(); renderGwLegend(); syncArrowImage(); });
 }
 try { const saved = localStorage.getItem('theme'); if (saved) document.documentElement.dataset.theme = saved; } catch (_) { /* ignore */ }
 
@@ -98,9 +103,12 @@ const FLOW_DASH = { length: 2.2, gap: 2.4 };          // in line widths
 const FLOW_DASH_STEPS = 10;                           // phase layers, all drawn every frame: keep small
 const FLOW_DASH_MIN_CMS = 20;                         // animate streams from 20 m³/s; smaller ones stay static
 const FLOW_TICK_MS = 70;
+const PULSE_MS = 2600, PULSE_LENGTH = 0.22;          // one pulse runs the length of a link or trunk stage in 2.6 s
+const pulseWindow = (p) => [p, Math.min(1, p + PULSE_LENGTH)];
 const FLOW_DASH_OPACITY = 0.9;
 let flowStep = 0;
 let flowAnimating = true;
+let styleReady = true;                               // false only while a basemap switch reloads the style
 
 function flowWidthExpr(scale) {
   const px = (zoomScale) => ['interpolate', ['linear'], FLOW_LOG_Q, ...FLOW_WIDTH_STOPS.flatMap(([l, w]) => [l, w * scale * zoomScale])];
@@ -216,7 +224,7 @@ let tankMode = 'tanks';                    // off | tanks | kakatiya
 let tanksLoaded = false;
 let tankSummary = null;
 const TANK_POLYGON_ZOOM = 9;               // real outlines from here up, centroid dots below
-const districtLabels = new Map();          // district -> label element (carries the Mission Kakatiya count)
+const TANK_HEAT_ZOOM = 8.5;                // a heatmap of tank density below this, fading into the dots
 const districtCentres = new Map();         // district -> [lon, lat]
 const tankVisibility = () => (tankMode !== 'off' && statusMode !== 'pending' ? 'visible' : 'none');   // tanks all exist today
 function tankLayers(t) {
@@ -233,7 +241,13 @@ function tankLayers(t) {
       paint: { 'fill-color': t.tank, 'fill-opacity': 0.72 } },
     { id: 'tanks-outline', type: 'line', source: 'tanks', minzoom: TANK_POLYGON_ZOOM, layout: { visibility: vis, 'line-join': 'round' },
       paint: { 'line-color': t.tankEdge, 'line-width': 0.8, 'line-opacity': 0.8 } },
-    { id: 'tanks-dots', type: 'circle', source: 'tank-points', maxzoom: TANK_POLYGON_ZOOM, layout: { visibility: vis },
+    { id: 'tanks-heat', type: 'heatmap', source: 'tank-points', maxzoom: TANK_HEAT_ZOOM, layout: { visibility: vis }, paint: {
+        'heatmap-weight': ['interpolate', ['linear'], ['sqrt', ['get', 'area_ha']], 0, 0.05, 30, 1],
+        'heatmap-radius': ['interpolate', ['linear'], ['zoom'], 5.6, 9, TANK_HEAT_ZOOM, 26],
+        'heatmap-intensity': 0.7,
+        'heatmap-color': ['interpolate', ['linear'], ['heatmap-density'], 0, 'rgba(0,0,0,0)', 0.2, t.heat[0], 0.6, t.heat[1], 1, t.heat[2]],
+        'heatmap-opacity': ['interpolate', ['linear'], ['zoom'], TANK_HEAT_ZOOM - 1, 0.65, TANK_HEAT_ZOOM, 0] } },
+    { id: 'tanks-dots', type: 'circle', source: 'tank-points', minzoom: TANK_HEAT_ZOOM - 1.2, maxzoom: TANK_POLYGON_ZOOM, layout: { visibility: vis },
       paint: { 'circle-radius': radius, 'circle-color': t.tank, 'circle-opacity': 0.85, 'circle-stroke-color': t.tankEdge, 'circle-stroke-width': 0.5 } },
   ];
 }
@@ -261,7 +275,7 @@ function mixColour(a, b, f) {
 }
 function applyTankVisibility() {
   if (!tanksLoaded) return;
-  for (const id of ['tanks-fill', 'tanks-outline', 'tanks-dots']) map.setLayoutProperty(id, 'visibility', tankVisibility());
+  for (const id of ['tanks-fill', 'tanks-outline', 'tanks-heat', 'tanks-dots']) map.setLayoutProperty(id, 'visibility', tankVisibility());
   map.setLayoutProperty('tanks-kakatiya', 'visibility', tankMode === 'kakatiya' ? 'visible' : 'none');
 }
 function setTankMode(mode) {
@@ -269,6 +283,7 @@ function setTankMode(mode) {
   for (const button of document.querySelectorAll('[data-tank]')) button.setAttribute('aria-pressed', String(button.dataset.tank === mode));
   document.body.classList.toggle('tank-mk', mode === 'kakatiya');
   applyTankVisibility();
+  applyDistrictLabels();
   if (mode === 'off') tankPopup.remove();
 }
 for (const button of document.querySelectorAll('[data-tank]')) button.addEventListener('click', () => setTankMode(button.dataset.tank));
@@ -330,8 +345,9 @@ let proposalMode = 'off';                  // off | on
 let proposalLoaded = false;
 let proposalData = null;                   // proposal.json
 let proposalGeo = null;                    // proposal.geojson, also handed to the map source
-const proposalMarkers = [];
 const propVisibility = () => (proposalMode === 'on' ? 'visible' : 'none');
+// Elevated line: the `hg` array (water height above ground, sampled evenly along the line) sets the height at each point.
+const RIBBON = { 'line-elevation-reference': 'ground', 'line-z-offset': ['at-interpolated', ['*', ['line-progress'], ['-', ['length', ['get', 'hg']], 1]], ['get', 'hg']] };
 function proposalLayers(t) {
   if (!proposalLoaded) return [];
   const vis = propVisibility();
@@ -341,18 +357,23 @@ function proposalLayers(t) {
     { id: 'prop-command-new', type: 'fill', source: 'proposal', filter: kind('command_new'), layout: { visibility: vis }, paint: { 'fill-color': t.propCmdNew } },
     { id: 'prop-pool', type: 'fill', source: 'proposal', filter: kind('pool'), layout: { visibility: vis }, paint: { 'fill-color': t.propPool, 'fill-opacity': 0.6 } },
     { id: 'prop-pool-line', type: 'line', source: 'proposal', filter: kind('pool'), layout: { visibility: vis }, paint: { 'line-color': t.propPool, 'line-width': 1.5 } },
-    { id: 'prop-canal', type: 'line', source: 'proposal', filter: kind('canal'), layout: { visibility: vis, 'line-cap': 'round' },
-      paint: { 'line-color': t.prop, 'line-width': ['interpolate', ['linear'], ['zoom'], 6, 1.8, 10, 3.4] } },
+    // Routes ride the terrain as ribbons: lifted off the ground by the water's height above it (aqueducts, rising mains), on it elsewhere.
+    { id: 'prop-canal', type: 'line', source: 'proposal', filter: ['in', ['get', 'kind'], ['literal', ['canal', 'cut', 'aqueduct', 'pressure main']]],
+      layout: { visibility: vis, 'line-cap': 'round', 'line-join': 'round', ...RIBBON },
+      paint: { 'line-color': ['match', ['get', 'kind'], 'pressure main', t.propPump, t.prop], 'line-width': ['interpolate', ['linear'], ['zoom'], 6, 2.2, 10, 4.2] } },
     { id: 'prop-tunnel', type: 'line', source: 'proposal', filter: kind('tunnel'), layout: { visibility: vis },
       paint: { 'line-color': t.prop, 'line-width': ['interpolate', ['linear'], ['zoom'], 6, 2.6, 10, 4.8], 'line-dasharray': [0.5, 1.3] } },
     { id: 'prop-delivery', type: 'circle', source: 'proposal', filter: kind('delivery'), layout: { visibility: vis },
       paint: { 'circle-radius': 7, 'circle-color': t.prop, 'circle-stroke-color': '#ffffff', 'circle-stroke-width': 1.5 } },
     { id: 'prop-pump', type: 'circle', source: 'proposal', filter: kind('pump'), layout: { visibility: vis },
       paint: { 'circle-radius': 5, 'circle-color': t.propPump, 'circle-stroke-color': '#ffffff', 'circle-stroke-width': 1.2 } },
-    { id: 'prop-trunk-existing', type: 'line', source: 'proposal', filter: ['all', kind('trunk'), ['==', ['get', 'existing'], true]], layout: { visibility: vis },
+    { id: 'prop-trunk-existing', type: 'line', source: 'proposal', filter: ['all', kind('trunk'), ['==', ['get', 'existing'], true]], layout: { visibility: vis, ...RIBBON },
       paint: { 'line-color': t.propTrunk, 'line-width': 2, 'line-opacity': 0.7, 'line-dasharray': [2, 1.5] } },
-    { id: 'prop-trunk-new', type: 'line', source: 'proposal', filter: ['all', kind('trunk'), ['==', ['get', 'existing'], false]], layout: { visibility: vis, 'line-cap': 'round' },
+    { id: 'prop-trunk-new', type: 'line', source: 'proposal', filter: ['all', kind('trunk'), ['==', ['get', 'existing'], false]], layout: { visibility: vis, 'line-cap': 'round', 'line-join': 'round', ...RIBBON },
       paint: { 'line-color': t.propTrunk, 'line-width': ['interpolate', ['linear'], ['zoom'], 6, 3.2, 10, 6] } },
+    { id: 'prop-trunk-pulse', type: 'line', source: 'proposal', filter: kind('trunk'), layout: { visibility: vis, 'line-cap': 'round', 'line-join': 'round', ...RIBBON },
+      paint: { 'line-color': 'rgba(0,0,0,0)', 'line-width': ['interpolate', ['linear'], ['zoom'], 6, 3.6, 10, 6.4],
+               'line-trim-offset': pulseWindow(0), 'line-trim-color': t.propPulse, 'line-trim-fade-range': [0.45, 0.45] } },
   ];
 }
 function setProposalMode(mode) {
@@ -376,7 +397,7 @@ function slotFor(layer) {
   return ['line', 'circle'].includes(layer.type) ? 'middle' : 'bottom';
 }
 function basemapConfig(theme) {
-  const labels = { showPlaceLabels: false, showPointOfInterestLabels: false, showTransitLabels: false, showRoadLabels: true };
+  const labels = { showPlaceLabels: false, showPointOfInterestLabels: false, showTransitLabels: false, showRoadLabels: roadLabelsShown };
   return basemap === 'satellite' ? labels : { ...labels, lightPreset: MAP_THEMES[theme].lightPreset, theme: 'faded', show3dObjects: true };
 }
 function buildStyle(theme) {
@@ -394,12 +415,14 @@ function buildStyle(theme) {
       districts: { type: 'geojson', data: 'data/districts.geojson' },
       flow: { type: 'geojson', data: 'data/flow.geojson' },
       contours: { type: 'geojson', data: 'data/contours.geojson' },
-      links: { type: 'geojson', data: 'data/links.geojson' },
+      links: { type: 'geojson', data: 'data/links.geojson', lineMetrics: true },
       ...cropSources(),
       ...(canalsLoaded ? { canals: { type: 'geojson', data: 'data/canals.geojson' } } : {}),
       ...(tanksLoaded ? { tanks: { type: 'geojson', data: 'data/tanks.geojson' }, 'tank-points': { type: 'geojson', data: 'data/tank_points.geojson' } } : {}),
       ...(gwLoaded ? { groundwater: { type: 'geojson', data: 'data/groundwater.geojson' } } : {}),
-      ...(proposalLoaded ? { proposal: { type: 'geojson', data: proposalGeo } } : {}),
+      ...(proposalLoaded ? { proposal: { type: 'geojson', data: proposalGeo, lineMetrics: true } } : {}),
+      ...Object.fromEntries(Object.entries(labelData).map(([id, data]) => [id, { type: 'geojson', data, generateId: true }])),
+      scrub: { type: 'geojson', data: scrubPoint },
     },
     layers: [
       { id: 'relief', type: 'raster', source: 'relief-dem', layout: { visibility: chipOn('relief') }, paint: {
@@ -445,13 +468,20 @@ function buildStyle(theme) {
         paint: { 'line-color': t.link, 'line-width': ['interpolate', ['linear'], ['zoom'], 6, 2.6, 10, 4.2],
                  'line-opacity': ['case', ['==', ['get', 'status'], 'operational'], 0.9, 0.6],
                  'line-dasharray': ['case', ['==', ['get', 'status'], 'operational'], ['literal', [1, 0]], ['==', ['get', 'status'], 'planned'], ['literal', [0.6, 2.4]], ['literal', [2, 2]]] } },
-      // Static arrows give direction on links still being built; operating links get moving chevrons on the canvas.
+      // Operating links carry a pulse of light travelling in the direction of pumping: a line-trim window moved every frame.
+      { id: 'links-pulse', type: 'line', source: 'links', filter: ['all', ['==', ['get', 'status'], 'operational'], linkStatusFilter()],
+        layout: { 'line-join': 'round', 'line-cap': 'round', visibility: chipOn('links') },
+        paint: { 'line-color': 'rgba(0,0,0,0)', 'line-width': ['interpolate', ['linear'], ['zoom'], 6, 3.4, 10, 5.6],
+                 'line-trim-offset': pulseWindow(0), 'line-trim-color': t.linkDash, 'line-trim-fade-range': [0.45, 0.45] } },
+      // Static arrows give direction on links still being built.
       { id: 'links-arrows', type: 'symbol', source: 'links', filter: ['all', ['!=', ['get', 'status'], 'operational'], linkStatusFilter()],
         layout: { 'symbol-placement': 'line', 'symbol-spacing': 70, 'icon-image': 'arrow', 'icon-size': ['interpolate', ['linear'], ['zoom'], 6, 0.4, 10, 0.6],
                   'icon-rotation-alignment': 'map', 'icon-allow-overlap': true, 'icon-ignore-placement': true, visibility: chipOn('links') },
         paint: { 'icon-opacity': 0.7 } },
       { id: 'links-hit', type: 'line', source: 'links', filter: linkStatusFilter(), layout: { visibility: chipOn('links') },
         paint: { 'line-color': '#000000', 'line-opacity': 0, 'line-width': 16 } },
+      { id: 'scrub', type: 'circle', source: 'scrub', paint: { 'circle-radius': 6, 'circle-color': t.labelActive, 'circle-stroke-color': t.iconBg, 'circle-stroke-width': 2 } },
+      ...labelLayers(theme),
     ],
     terrain: { source: 'mapbox-dem', exaggeration: Number($('exag').value) },
   };
@@ -499,13 +529,89 @@ function syncArrowImage() {
   const image = arrowImage(MAP_THEMES[currentTheme()].link);
   if (map.hasImage('arrow')) map.updateImage('arrow', image); else map.addImage('arrow', image, { pixelRatio: 2 });
 }
-map.on('styleimagemissing', (event) => { if (event.id === 'arrow') syncArrowImage(); });
+// ---------- icons: the SVG symbols in index.html rasterised on demand for the symbol layers ----------
+// Image ids read "ic|symbol|colourKey|flags|theme"; flags: p = pending (dashed ring, cone badge), a = approximate (dotted outer ring),
+// n = proposed (dashed ring), s = small. The theme is part of the id, so a theme change simply asks for new images.
+const ICON_PX = 40, ICON_RATIO = 2;
+const iconsInProgress = new Set();
+function svgImage(symbol, colour, px) {
+  const inner = document.getElementById(`ic-${symbol}`).innerHTML;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${px}" height="${px}" viewBox="0 0 16 16" style="color:${colour};fill:${colour}">${inner}</svg>`;
+  const image = new Image();
+  image.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+  return image.decode().then(() => image);
+}
+async function renderIcon(id) {
+  const [, symbol, colourKey, flags, theme] = id.split('|');
+  const t = MAP_THEMES[theme] || MAP_THEMES[currentTheme()];
+  const colour = t[colourKey] || t.link;
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = ICON_PX;
+  const ctx = canvas.getContext('2d');
+  const c = ICON_PX / 2;
+  const disc = (radius, fill, stroke, width, dash) => {
+    ctx.beginPath(); ctx.arc(c, c, radius, 0, Math.PI * 2);
+    if (fill) { ctx.fillStyle = fill; ctx.fill(); }
+    if (stroke) { ctx.lineWidth = width; ctx.strokeStyle = stroke; ctx.setLineDash(dash || []); ctx.stroke(); ctx.setLineDash([]); }
+  };
+  if (symbol === 'dot') {                      // cities and towns
+    disc(flags.includes('s') ? 4 : 5.5, colour, t.iconBg, 2);
+  } else if (symbol === 'peak') {              // where a river leaves the state: a ring around a core
+    disc(13, null, colour, 2); disc(5, colour, t.iconBg, 1.5);
+  } else {
+    disc(15, t.iconBg, colour, 2, flags.includes('p') || flags.includes('n') ? [3.5, 3] : null);
+    if (flags.includes('a')) disc(18.5, null, colour, 1.5, [1.5, 3]);
+    ctx.drawImage(await svgImage(symbol, colour, 40), c - 10, c - 10, 20, 20);
+    if (flags.includes('p')) {                 // the "still being built" cone
+      ctx.beginPath(); ctx.arc(c + 11, c + 11, 7.5, 0, Math.PI * 2); ctx.fillStyle = t.iconBg; ctx.fill();
+      ctx.lineWidth = 1; ctx.strokeStyle = t.link; ctx.stroke();
+      ctx.drawImage(await svgImage('wip', t.link, 24), c + 5, c + 5, 12, 12);
+    }
+  }
+  return ctx.getImageData(0, 0, ICON_PX, ICON_PX);
+}
+/** Every icon the label layers will ask for in a theme, rendered and added before the symbols lay out. */
+async function ensureIcons(theme) {
+  const ids = new Set(['ic|dot|label|', 'ic|dot|label|s', 'ic|wip|link|', 'ic|peak|peakIcon|']);
+  for (const data of Object.values(labelData)) for (const f of data.features) if (f.properties.icon) ids.add(f.properties.icon);
+  await Promise.all([...ids].map(async (base) => {
+    const id = `${base}|${theme}`;
+    if (map.hasImage(id) || iconsInProgress.has(id)) return;
+    iconsInProgress.add(id);
+    const image = await renderIcon(id);
+    if (!map.hasImage(id)) map.addImage(id, image, { pixelRatio: ICON_RATIO });
+    iconsInProgress.delete(id);
+  }));
+}
+map.on('styleimagemissing', async (event) => {
+  if (event.id === 'arrow') { syncArrowImage(); return; }
+  if (!event.id.startsWith('ic|') || map.hasImage(event.id) || iconsInProgress.has(event.id)) return;
+  iconsInProgress.add(event.id);
+  const image = await renderIcon(event.id);
+  if (!map.hasImage(event.id)) map.addImage(event.id, image, { pixelRatio: ICON_RATIO });
+  iconsInProgress.delete(event.id);
+});
 
 function applyMapTheme() {
-  // The style is the single source of truth for colours; a diffed setStyle
-  // updates paint properties and the sky without reloading sources.
-  map.setStyle(buildStyle(currentTheme()), { diff: true });
+  // buildStyle stays the single source of truth for colours, but its result is applied property by property:
+  // a diffed setStyle cannot cope with the Standard import and reloads the whole style, dropping our icons.
+  const style = buildStyle(currentTheme());
+  for (const layer of style.layers) {
+    if (!map.getLayer(layer.id)) continue;
+    for (const [key, value] of Object.entries(layer.paint || {})) map.setPaintProperty(layer.id, key, value);
+    for (const [key, value] of Object.entries(layer.layout || {})) map.setLayoutProperty(layer.id, key, value);
+  }
+  if (basemap === 'standard') map.setConfigProperty('basemap', 'lightPreset', MAP_THEMES[currentTheme()].lightPreset);
 }
+function setBasemap(mode) {
+  basemap = mode;
+  for (const button of document.querySelectorAll('[data-base]')) button.setAttribute('aria-pressed', String(button.dataset.base === mode));
+  document.querySelector('.chip[data-toggle="relief"]').setAttribute('aria-pressed', String(mode === 'standard'));   // imagery shows only without the tint
+  styleReady = false;                                               // the flow animation leaves the style alone while it loads
+  map.once('style.load', () => { styleReady = true; ensureIcons(currentTheme()); });   // a new style starts without our images
+  map.setStyle(buildStyle(currentTheme()), { diff: false });        // the Standard import cannot be diffed
+}
+for (const button of document.querySelectorAll('[data-base]')) button.addEventListener('click', () => setBasemap(button.dataset.base));
 
 // ---------- elevation under the cursor (the terrain the map is drawing, so the number always matches the surface) ----------
 /** Elevation in metres above sea level from the loaded terrain tiles; null where none is loaded yet. */
@@ -586,6 +692,7 @@ $('exag').addEventListener('input', (event) => {
   map.triggerRepaint();
 });
 
+function setVisible(ids, on) { for (const id of ids) if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', on ? 'visible' : 'none'); }
 let orbiting = false;
 function orbitStep() {
   if (!orbiting) return;
@@ -597,12 +704,10 @@ const toggles = {
   hillshade: (on) => map.setLayoutProperty('hillshade', 'visibility', on ? 'visible' : 'none'),
   contours: (on) => map.setLayoutProperty('contours', 'visibility', on ? 'visible' : 'none'),
   districts: (on) => { map.setLayoutProperty('districts', 'visibility', on ? 'visible' : 'none'); document.body.classList.toggle('districts-off', !on); },
-  labels: (on) => document.body.classList.toggle('labels-off', !on),
-  dams: (on) => document.body.classList.toggle('dams-off', !on),
+  labels: (on) => setVisible(LABEL_LAYERS.labels, on),
+  dams: (on) => setVisible(['dam-labels'], on),
   links: (on) => {
-    const visibility = on ? 'visible' : 'none';
-    for (const id of ['links-highlight', 'links-casing', 'links-line', 'links-arrows', 'links-hit']) map.setLayoutProperty(id, 'visibility', visibility);
-    document.body.classList.toggle('links-off', !on);
+    setVisible(['links-highlight', 'links-casing', 'links-line', 'links-pulse', 'links-arrows', 'links-hit', ...LABEL_LAYERS.links], on);
     if (!on) linkPopup.remove();
   },
   orbit: (on) => { orbiting = on; if (on) orbitStep(); },
@@ -618,6 +723,7 @@ const toggles = {
 let flowLast = 0, bubbleLast = 0;
 function animateFlow(now) {
   if (!flowAnimating) { clearBubbles(); return; }
+  if (!styleReady) { requestAnimationFrame(animateFlow); return; }
   if (now - flowLast >= FLOW_TICK_MS) {
     flowLast = now;
     const previous = flowStep;
@@ -631,6 +737,8 @@ function animateFlow(now) {
   }
   drawBubbles(bubbleLast ? Math.min((now - bubbleLast) / 1000, 0.1) : 0);
   bubbleLast = now;
+  const window = pulseWindow((now % PULSE_MS) / PULSE_MS);
+  for (const id of ['links-pulse', 'prop-trunk-pulse']) if (map.getLayer(id)) map.setPaintProperty(id, 'line-trim-offset', window);
   requestAnimationFrame(animateFlow);
 }
 
@@ -686,56 +794,6 @@ function resizeBubbleCanvas() {
   bubbleCtx.setTransform(ratio, 0, 0, ratio, 0, 0);
 }
 function clearBubbles() { bubbleCtx.clearRect(0, 0, bubbleCanvas.width, bubbleCanvas.height); }
-// Operating Kaleshwaram links carry moving chevrons so the direction of pumping is unmistakable.
-const LINK_CHEVRON = { spacingM: 4000, speedPx: 45, size: 4.5 };
-let linkTracks = [];
-
-function prepareLinkParticles(links) {
-  linkTracks = [];
-  for (const feature of links.features) {
-    if (feature.properties.status !== 'operational') continue;
-    const coords = feature.geometry.coordinates, cum = [0];
-    for (let i = 1; i < coords.length; i++) {
-      const dx = (coords[i][0] - coords[i - 1][0]) * EARTH_M_PER_DEG * Math.cos(coords[i][1] * Math.PI / 180);
-      const dy = (coords[i][1] - coords[i - 1][1]) * EARTH_M_PER_DEG;
-      cum.push(cum[i - 1] + Math.hypot(dx, dy));
-    }
-    const length = cum[cum.length - 1];
-    const count = Math.max(2, Math.round(length / LINK_CHEVRON.spacingM));
-    const lngs = coords.map((c) => c[0]), lats = coords.map((c) => c[1]);
-    linkTracks.push({ coords, cum, length, bbox: [Math.min(...lngs), Math.min(...lats), Math.max(...lngs), Math.max(...lats)],
-                      particles: Array.from({ length: count }, (_, i) => i * length / count) });
-  }
-}
-
-function drawLinkChevrons(dt, metresPerPixel, west, south, east, north, width, height) {
-  if (document.body.classList.contains('links-off') || statusMode === 'pending') return;   // chevrons mark operating links only
-  const colour = MAP_THEMES[currentTheme()].link;
-  for (const track of linkTracks) {
-    const step = LINK_CHEVRON.speedPx * metresPerPixel * dt;
-    for (let i = 0; i < track.particles.length; i++) track.particles[i] = (track.particles[i] + step) % track.length;
-    const [minLng, minLat, maxLng, maxLat] = track.bbox;
-    if (maxLng < west || minLng > east || maxLat < south || minLat > north) continue;
-    for (const distance of track.particles) {
-      const here = map.project(pointAlong(track, distance));
-      const ahead = map.project(pointAlong(track, Math.min(distance + 300, track.length)));
-      if (here.x < -20 || here.y < -20 || here.x > width + 20 || here.y > height + 20) continue;
-      const angle = Math.atan2(ahead.y - here.y, ahead.x - here.x);
-      const alpha = Math.min(1, distance / 1500, (track.length - distance) / 1500);
-      drawChevron(here.x, here.y, angle, LINK_CHEVRON.size, colour, alpha);
-    }
-  }
-}
-function drawChevron(x, y, angle, size, colour, alpha) {
-  bubbleCtx.save();
-  bubbleCtx.translate(x, y); bubbleCtx.rotate(angle); bubbleCtx.globalAlpha = alpha;
-  bubbleCtx.beginPath();
-  bubbleCtx.moveTo(size, 0); bubbleCtx.lineTo(-size * 0.8, size * 0.9); bubbleCtx.lineTo(-size * 0.3, 0); bubbleCtx.lineTo(-size * 0.8, -size * 0.9); bubbleCtx.closePath();
-  bubbleCtx.fillStyle = colour; bubbleCtx.fill();
-  bubbleCtx.lineWidth = 1; bubbleCtx.strokeStyle = 'rgba(255,255,255,0.95)'; bubbleCtx.lineJoin = 'round'; bubbleCtx.stroke();
-  bubbleCtx.restore();
-}
-
 function drawBubbles(dt) {
   clearBubbles();
   if (!bubbleReaches.length) return;
@@ -758,7 +816,6 @@ function drawBubbles(dt) {
       drawBubble(point.x, point.y, reach.radius, alpha);
     }
   }
-  drawLinkChevrons(dt, metresPerPixel, west, south, east, north, width, height);
 }
 // Bubbles keep one light body and a dark rim in both themes, so they show on
 // every river colour (a bubble in its river's own colour vanished on the Krishna).
@@ -826,12 +883,8 @@ function renderPeaks(summary) {
   }
 }
 function addPeakMarker(river, peak) {
-  const node = document.createElement('div'); node.className = 'mk-peak';
-  const label = textEl('span', 'lbl', `${river} peak`);
-  label.appendChild(textEl('span', 'e', `${peak.q.toLocaleString('en-IN')} m³/s`));
-  node.append(textEl('span', 'ring', ''), textEl('span', 'core', ''), label);
-  node.addEventListener('click', () => flyToPoint(peak.lon, peak.lat, 10));
-  new mapboxgl.Marker({ element: node, anchor: 'center' }).setLngLat([peak.lon, peak.lat]).addTo(map);
+  if (!labelData.peaks) labelData.peaks = collection([]);
+  labelData.peaks.features.push(pointFeature(peak.lon, peak.lat, { title: `${river} peak`, detail: ` ${peak.q.toLocaleString('en-IN')} m³/s`, lon: peak.lon, lat: peak.lat }));
 }
 function renderDistrictFlow(summary) {
   const list = $('district-flow');
@@ -897,47 +950,135 @@ $('collapse').addEventListener('click', () => { $('panel').classList.add('hidden
 $('expand').addEventListener('click', () => { $('panel').classList.remove('hidden'); $('expand').hidden = true; });
 $('filters-collapse').addEventListener('click', () => { $('filters').classList.add('hidden'); $('filters-expand').hidden = false; });
 $('filters-expand').addEventListener('click', () => { $('filters').classList.remove('hidden'); $('filters-expand').hidden = true; });
-const updateLabelDensity = () => document.body.classList.toggle('z-far', map.getZoom() < LABEL_ZOOM);
+const updateLabelDensity = () => {
+  const near = map.getZoom() >= LABEL_ZOOM;
+  if (near === roadLabelsShown || !styleReady) return;
+  roadLabelsShown = near;
+  map.setConfigProperty('basemap', 'showRoadLabels', near);
+};
 map.on('zoom', updateLabelDensity);
+map.on('moveend', updateLabelDensity);
 map.on('load', updateLabelDensity);   // a view restored from the URL hash fires no zoom event
 updateLabelDensity();
 
-// ---------- markers ----------
-const cityMarkers = new Map();
-function addCityMarker(city) {
-  const el = document.createElement('div');
-  el.className = `mk-city ${city.place}`;
-  const dot = document.createElement('span'); dot.className = 'dot';
-  const label = document.createElement('span'); label.className = 'lbl';
-  const name = document.createElement('span'); name.textContent = city.name;
-  const elev = document.createElement('span'); elev.className = 'e'; elev.textContent = `${city.elev} m`;
-  label.append(name, elev); el.append(dot, label);
-  el.addEventListener('click', () => flyToCity(city));
-  const marker = new mapboxgl.Marker({ element: el, anchor: 'left', offset: [-5, 0] }).setLngLat([city.lon, city.lat]).addTo(map);
-  cityMarkers.set(city.name, marker);
+// ---------- labels: symbol layers from one GeoJSON source per kind, text in Mapbox fonts, icons from the SVG symbols ----------
+const cityIndex = new Map();                // city name -> feature id, for the active state
+const districtFeatures = new Map();         // district -> its label feature (carries the Mission Kakatiya count)
+const labelActions = { 'prop-labels': [] }; // per-feature click handlers for the proposal labels
+const FONT = ['DIN Pro Medium', 'Arial Unicode MS Regular'];
+const LABEL_LAYERS = {
+  labels: ['city-labels', 'town-labels', 'district-labels', 'peak-labels', 'prop-labels-far', 'prop-labels-near'],   // the Place labels chip
+  links: ['pump-labels', 'wip-labels'],                                                                                // the Water links chip
+};
+let eraMode = 'all';
+function pointFeature(lon, lat, properties) { return { type: 'Feature', geometry: { type: 'Point', coordinates: [lon, lat] }, properties }; }
+function collection(features) { return { type: 'FeatureCollection', features }; }
+const muted = (t, scale) => ({ 'font-scale': scale, 'text-color': t.labelMuted });
+const eraFilter = () => (eraMode === 'all' ? ['literal', true] : ['all', ['has', 'year'], [eraMode === 'before' ? '<' : '>=', ['get', 'year'], ERA_YEAR]]);
+const damFilter = () => ['all', linkStatusFilter(), eraFilter()];
+const districtFilter = () => (tankMode === 'kakatiya' ? ['literal', true] : ['!', ['get', 'named_by_city']]);
+const districtText = (t) => (tankMode === 'kakatiya'
+  ? ['format', ['upcase', ['get', 'name']], {}, '\n', {}, ['get', 'mk'], { 'font-scale': 1.05, 'text-color': t.label }]
+  : ['upcase', ['get', 'name']]);
+
+/** A point symbol layer: icon on the point, text beside it on whichever side is free, text dropped before the icon when space is short. */
+function labelLayer(id, source, t, { icon, text, sort, minzoom, filter, size = [11, 13], layout = {} }) {
+  const stateColour = ['case', ['any', ['boolean', ['feature-state', 'hover'], false], ['boolean', ['feature-state', 'active'], false]], t.labelActive, t.label];
+  return { id, type: 'symbol', source, ...(minzoom ? { minzoom } : {}), ...(filter ? { filter } : {}),
+    layout: { 'icon-image': icon, 'icon-size': 1, 'icon-allow-overlap': true, 'text-field': text, 'text-font': FONT,
+              'text-size': ['interpolate', ['linear'], ['zoom'], 6, size[0], 10, size[1]], 'text-variable-anchor': ['left', 'right'], 'text-radial-offset': 0.95,
+              'text-justify': 'auto', 'text-max-width': 14, 'text-optional': true, 'symbol-sort-key': sort || 0, ...layout },
+    paint: { 'text-color': stateColour, 'text-halo-color': t.labelHalo, 'text-halo-width': 1.3, 'text-halo-blur': 0.4 } };
 }
-function addDistrictLabels(points, cityNames) {
-  for (const feature of points.features) {
-    const name = feature.properties.shapeName;
-    const el = document.createElement('div');
-    el.className = 'mk-district' + (cityNames.has(name.toLowerCase()) ? ' named-by-city' : '');   // the city label already names it
-    el.append(textEl('span', 'nm', name), textEl('b', 'cnt', ''));
-    districtLabels.set(name, el);
-    districtCentres.set(name, feature.geometry.coordinates);
-    new mapboxgl.Marker({ element: el, anchor: 'center' }).setLngLat(feature.geometry.coordinates).addTo(map);
+function labelLayers(theme) {
+  const t = MAP_THEMES[theme];
+  const ic = (base) => ['concat', base, '|', theme];        // image id with the theme appended
+  const layers = [];
+  if (labelData.cities) {
+    const text = ['format', ['get', 'name'], {}, ['get', 'elev'], muted(t, 0.85)];
+    layers.push(labelLayer('city-labels', 'cities', t, { icon: ic('ic|dot|label|'), text, sort: ['get', 'sort'], filter: ['==', ['get', 'place'], 'city'], size: [12, 14], layout: { visibility: chipOn('labels') } }));
+    layers.push(labelLayer('town-labels', 'cities', t, { icon: ic('ic|dot|label|s'), text, sort: ['get', 'sort'], filter: ['!=', ['get', 'place'], 'city'], minzoom: LABEL_ZOOM, layout: { visibility: chipOn('labels') } }));
   }
+  if (labelData['district-points']) {
+    layers.push({ id: 'district-labels', type: 'symbol', source: 'district-points', minzoom: tankMode === 'kakatiya' ? 0 : LABEL_ZOOM, filter: districtFilter(),
+      layout: { 'text-field': districtText(t), 'text-font': FONT, 'text-size': 11, 'text-letter-spacing': 0.12, 'text-max-width': 10, 'symbol-sort-key': 10, visibility: chipOn('labels') },
+      paint: { 'text-color': t.labelMuted, 'text-halo-color': t.labelHalo, 'text-halo-width': 1.2 } });
+  }
+  if (labelData.dams) {
+    layers.push(labelLayer('dam-labels', 'dams', t, { icon: ic(['get', 'icon']), text: ['format', ['get', 'name'], {}, ['get', 'cap'], muted(t, 0.85), ['get', 'st'], muted(t, 0.8)],
+      sort: ['get', 'sort'], filter: damFilter(), size: [11.5, 13.5], layout: { visibility: chipOn('dams') } }));
+  }
+  if (labelData.pumphouses) {
+    const text = ['step', ['zoom'], '', LABEL_ZOOM, ['format', ['get', 'name'], {}, ['get', 'st'], muted(t, 0.8)]];   // icons only until zoomed in
+    layers.push(labelLayer('pump-labels', 'pumphouses', t, { icon: ic(['get', 'icon']), text, sort: 5, filter: linkStatusFilter(), layout: { visibility: chipOn('links') } }));
+  }
+  if (labelData.wip) {
+    layers.push(labelLayer('wip-labels', 'wip', t, { icon: ic('ic|wip|link|'), text: ['get', 'name'], sort: 6, filter: linkStatusFilter(), size: [10.5, 12], layout: { visibility: chipOn('links') } }));
+  }
+  if (labelData.peaks) {
+    layers.push(labelLayer('peak-labels', 'peaks', t, { icon: ic('ic|peak|peakIcon|'), text: ['format', ['get', 'title'], {}, ['get', 'detail'], muted(t, 0.85)], sort: 1, layout: { visibility: chipOn('labels') } }));
+  }
+  if (labelData['prop-labels']) {
+    const text = ['format', ['get', 'title'], {}, ['get', 'detail'], muted(t, 0.85), ' new', { 'font-scale': 0.8, 'text-color': t.prop }];
+    const far = ['in', ['get', 'kind'], ['literal', ['reservoir', 'delivery', 'trunk']]];
+    layers.push(labelLayer('prop-labels-far', 'prop-labels', t, { icon: ic(['get', 'icon']), text, sort: ['get', 'sort'], filter: far, layout: { visibility: propVisibility() } }));
+    layers.push(labelLayer('prop-labels-near', 'prop-labels', t, { icon: ic(['get', 'icon']), text, sort: 8, filter: ['!', far], minzoom: LABEL_ZOOM, layout: { visibility: propVisibility() } }));
+  }
+  return layers;
 }
+/** Hover and click through the Interactions API: a pointer cursor and a hover state on the feature. */
+function interactive(layerId, onClick) {
+  const target = { layerId };
+  map.addInteraction(`${layerId}-enter`, { type: 'mouseenter', target, handler: ({ feature }) => { map.getCanvas().style.cursor = 'pointer'; if (feature) map.setFeatureState(feature, { hover: true }); } });
+  map.addInteraction(`${layerId}-leave`, { type: 'mouseleave', target, handler: ({ feature }) => { map.getCanvas().style.cursor = ''; if (feature) map.setFeatureState(feature, { hover: false }); } });
+  if (onClick) map.addInteraction(`${layerId}-click`, { type: 'click', target, handler: (event) => { onClick(event.feature.properties, event.lngLat); return true; } });
+}
+function buildCityLabels(cities) {
+  labelData.cities = collection(cities.map((city, i) => {
+    cityIndex.set(city.name, i);
+    return pointFeature(city.lon, city.lat, { i, name: city.name, elev: ` ${city.elev} m`, place: city.place, sort: -(city.population || 0) });
+  }));
+}
+function buildDistrictLabels(points, cityNames) {
+  labelData['district-points'] = collection(points.features.map((f) => {
+    const name = f.properties.shapeName;
+    const feature = pointFeature(f.geometry.coordinates[0], f.geometry.coordinates[1], { name, named_by_city: cityNames.has(name.toLowerCase()), mk: '' });
+    districtFeatures.set(name, feature);
+    districtCentres.set(name, f.geometry.coordinates);
+    return feature;
+  }));
+}
+function applyDistrictLabels() {
+  if (!map.getLayer('district-labels')) return;
+  map.setFilter('district-labels', districtFilter());
+  map.setLayerZoomRange('district-labels', tankMode === 'kakatiya' ? 0 : LABEL_ZOOM, 24);
+  map.setLayoutProperty('district-labels', 'text-field', districtText(MAP_THEMES[currentTheme()]));
+}
+async function addLabelSources() {
+  await ensureIcons(currentTheme());
+  for (const [id, data] of Object.entries(labelData)) if (!map.getSource(id)) map.addSource(id, { type: 'geojson', data, generateId: true });
+  addLayers(labelLayers(currentTheme()));
+  interactive('city-labels', (p) => flyToCity(citiesData[p.i]));
+  interactive('town-labels', (p) => flyToCity(citiesData[p.i]));
+  interactive('dam-labels', (p) => { const dam = damsData[p.i]; openDamPopup(dam); flyToPoint(dam.lon, dam.lat, 11.5); });
+  interactive('pump-labels', (p, lngLat) => notePopup.setLngLat(lngLat).setText(p.title).addTo(map));
+  interactive('wip-labels', (p, lngLat) => notePopup.setLngLat(lngLat).setText(p.title).addTo(map));
+  interactive('peak-labels', (p) => flyToPoint(p.lon, p.lat, 10));
+  for (const id of ['prop-labels-far', 'prop-labels-near']) interactive(id, (p) => labelActions['prop-labels'][p.i]());
+}
+let citiesData = [], damsData = [];
+const notePopup = new mapboxgl.Popup({ closeButton: true, closeOnClick: true, offset: 12, className: 'flow-popup', maxWidth: '280px' });
 // ---------- dams: markers and the year filter (Telangana was formed in 2014) ----------
 const ERA_YEAR = 2014;
-const damMarkers = [];                       // { dam, element }
 function damYear(dam) { return dam.opened || dam.began || null; }
 function damInEra(dam, era) {
   const year = damYear(dam);
   return era === 'all' || (year !== null && (era === 'before' ? year < ERA_YEAR : year >= ERA_YEAR));
 }
 function setEra(era) {
+  eraMode = era;
   for (const button of document.querySelectorAll('[data-era]')) button.setAttribute('aria-pressed', String(button.dataset.era === era));
-  for (const { dam, element } of damMarkers) element.classList.toggle('era-hidden', !damInEra(dam, era));
+  if (map.getLayer('dam-labels')) map.setFilter('dam-labels', damFilter());
 }
 function renderEraCounts(dams) {
   for (const button of document.querySelectorAll('[data-era]')) {
@@ -949,15 +1090,13 @@ function renderEraCounts(dams) {
 for (const button of document.querySelectorAll('[data-era]')) button.addEventListener('click', () => setEra(button.dataset.era));
 
 // ---------- status filter: operating vs still to build ----------
-const pumpMarkers = [];                      // { house, element }
-const wipMarkers = [];                       // link cones: { status, element }
 function setStatusMode(mode) {
   statusMode = mode;
   for (const button of document.querySelectorAll('[data-status]')) button.setAttribute('aria-pressed', String(button.dataset.status === mode));
-  for (const { dam, element } of damMarkers) element.classList.toggle('status-hidden', !statusShown(dam.status));
-  for (const { house, element } of pumpMarkers) element.classList.toggle('status-hidden', !statusShown(house.status));
-  for (const { status, element } of wipMarkers) element.classList.toggle('status-hidden', !statusShown(status));
+  if (map.getLayer('dam-labels')) map.setFilter('dam-labels', damFilter());
+  for (const id of ['pump-labels', 'wip-labels']) if (map.getLayer(id)) map.setFilter(id, linkStatusFilter());
   for (const id of ['links-casing', 'links-line', 'links-hit']) if (map.getLayer(id)) map.setFilter(id, linkStatusFilter());
+  if (map.getLayer('links-pulse')) map.setFilter('links-pulse', ['all', ['==', ['get', 'status'], 'operational'], linkStatusFilter()]);
   if (map.getLayer('links-arrows')) map.setFilter('links-arrows', ['all', ['!=', ['get', 'status'], 'operational'], linkStatusFilter()]);
   applyTankVisibility();
   applyGwMode();
@@ -986,52 +1125,25 @@ function pendingYears(item) {
   if (item.target) parts.push(`target ${item.target}`);
   return parts.length ? parts.join(' · ') : null;
 }
-function statusBadge() {
-  const badge = document.createElement('span'); badge.className = 'badge'; badge.title = 'under construction or proposed';
-  const svg = document.createElementNS(SVG_NS, 'svg'); svg.setAttribute('viewBox', '0 0 16 16'); svg.setAttribute('aria-hidden', 'true');
-  const use = document.createElementNS(SVG_NS, 'use'); use.setAttribute('href', '#ic-wip'); svg.appendChild(use); badge.appendChild(svg);
-  return badge;
-}
-
-// The label carries name and capacity; while a dam's popup is open it shrinks to the name.
 const damPopup = new mapboxgl.Popup({ closeButton: true, closeOnClick: true, offset: 16, className: 'dam-popup', maxWidth: '320px' });
-let openDamNode = null;
-damPopup.on('close', () => { if (openDamNode) openDamNode.classList.remove('open'); openDamNode = null; });
 
 const damKindLabel = (dam) => (dam.kind === 'barrage' ? 'Barrage' : dam.river && dam.river.includes('off-river') ? 'Reservoir' : 'Dam');
-function addDamMarker(dam) {
-  const node = document.createElement('div');
-  node.className = `mk-dam ${dam.kind}${isPending(dam.status) ? ` pending ${dam.status === 'proposed' ? 'proposed' : 'uc'}` : ''}${dam.approx ? ' approx' : ''}`;
-  damMarkers.push({ dam, element: node });
-  const icon = document.createElement('span'); icon.className = 'ic';
-  const svg = document.createElementNS(SVG_NS, 'svg'); svg.setAttribute('viewBox', '0 0 16 16'); svg.setAttribute('aria-hidden', 'true');
-  const use = document.createElementNS(SVG_NS, 'use'); use.setAttribute('href', `#ic-${dam.kind}`); svg.appendChild(use); icon.appendChild(svg);
-  if (isPending(dam.status)) icon.appendChild(statusBadge());
-  const label = textEl('span', 'lbl', dam.name);
-  if (dam.capacity_tmcft) label.appendChild(textEl('span', 'e', formatTmcft(dam.capacity_tmcft)));
-  if (isPending(dam.status)) label.appendChild(textEl('span', 'st', STATUS_LABEL[dam.status]));
-  node.append(icon, label);
-  node.title = `${damKindLabel(dam)}${dam.river && !dam.river.includes('off-river') ? ` on the ${dam.river}` : ''}${isPending(dam.status) ? ` · ${STATUS_LABEL[dam.status]}` : ''}`
-             + `${dam.approx ? ` · position approximate (${dam.approx})` : ''} · click for details`;
-  node.addEventListener('click', (event) => { event.stopPropagation(); openDamPopup(dam, node); flyToPoint(dam.lon, dam.lat, 11.5); });
-  new mapboxgl.Marker({ element: node, anchor: 'left', offset: [-11, 0] }).setLngLat([dam.lon, dam.lat]).addTo(map);
+const iconFlags = (item) => `${isPending(item.status) ? 'p' : ''}${item.approx ? 'a' : ''}`;
+function buildDamLabels(dams) {
+  damsData = dams;
+  labelData.dams = collection(dams.map((dam, i) => pointFeature(dam.lon, dam.lat, {
+    i, name: dam.name, status: dam.status, ...(damYear(dam) !== null ? { year: damYear(dam) } : {}),
+    icon: `ic|${dam.kind}|${dam.kind}Icon|${iconFlags(dam)}`, sort: -(dam.capacity_tmcft || 0),
+    cap: dam.capacity_tmcft ? ` ${formatTmcft(dam.capacity_tmcft)}` : '', st: isPending(dam.status) ? ` · ${STATUS_LABEL[dam.status]}` : '' })));
 }
 
 // ---------- Kaleshwaram links: pump houses, tunnel portals and the link list ----------
-function addPumpMarker(house) {
-  const node = document.createElement('div');
-  node.className = `mk-pump${isPending(house.status) ? ' pending' : ''}${house.approx ? ' approx' : ''}`;
-  pumpMarkers.push({ house, element: node });
-  const icon = document.createElement('span'); icon.className = 'ic';
-  const svg = document.createElementNS(SVG_NS, 'svg'); svg.setAttribute('viewBox', '0 0 16 16'); svg.setAttribute('aria-hidden', 'true');
-  const use = document.createElementNS(SVG_NS, 'use'); use.setAttribute('href', house.kind === 'tunnel' ? '#ic-tunnel' : '#ic-pump'); svg.appendChild(use); icon.appendChild(svg);
-  if (isPending(house.status)) icon.appendChild(statusBadge());
-  const label = textEl('span', 'lbl', `${house.name}${house.power ? ` · ${house.power.replace('MW', ' MW')}` : ''}`);
-  if (isPending(house.status)) label.appendChild(textEl('span', 'st', STATUS_LABEL[house.status]));
-  node.append(icon, label);
-  node.title = `${house.name}${house.elev_m ? ` · terrain ${house.elev_m} m` : ''}${house.since ? ` · pumping since ${house.since}` : ''}`
-             + `${house.approx ? ` · position approximate (${house.approx})` : ''} · ${house.source === 'OpenStreetMap' ? 'OpenStreetMap' : 'see the link popup for the source'}`;
-  new mapboxgl.Marker({ element: node, anchor: 'left', offset: [-10, 0] }).setLngLat([house.lon, house.lat]).addTo(map);
+function buildPumpLabels(houses) {
+  labelData.pumphouses = collection(houses.map((house) => pointFeature(house.lon, house.lat, {
+    name: `${house.name}${house.power ? ` · ${house.power.replace('MW', ' MW')}` : ''}`, status: house.status,
+    icon: `ic|${house.kind === 'tunnel' ? 'tunnel' : 'pump'}|link|${iconFlags(house)}`, st: isPending(house.status) ? ` · ${STATUS_LABEL[house.status]}` : '',
+    title: `${house.name}${house.elev_m ? ` · terrain ${house.elev_m} m` : ''}${house.since ? ` · pumping since ${house.since}` : ''}`
+         + `${house.approx ? ` · position approximate (${house.approx})` : ''} · ${house.source === 'OpenStreetMap' ? 'OpenStreetMap' : 'see the link popup for the source'}` })));
 }
 
 // ---------- cropland panel and mode ----------
@@ -1241,11 +1353,12 @@ function renderTanks(data) {
     tbody.appendChild(tr);
   }
   for (const d of data.districts) {
-    const label = districtLabels.get(d.district);
-    if (!label) continue;
+    const feature = districtFeatures.get(d.district);
+    if (!feature) continue;
     const total = kakatiyaTotal(d);
-    label.querySelector('.cnt').textContent = d.mk_counted_in ? `in ${d.mk_counted_in}` : total ? `${indian(total)} tanks` : '';
+    feature.properties.mk = d.mk_counted_in ? `in ${d.mk_counted_in}` : total ? `${indian(total)} tanks` : '';
   }
+  if (map.getSource('district-points')) map.getSource('district-points').setData(labelData['district-points']);
 }
 
 // ---------- groundwater: well and district popups, legend, year curve and the Groundwater card ----------
@@ -1402,7 +1515,7 @@ const proposalPopup = new mapboxgl.Popup({ closeButton: true, closeOnClick: true
 const crore = (value) => `₹${indian(Math.round(value))} crore`;
 const proposalWork = (id) => proposalData && proposalData.works.find((w) => w.id === id);
 const PROP_KIND_LABEL = { pool: 'proposed reservoir', delivery: 'proposed lift delivery', tunnel: 'proposed tunnel', canal: 'proposed canal', cut: 'proposed deep cut', aqueduct: 'proposed aqueduct or siphon', 'pressure main': 'proposed pressure main' };
-const TUNNEL_ABOVE_M = 25;
+const TUNNEL_ABOVE_M = 30;
 function openTrunkPopup(p, lngLat) {
   const system = proposalData.systems.find((s) => s.name === p.system);
   const content = document.createElement('div');
@@ -1464,22 +1577,12 @@ for (const id of ['prop-pool', 'prop-canal', 'prop-tunnel', 'prop-delivery', 'pr
   map.on('mouseenter', id, () => { map.getCanvas().style.cursor = 'pointer'; });
   map.on('mouseleave', id, () => { map.getCanvas().style.cursor = ''; });
 }
-function propIcon(symbol) {
-  const icon = document.createElement('span');
-  icon.className = 'ic';
-  const svg = document.createElementNS(SVG_NS, 'svg'); svg.setAttribute('viewBox', '0 0 16 16'); svg.setAttribute('aria-hidden', 'true');
-  const use = document.createElementNS(SVG_NS, 'use'); use.setAttribute('href', `#ic-${symbol}`); svg.appendChild(use); icon.appendChild(svg);
-  return icon;
-}
 /** A proposed work on the map: icon, name, figure (TMC, MW, km) and a "new" tag; clicking opens its popup. */
+const PROP_ICON_COLOUR = { reservoir: 'propPool', delivery: 'prop', canal: 'prop', tunnel: 'prop', pump: 'propPump', main: 'propPump', trunk: 'propTrunk' };
 function propMarker(kind, symbol, lngLat, title, detail, onClick) {
-  const node = textEl('div', `mk-new ${kind}`, '');
-  const label = textEl('span', 'lbl', title);
-  label.append(textEl('span', 'e', detail), textEl('span', 'st', 'new'));
-  node.append(propIcon(symbol), label);
-  node.title = `${title} · proposed, not built · click for details`;
-  node.addEventListener('click', (event) => { event.stopPropagation(); onClick(); });
-  proposalMarkers.push(new mapboxgl.Marker({ element: node, anchor: 'left', offset: [-11, 0] }).setLngLat(lngLat).addTo(map));
+  if (!labelData['prop-labels']) labelData['prop-labels'] = collection([]);
+  const i = labelActions['prop-labels'].push(onClick) - 1;
+  labelData['prop-labels'].features.push(pointFeature(lngLat[0], lngLat[1], { i, kind, title, detail: ` ${detail}`, icon: `ic|${symbol}|${PROP_ICON_COLOUR[kind]}|n`, sort: kind === 'reservoir' ? 1 : 3 }));
 }
 /** Midpoint of a lon/lat polyline, for the canal and tunnel labels. */
 function lineMidpoint(coords) {
@@ -1680,21 +1783,15 @@ map.on('click', 'links-hit', (event) => { event.originalEvent.stopPropagation();
 map.on('mouseenter', 'links-hit', () => { map.getCanvas().style.cursor = 'pointer'; });
 map.on('mouseleave', 'links-hit', () => { map.getCanvas().style.cursor = ''; });
 
-function addWorkInProgressMarkers(links) {
+function buildWorkInProgressLabels(links) {
   const seen = new Set();
+  labelData.wip = collection([]);
   for (const feature of links.features) {
     const p = feature.properties;
     if (p.status === 'operational' || seen.has(linkKey(p))) continue;
     seen.add(linkKey(p));
     const coords = feature.geometry.coordinates, mid = coords[Math.floor(coords.length / 2)];
-    const node = document.createElement('div'); node.className = 'mk-wip';
-    const icon = document.createElement('span'); icon.className = 'ic';
-    const svg = document.createElementNS(SVG_NS, 'svg'); svg.setAttribute('viewBox', '0 0 16 16'); svg.setAttribute('aria-hidden', 'true');
-    const use = document.createElementNS(SVG_NS, 'use'); use.setAttribute('href', '#ic-wip'); svg.appendChild(use); icon.appendChild(svg);
-    node.append(icon, textEl('span', 'lbl', `${p.link} · ${STATUS_LABEL[p.status] || p.status}`));
-    node.title = `${p.link}: ${p.from} → ${p.to} · ${p.note}`;
-    wipMarkers.push({ status: p.status, element: node });
-    new mapboxgl.Marker({ element: node, anchor: 'left', offset: [-11, 0] }).setLngLat(mid).addTo(map);
+    labelData.wip.features.push(pointFeature(mid[0], mid[1], { name: `${p.link} · ${STATUS_LABEL[p.status] || p.status}`, status: p.status, title: `${p.link}: ${p.from} → ${p.to} · ${p.note}` }));
   }
 }
 
@@ -1750,13 +1847,12 @@ function renderLinkList(links) {
 function renderPendingList(dams, links, notes) {
   const bySchemes = new Map();                 // scheme -> [{ kind, label, status, years, onClick, note }]
   const add = (scheme, row) => { if (!bySchemes.has(scheme)) bySchemes.set(scheme, []); bySchemes.get(scheme).push(row); };
-  for (const entry of damMarkers) {
-    const { dam, element } = entry;
+  for (const dam of damsData) {
     if (!isPending(dam.status)) continue;
     add(dam.scheme || 'Other projects', {
       kind: damKindLabel(dam).toLowerCase(), label: dam.name, status: dam.status, years: pendingYears(dam),
       extra: [dam.capacity_tmcft ? formatTmcft(dam.capacity_tmcft) : null, dam.approx ? 'position approximate' : null].filter(Boolean).join(' · '),
-      onClick: (button) => { for (const other of document.querySelectorAll('.link-list .row')) other.classList.toggle('active', other === button); openDamPopup(dam, element); flyToPoint(dam.lon, dam.lat, 11); },
+      onClick: (button) => { for (const other of document.querySelectorAll('.link-list .row')) other.classList.toggle('active', other === button); openDamPopup(dam); flyToPoint(dam.lon, dam.lat, 11); },
     });
   }
   for (const group of groupLinks(links).values()) {
@@ -1797,8 +1893,8 @@ function renderPendingList(dams, links, notes) {
   return { structures, links: linkCount, unlocated };
 }
 
-function openDamPopup(dam, node) {
-  damPopup.remove();                                   // closes any other dam's popup (restoring its label)
+function openDamPopup(dam) {
+  damPopup.remove();
   linkPopup.remove();
   const content = document.createElement('div');
   const head = textEl('div', 'head', '');
@@ -1828,12 +1924,11 @@ function openDamPopup(dam, node) {
   link.href = dam.url; link.target = '_blank'; link.rel = 'noopener';
   link.textContent = dam.url.includes('wikipedia.org') ? 'Source: Wikipedia ↗' : dam.url.includes('wikidata.org') ? 'Source: Wikidata ↗' : 'Source ↗';
   content.appendChild(link);
-  node.classList.add('open');
-  openDamNode = node;
   damPopup.setLngLat([dam.lon, dam.lat]).setDOMContent(content).addTo(map);
 }
 function flyToCity(city) {
-  for (const [name, marker] of cityMarkers) marker.getElement().classList.toggle('active', name === city.name);
+  if (!city) return;
+  for (const [name, id] of cityIndex) map.setFeatureState({ source: 'cities', id }, { active: name === city.name });
   for (const row of document.querySelectorAll('#city-list .row')) row.classList.toggle('active', row.dataset.city === city.name);
   map.flyTo({ center: [city.lon, city.lat], zoom: 10.6, pitch: 64, bearing: -28, duration: 2400, essential: true });
 }
@@ -2012,12 +2107,8 @@ function highlightProfile(index, showTip) {
     tip.style.top = `${y(point.elev) / CHART.h * box.height}px`;
     tip.hidden = false;
   }
-  if (!profileState.marker) {
-    const el = document.createElement('div'); el.className = 'mk-scrub';
-    profileState.marker = new mapboxgl.Marker({ element: el }).setLngLat([point.lon, point.lat]).addTo(map);
-  } else {
-    profileState.marker.setLngLat([point.lon, point.lat]);
-  }
+  scrubPoint = collection([pointFeature(point.lon, point.lat, {})]);
+  if (map.getSource('scrub')) map.getSource('scrub').setData(scrubPoint);
 }
 function spanText(text) { const el = document.createElement('span'); el.textContent = text; return el; }
 $('scrub').addEventListener('input', (event) => highlightProfile(Number(event.target.value), true));
@@ -2058,20 +2149,20 @@ map.on('load', async () => {
     }
     debug.notes.cropDistricts = cropland.districts.length;
     prepareBubbles(flowReaches);
-    dams.forEach(addDamMarker);
+    buildDamLabels(dams);
     renderEraCounts(dams);
-    pumphouses.forEach(addPumpMarker);
+    buildPumpLabels(pumphouses);
     renderLinkList(links);
-    prepareLinkParticles(links);
-    addWorkInProgressMarkers(links);
+    buildWorkInProgressLabels(links);
     renderStatusCounts(dams, links);
     debug.notes.pending = renderPendingList(dams, links, pendingNotes);
     debug.notes.dams = dams.length;
     debug.notes.links = links.features.length;
     debug.notes.bubbles = bubbleReaches.reduce((n, reach) => n + reach.particles.length, 0);
     profileState.profiles = profiles;
-    cities.forEach(addCityMarker);
-    addDistrictLabels(districtPoints, new Set(cities.map((c) => c.name.toLowerCase())));
+    citiesData = cities;
+    buildCityLabels(cities);
+    buildDistrictLabels(districtPoints, new Set(cities.map((c) => c.name.toLowerCase())));
     const tanks = await loadJson('data/tanks_summary.json').catch(() => null);   // absent until fetch_data.py gets OSM water bodies
     if (tanks) {
       tanksLoaded = true;
@@ -2101,7 +2192,7 @@ map.on('load', async () => {
     if (proposal) {
       proposalLoaded = true;
       proposalGeo = await loadJson('data/proposal.geojson');
-      map.addSource('proposal', { type: 'geojson', data: proposalGeo });
+      map.addSource('proposal', { type: 'geojson', data: proposalGeo, lineMetrics: true });
       addLayers(proposalLayers(MAP_THEMES[currentTheme()]), 'districts');
       renderProposal(proposal);
       addProposalMarkers(proposal, proposalGeo);
@@ -2115,6 +2206,7 @@ map.on('load', async () => {
     renderFlowLegend();
     renderPeaks(flowSummary);
     renderDistrictFlow(flowSummary);
+    await addLabelSources();                // every label source is built by now: cities, districts, dams, pump houses, cones, peaks, proposal
     debug.notes.flowDistricts = flowSummary.districts.length;
     debug.phase = 'data-loaded'; writeDebug();
     if (DEBUG) {
@@ -2127,7 +2219,6 @@ map.on('load', async () => {
     $('toast').textContent = `Data failed to load: ${error.message}`;
     return;
   }
-  // 'idle' never fires while DOM markers sit on 3D terrain, so wait for the tiles instead.
   // The flow animation starts only now: its paint updates keep map.loaded() false.
   const settle = () => {
     if (!map.loaded()) { map.once('render', settle); return; }
