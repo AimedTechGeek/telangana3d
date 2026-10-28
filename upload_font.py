@@ -4,8 +4,8 @@ Downloads the official rsms/inter release zip from GitHub, posts the three TTFs 
 Mapbox Fonts API (POST https://api.mapbox.com/fonts/v1/{username}) and writes
 web/data/fonts.json, which tells web/app.js that 'Inter Medium' exists as a glyph font.
 
-Needs the environment variable MAPBOX_SECRET_TOKEN, a secret token with the fonts:write
-scope (account.mapbox.com). The username is read from the public MAPBOX_TOKEN (its JWT
+Needs the environment variable MAPBOX_SECRET_TOKEN (MAPBOX_ALL_ACCESS_TOKEN is used when it is
+not set), a secret token with the fonts:write scope (account.mapbox.com). The username is read from the public MAPBOX_TOKEN (its JWT
 "u" field). Neither token is printed. Inter is licensed under the SIL OFL 1.1.
 """
 from __future__ import annotations
@@ -43,17 +43,19 @@ def download_inter_ttfs() -> dict[str, bytes]:
 
 
 def main() -> int:
-    secret = os.environ.get("MAPBOX_SECRET_TOKEN", "").strip()
+    secret = (os.environ.get("MAPBOX_SECRET_TOKEN") or os.environ.get("MAPBOX_ALL_ACCESS_TOKEN") or "").strip()
     public = os.environ.get("MAPBOX_TOKEN", "").strip()
     if not secret or not public:
-        print("Nothing uploaded: set MAPBOX_SECRET_TOKEN (a secret token with the fonts:write scope) and "
+        print("Nothing uploaded: set MAPBOX_SECRET_TOKEN or MAPBOX_ALL_ACCESS_TOKEN (a secret token with the fonts:write scope) and "
               "MAPBOX_TOKEN (the public token, for the account name), then run this again.")
         return 2
     username = username_from_public_token(public)
     names = []
     for filename, data in download_inter_ttfs().items():
+        # The Fonts API takes the font file as the raw request body (as curl --data-binary would), not a multipart form:
+        # a multipart upload is answered with 422 "not supported or may be corrupt".
         response = requests.post(f"https://api.mapbox.com/fonts/v1/{username}", params={"access_token": secret},
-                                 files={"file": (filename, data, "font/ttf")}, timeout=TIMEOUT)
+                                 data=data, headers={"Content-Type": "application/octet-stream"}, timeout=TIMEOUT)
         if not response.ok:
             print(f"{filename}: Fonts API answered {response.status_code}: {response.text[:300]}")
             return 1

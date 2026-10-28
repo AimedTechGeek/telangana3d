@@ -68,9 +68,15 @@ public and were downloaded by `fetch_data.py` into `data/raw/` (not committed);
   Regular, Medium and Bold (TTF, SIL OFL 1.1) from the official rsms/inter
   GitHub release (v4.1 at the time of writing) and uploads them to the Mapbox
   account through the Fonts API (`POST https://api.mapbox.com/fonts/v1/{username}`,
-  secret token with `fonts:write`); it then writes `web/data/fonts.json`. The
-  upload endpoint and the glyph name `Inter Medium` follow Mapbox's
-  documentation and were not exercised against a real account (unverified).
+  secret token with `fonts:write`); it then writes `web/data/fonts.json`. Run on
+  29 October 2026 against the account `tecgeor`: Inter Regular, Medium and Bold
+  are in its fonts list. The Fonts API wants the file as the raw request body
+  (`Content-Type: application/octet-stream`); a multipart form is answered 422
+  "not supported or may be corrupt". The map's glyph URL names the `mapbox`
+  account and Mapbox serves `Inter Medium` there (and under any account name,
+  with no token) with the same bytes as from `tecgeor` (md5 of glyph range
+  0-255 equal), so the upload was not needed for the map as configured; which
+  copy is served was not determined. `fonts.json` is generated and git-ignored.
 - **Basemap configuration (Standard only):** `basemapConfig()` passes
   `show3dFacades`, `show3dTrees` (both true) and the
   `colorWater`, `colorGreenspace`, `colorLand`, `colorRoads`,
@@ -99,7 +105,10 @@ public and were downloaded by `fetch_data.py` into `data/raw/` (not committed);
 
 ## 1c. Mapbox Tiling Service (optional hosted vector tiles of the atlas layers)
 
-- **What:** Mapbox's hosted tiling pipeline. `publish_tilesets.py` uploads the
+- **What:** Mapbox's hosted tiling pipeline (run on 29 October 2026, account
+  `tecgeor`: live are `tg-flow`, `tg-tanks`, `tg-tank_points`, `tg-canals`,
+  `tg-contours`, `tg-districts`, `tg-state`, `tg-groundwater`; `tg-mask` failed,
+  see below). `publish_tilesets.py` uploads the
   atlas's own GeoJSON (sections 2, 5, 6f, 6i, 6j and the contours of 1) as
   tileset sources through the `mapbox-tilesets` CLI, builds tilesets
   `<username>.tg-<layer>` from a recipe (zoom 5 to 12, simplification) and
@@ -117,10 +126,16 @@ public and were downloaded by `fetch_data.py` into `data/raw/` (not committed);
   are covered by the map-load pricing in section 1b.
 - **Used for:** replacing the GeoJSON fetches at boot. Optional: without
   `tilesets.json` the map reads the GeoJSON files.
-- **Unverified:** publishing was not run, so the recipe (`features.simplification`
-  expression), the tileset sizes and the processing cost against the free tier
-  are not checked; the figures above are quoted from the pricing page, not
-  measured. Tiles are simplified, so geometry at zoom 5 to 11 is slightly
+- **Not live:** `tg-mask` (the world-minus-state polygon) processed for over
+  an hour and then failed with "Error processing tileset tecgeor.tg-mask ...
+  Please contact support"; `mask` is therefore not in `web/data/tilesets.json`
+  and the map keeps `mask.geojson`. Not retried. `tilesets.json` is generated
+  and git-ignored, so a fresh clone needs `publish_tilesets.py` or a copy of the file.
+- **Unverified:** the processing cost against the free tier and the tileset
+  sizes were not checked (the jobs succeeded); the figures above are quoted
+  from the pricing page, not measured. In a headless Edge run every tile that
+  answered 4xx (27, at zoom 7, 9 and 12) was a tile that no source feature
+  intersects (Mapbox answers 404 for an empty tile); none was a failure. Tiles are simplified, so geometry at zoom 5 to 11 is slightly
   coarser than the GeoJSON; layer ids and properties are unchanged.
 
 ## 2. geoBoundaries gbOpen, India ADM1 and ADM2 (state and districts)
@@ -208,8 +223,9 @@ public and were downloaded by `fetch_data.py` into `data/raw/` (not committed);
 - **Publishing:** `publish_flow_raster.py` uploads it with the tilesets CLI
   (`upload-raster-source`, `create`, `publish`) using the recipe
   `recipes/flow_particles.json`, as tileset `<username>.tg-flow-particles`, and
-  writes `web/data/tilesets.json` (`flow_particles`). Needs the `mapbox-tilesets`
-  CLI and a secret token (`MAPBOX_SECRET_TOKEN`, tilesets scopes). Terms: Mapbox
+  writes `web/data/tilesets.json` (`flow_particles`). Needs `uv` (it runs the
+  `mapbox-tilesets` CLI) and a secret token (`MAPBOX_SECRET_TOKEN`, or
+  `MAPBOX_ALL_ACCESS_TOKEN` as a fallback; tilesets scopes). Terms: Mapbox
   Tiling Service usage and storage fall under the account's Mapbox plan.
 - **Used for:** when `tilesets.json` lists `flow_particles`, the map adds a
   `raster-array` source and a `raster-particle` layer (`flow-particles`) and skips
@@ -220,13 +236,26 @@ public and were downloaded by `fetch_data.py` into `data/raw/` (not committed);
   https://docs.mapbox.com/mapbox-tiling-service/raster/raster-recipes-details.md ·
   https://docs.mapbox.com/mapbox-tiling-service/examples/raster-mts-basic-recipe.md ·
   https://github.com/mapbox/tilesets-cli
-- **Unverified:** the tileset has not been published (no secret token was available),
-  so the particle look is unseen. The recipe follows the documented rasterarray
-  fields, but two details are not confirmed by the docs read: that selecting both
-  bands under one `name` ("flow") makes them the u/v pair of one vector band, and
-  the `"name": ["literal", "flow"]` expression. The layer leaves
-  `raster-particle-array-band` unset (first band). If the published tileset shows
-  no particles, check the band names in its TileJSON.
+- **State (29 October 2026):** published as `tecgeor.tg-flow-particles`, job
+  `success`, and drawn by the map (`flow-particles`, `raster-array` source, tile
+  requests to `rasterarrays/v1/.../*.mrt` answer 206). The recipe needed a
+  different form than the documentation example suggests:
+  - one filter selecting bands 1 and 2 together (`["all", ["in", ["bandindex"], ["literal", [1, 2]]]]`)
+    failed with the generic "An error occurred during the processing of this job";
+  - a single-band scalar recipe on the same raster succeeded, so the GeoTIFF is fine;
+  - two single-band sources with source tags (`u`, `v`) failed with "Expected
+    fourth dimension of data to match dimensionality for format uint16 (2) but got size 1";
+  - **the vector-pair form works**: `"filter"` is a list of two filters, one per
+    band (`[["all", ["in", ["bandindex"], ["literal", [1]]]], ["all", ["in", ["bandindex"], ["literal", [2]]]]]`),
+    `"name": ["literal", "flow"]`, `"input_no_data_value": -9999`, minzoom 4, maxzoom 8
+    (that is `recipes/flow_particles.json`; maxzoom 9, a `units` field and a
+    `sort_key` were in the failed recipe and were dropped, so which difference
+    besides the two-filter form mattered was not isolated).
+  Seen in headless Edge (software GL) near Bhadrachalam at zoom 9: the particle
+  layer draws along the rivers (the picture differs with the layer on and off). The
+  look at full speed on real hardware, and `raster-particle-array-band` (left
+  unset), were not examined further. The experiment tilesets and sources
+  (`tg-flow-test`, `tg-flow-v1` to `v3`, `tg-flow-u`, `tg-flow-v`) were deleted.
 
 ## 6. Wikipedia (dams and barrages)
 

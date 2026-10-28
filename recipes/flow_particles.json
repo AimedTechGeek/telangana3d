@@ -5,17 +5,18 @@
     { "uri": "mapbox://tileset-source/{username}/tg-flow-velocity" }
   ],
   "minzoom": 4,
-  "maxzoom": 9,
+  "maxzoom": 8,
   "layers": {
     "flow": {
       "tilesize": 512,
       "buffer": 1,
-      "units": "speed units (1 + 2 log10 m3/s)",
+      "input_no_data_value": -9999,
       "source_rules": {
-        "filter": ["all", ["in", ["bandindex"], ["literal", [1, 2]]]],
-        "sort_key": ["bandindex"],
-        "name": ["literal", "flow"],
-        "order": "asc"
+        "filter": [
+          ["all", ["in", ["bandindex"], ["literal", [1]]]],
+          ["all", ["in", ["bandindex"], ["literal", [2]]]]
+        ],
+        "name": ["literal", "flow"]
       }
     }
   }

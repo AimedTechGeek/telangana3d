@@ -32,6 +32,7 @@ function riseTerrain(ms = 1800) {
     terrainRise = 1 - (1 - terrainRise) ** 3;
     map.setTerrain({ source: 'mapbox-dem', exaggeration: terrainExaggeration() });
     setWallHeights();
+    refreshLinkLift(terrainRise >= 1);
     if (terrainRise < 1) requestAnimationFrame(step); else terrainRise = 1;
   };
   terrainRise = 0.05;
@@ -470,7 +471,7 @@ function exaggerationFactorAt(zoom) {
   }
   return stops[stops.length - 1][1];
 }
-const linkLiftAt = (zoom) => LINK_LIFT_M * Math.max(0.01, Number($('exag').value) * exaggerationFactorAt(zoom));
+const linkLiftAt = (zoom) => LINK_LIFT_M * Math.max(0.01, Number($('exag').value) * exaggerationFactorAt(zoom) * terrainRise);   // terrainRise as in wallHeight(): the pipes rise with the terrain
 const linkLayout = () => ({ 'line-elevation-reference': 'ground', 'line-z-offset': (linkLift = linkLiftAt(linkZoom)) });
 const LINK_LIFTED = ['links-highlight', 'links-casing', 'links-line', 'links-pulse', 'links-hit'];
 const wallPaint = (colour, property, extra = {}) => ({
@@ -599,9 +600,9 @@ function buildStyle(theme) {
       ...tankLayers(t),                      // tanks and the Mission Kakatiya shading sit under the district lines
       ...gwLayers(t),                        // groundwater wells and district shading, same slot
       ...proposalLayers(t),                  // proposed reservoirs, routes and commands
-      { id: 'district-hover', type: 'fill', source: 'districts', paint: {
+      { id: 'district-hover', type: 'fill', source: 'districts', layout: { visibility: chipOn('districts') }, paint: {
           'fill-color': t.districtHover, 'fill-opacity': ['case', ['boolean', ['feature-state', 'hover'], false], 0.18, 0] } },
-      { id: 'district-hover-line', type: 'line', source: 'districts', layout: { 'line-join': 'round' }, paint: {
+      { id: 'district-hover-line', type: 'line', source: 'districts', layout: { 'line-join': 'round', visibility: chipOn('districts') }, paint: {
           'line-color': t.districtHover, 'line-opacity': ['case', ['boolean', ['feature-state', 'hover'], false], 0.9, 0],
           'line-width': ['interpolate', ['linear'], ['zoom'], 6, 2.2, 10, 3.4] } },
       { id: 'districts', type: 'line', source: 'districts', layout: { visibility: chipOn('districts'), 'line-join': 'round' }, paint: {
@@ -646,9 +647,9 @@ function buildStyle(theme) {
       { id: 'links-hit', type: 'line', source: 'links', filter: linkFilter(), layout: { visibility: chipOn('links'), ...linkLayout() },
         paint: { 'line-color': '#000000', 'line-opacity': 0, 'line-width': 16 } },
       // The active river's bed, coloured along its length by the relief tint of its elevation (updated when the Rivers tab changes).
-      { id: 'profile-casing', type: 'line', source: 'profile', layout: { 'line-join': 'round', 'line-cap': 'round' },
+      { id: 'profile-casing', type: 'line', source: 'profile', layout: { 'line-join': 'round', 'line-cap': 'round', visibility: chipOn('bed') },
         paint: { 'line-color': t.profileCasing, 'line-width': 8, 'line-opacity': 0.85 } },
-      { id: 'profile-line', type: 'line', source: 'profile', layout: { 'line-join': 'round', 'line-cap': 'round' },
+      { id: 'profile-line', type: 'line', source: 'profile', layout: { 'line-join': 'round', 'line-cap': 'round', visibility: chipOn('bed') },
         paint: { 'line-color': '#888888', 'line-width': 5, 'line-gradient': profileGradient } },
       { id: 'scrub', type: 'circle', source: 'scrub', paint: { 'circle-radius': 6, 'circle-color': t.labelActive, 'circle-stroke-color': t.iconBg, 'circle-stroke-width': 2 } },
       ...damWallLayers(t),
@@ -928,8 +929,13 @@ const toggles = {
   bands: () => { map.setPaintProperty('relief', 'raster-color', reliefExpression(currentTheme())); renderLegend(); },
   hillshade: (on) => map.setLayoutProperty('hillshade', 'visibility', on ? 'visible' : 'none'),
   contours: (on) => setVisible(['contours', 'contour-labels'], on),
+  bed: (on) => setVisible(['profile-casing', 'profile-line'], on),
   sketch: (on) => setSketch(on),
-  districts: (on) => { map.setLayoutProperty('districts', 'visibility', on ? 'visible' : 'none'); document.body.classList.toggle('districts-off', !on); },
+  districts: (on) => {
+    setVisible(['districts', 'district-hover', 'district-hover-line'], on);   // a hidden hover layer fires no mouse events
+    document.body.classList.toggle('districts-off', !on);
+    if (!on) { setDistrictHover(null); districtPopup.remove(); }
+  },
   labels: (on) => setVisible(LABEL_LAYERS.labels, on),
   dams: (on) => setVisible(['dam-labels', 'dam-walls'], on),
   links: (on) => {
@@ -2578,11 +2584,17 @@ function pointAtKm(points, d) {
   const a = points[lo], b = points[hi], f = (d - a.d) / ((b.d - a.d) || 1);
   return { lon: a.lon + (b.lon - a.lon) * f, lat: a.lat + (b.lat - a.lat) * f, elev: a.elev + (b.elev - a.elev) * f, q: a.q + (b.q - a.q) * f };
 }
+const bedChip = document.querySelector('.chip[data-toggle="bed"]');
+function setBedLine(on) {
+  bedChip.setAttribute('aria-pressed', String(on));
+  toggles.bed(on);
+}
 function startFlight() {
   stopOrbit();
   stopStructureOrbit();
   const points = profileState.profiles[profileState.river].points;
-  flight = { points, total: points[points.length - 1].d, d: Math.max(0, points[profileState.index].d), last: 0, fov: map.transform.fov };
+  flight = { points, total: points[points.length - 1].d, d: Math.max(0, points[profileState.index].d), last: 0, fov: map.transform.fov, bed: bedChip.getAttribute('aria-pressed') === 'true' };
+  setBedLine(true);                          // the bed height line shows during the flight
   map.easeTo({ fov: FLIGHT_FOV, duration: 600, essential: true });
   $('fly').textContent = 'Stop';
   $('fly').setAttribute('aria-pressed', 'true');
@@ -2593,6 +2605,7 @@ function stopFlight() {
   stopStructureOrbit();                      // one stop handler (drag, wheel, touch, Esc, 2D button) ends either kind of camera animation
   if (!flight) return;
   map.easeTo({ fov: flight.fov, duration: 600, essential: true });
+  setBedLine(flight.bed);                    // back to what the chip showed before the flight
   flight = null;
   $('fly').textContent = 'Fly the river';
   $('fly').setAttribute('aria-pressed', 'false');
@@ -2777,6 +2790,14 @@ async function loadSketchData() {
   refreshSketch();
 }
 function setSketch(on) {
+  if (on && typeof MapboxDraw === 'undefined') {                    // the plugin script (Mapbox CDN) did not load
+    document.querySelector('.chip[data-toggle="sketch"]').setAttribute('aria-pressed', 'false');
+    document.body.classList.add('sketch-failed');
+    $('sketch-card').open = true;
+    renderSketchCard(null);
+    $('sketch-summary').textContent = 'The Sketch tool could not start: the mapbox-gl-draw script did not load (offline, or api.mapbox.com plugins blocked). Reload the page to try again.';
+    return;
+  }
   document.body.classList.toggle('sketch-off', !on);
   if (on && !sketchDraw) {
     startSketchControl(null, 'draw_line_string');

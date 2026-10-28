@@ -84,7 +84,7 @@ uv run python serve.py      # http://127.0.0.1:8765/ opens in your browser
 - Hover anywhere for the elevation under the cursor, shown as a stack of
   landmark silhouettes for scale (Gateway of India 26 m, Charminar 56 m,
   Qutub Minar 73 m, Statue of Unity 182 m)
-- Hover a district to tint and outline it and see its name, its mean river flow
+- Hover a district (only while the Districts chip is on) to tint and outline it and see its name, its mean river flow
   (the flow summary) and its mapped tank count; the popup stays away from tank outlines,
   wells, dams, links and streams under the pointer and from any open popup. A hovered
   stream turns brighter and wider. Both use feature state: districts are keyed by
@@ -110,10 +110,12 @@ uv run python serve.py      # http://127.0.0.1:8765/ opens in your browser
   heights at both ends, straight-line distance and source. Lines are
   schematic, not real canal alignments, and are drawn as overhead pipes: lifted
   about 120 m above the ground at district level (scaled with the terrain
-  exaggeration) so they clear the hills
-- **River bed on the map:** the river selected in the River profiles card is
+  exaggeration, and with the 3D rise at the start) so they clear the hills
+- **River bed on the map:** the river selected in the River profiles card can be
   drawn on the map as a line that takes the relief colours of its bed, from the
-  profile's elevations; it follows the Godavari / Krishna tab
+  profile's elevations; it follows the Godavari / Krishna tab. The **Bed height
+  line** chip next to "Fly the river" shows it (off by default, so the river's flow
+  colours stay visible); a river flight turns it on and puts it back afterwards
 - **Orbit:** the dam popup and the proposal reservoir popup have an Orbit
   button; the free camera circles the structure at a 4 km radius about 2,500 m
   above the exaggerated terrain, one turn in 24 s. Drag, scroll, touch, Esc or
@@ -204,7 +206,8 @@ uv run python serve.py      # http://127.0.0.1:8765/ opens in your browser
   its line and bin buttons, in a Sketch card at the top of the left column.
   Click vertices, double-click to finish; dragging a vertex or deleting the
   line updates the card, "Clear" removes it, and switching the chip off leaves
-  no layers behind. For the line it shows the length in km (haversine over the
+  no layers behind. If the plugin script from the Mapbox CDN fails to load, the chip
+  stays off and the Sketch card says so. For the line it shows the length in km (haversine over the
   vertices), an elevation profile read from the Terrain-DEM every 500 m (it
   fits the line in view and says "terrain still loading" until every sample
   is a number), start and end elevation, net fall and highest point, and a
@@ -235,8 +238,8 @@ uv run python serve.py      # http://127.0.0.1:8765/ opens in your browser
 
 Panels use Inter (Google Fonts); map labels use Mapbox's DIN Pro. To set the
 labels in Inter too, create a secret token with the `fonts:write` scope at
-account.mapbox.com, put it in `MAPBOX_SECRET_TOKEN` and run
-`python upload_font.py`. It downloads Inter Regular, Medium and Bold from the
+account.mapbox.com, put it in `MAPBOX_SECRET_TOKEN` (or `MAPBOX_ALL_ACCESS_TOKEN`, which
+`upload_font.py` uses when the first is not set) and run `python upload_font.py`. It downloads Inter Regular, Medium and Bold from the
 official rsms/inter release, uploads them to your Mapbox account through the
 Fonts API and writes `web/data/fonts.json`; with that file present the map asks
 for `Inter Medium` (label font constant `LABEL_FONT` in `web/app.js`), without
@@ -245,7 +248,17 @@ empty `{}` while they do not exist, so the default page load logs no console err
 static host without that fallback (GitHub Pages) logs a harmless 404 for each file.
 `tilesets.json` is read once, by a synchronous request at load (the style needs it at once).
 
-Not yet run against a real account: `upload_font.py` has not been executed against a real Mapbox account, so the upload and the `fonts.json` it writes are untested.
+State on 29 October 2026: `upload_font.py` was run against the account `tecgeor` and Inter Regular, Medium and
+Bold are in its fonts list; `web/data/fonts.json` (`{"inter": true, ...}`) was written, and with it the map asks for
+`Inter Medium` and the glyph requests answer 200. The first attempt failed with 422 "not supported or may be
+corrupt" because the Fonts API wants the font file as the raw request body
+(`Content-Type: application/octet-stream`), not a multipart form; the script now sends it that way.
+Worth knowing: the map's glyph URL names the `mapbox` account (`mapbox://fonts/mapbox/{fontstack}`), and Mapbox
+answered a request for `Inter Medium` there, and under any other account name and with no token, with the same
+bytes (checked by md5 of glyph range 0-255), so Mapbox already serves Inter Medium to everyone and the upload was
+not needed for the map as it is configured. Whether the uploaded copy is ever the one served was not determined.
+`fonts.json` and `tilesets.json` are generated and git-ignored (`web/data/`): a fresh clone has neither, so the
+map falls back to DIN Pro and to the GeoJSON files until you run the scripts here or copy the two files over.
 
 ### Camera
 
@@ -281,7 +294,7 @@ uv run python prepare_data.py     # mosaic, reproject, clip -> data/
 uv run python make_overlay.py     # map colours and lines -> data/overlay.png (forge3d)
 uv run python build_web_data.py   # profiles, contours, layers -> web/data (and Terrarium tiles -> web/tiles, no longer used by the map)
 uv run python build_flow_raster.py   # optional: river velocity GeoTIFF -> data/flow_velocity.tif
-uv run python publish_flow_raster.py # optional: publish it as a Mapbox raster-array tileset (needs MAPBOX_SECRET_TOKEN and `pip install mapbox-tilesets`);
+uv run python publish_flow_raster.py # optional: publish it as a Mapbox raster-array tileset (needs MAPBOX_SECRET_TOKEN or MAPBOX_ALL_ACCESS_TOKEN, and uv);
                                      # the map then draws river particles instead of the canvas bubbles (see DATA_SOURCES.md 5b)
 uv run python propose_water.py    # the Proposal view: reservoir sites, routes, pump houses -> web/data/proposal.*
 uv run python web_smoke_test.py   # headless Edge check of the web map -> out/web_home.png
@@ -316,7 +329,16 @@ project path.
 
 ### Hosted tiles
 
-Not yet run against a real account: `publish_tilesets.py` and `publish_flow_raster.py` have not been executed against a real Mapbox account, so the upload, the status polling and the `tilesets.json` they write are untested.
+State on 29 October 2026, account `tecgeor`: both scripts have been run. Live (latest job `success`):
+`tg-flow`, `tg-tanks`, `tg-tank_points`, `tg-canals` (republished with the numeric `year` property the Years slider
+needs), `tg-contours`, `tg-districts`, `tg-state`, `tg-groundwater` and the raster-array tileset `tg-flow-particles`.
+**Not live: `tg-mask`.** Its job (the world-minus-state polygon) ran for over an hour and then failed with "Error
+processing tileset ..., Please contact support", so `mask` is left out of `tilesets.json` and the map keeps its
+GeoJSON; republishing it (`publish_tilesets.py mask`) was not retried. The tileset ids and the files
+`web/data/tilesets.json` and `web/data/fonts.json` are generated and git-ignored: a fresh clone has neither and
+needs `publish_tilesets.py`, `publish_flow_raster.py` and `upload_font.py` run with your own tokens, or a copy of
+those two files from a checkout that has them (the tilesets live in the `tecgeor` account, so the copied ids work
+only where the Mapbox token can read that account's published tilesets; not tested with another token).
 
 By default the map fetches about 18 MB of GeoJSON at boot. `publish_tilesets.py`
 instead uploads the static layers to Mapbox as vector tilesets (Mapbox Tiling
@@ -324,6 +346,7 @@ Service) so the map loads only the tiles in view:
 
 ```bash
 export MAPBOX_SECRET_TOKEN=sk....        # secret token with tilesets:read, tilesets:write, tilesets:list
+                                         # (MAPBOX_ALL_ACCESS_TOKEN is used when MAPBOX_SECRET_TOKEN is not set)
 uv run python publish_tilesets.py        # or name layers: publish_tilesets.py flow tanks
 ```
 
@@ -347,6 +370,23 @@ points and the proposal are still fetched as small JSON where the panels
 need them. `web/data/` is git-ignored, so copy `tilesets.json` along with the
 rest when you redeploy. Re-run the script after rebuilding the data. Free tier
 and terms: DATA_SOURCES.md, section 1c.
+
+### River particles
+
+`build_flow_raster.py` writes `data/flow_velocity.tif` (two bands, u and v); `publish_flow_raster.py` uploads it
+and publishes `<username>.tg-flow-particles` from `recipes/flow_particles.json`, and writes `"flow_particles"` to
+`tilesets.json`; the map then draws a `raster-particle` layer (`flow-particles`) in place of the canvas bubbles.
+It is live on `tecgeor` (job `success` on 29 October 2026) and was seen rendering along the Godavari near
+Bhadrachalam in headless Edge (the picture differs with the layer on and off, and particles show on the
+rivers; this is a software-GL render, so the look at full speed on a real GPU was not seen). The tileset is built to
+zoom 8 and over-zoomed beyond. What the recipe has to look like: a recipe that selects both bands with **one**
+filter (`["all", ["in", ["bandindex"], ["literal", [1, 2]]]]`, what the repo had) fails with the generic "An error
+occurred during the processing of this job"; a single-band recipe on the same raster succeeds, so the raster is fine;
+the working form is a **vector pair**, one filter per band: `"filter": [["all", ["in", ["bandindex"],
+["literal", [1]]]], ["all", ["in", ["bandindex"], ["literal", [2]]]]]` with `"name": ["literal", "flow"]` and
+`"input_no_data_value": -9999`. Splitting u and v into two single-band sources with source tags also failed
+(`Expected fourth dimension of data to match dimensionality for format uint16 (2) but got size 1`). The map
+requests the tileset's raster-array tiles (`rasterarrays/v1/...`) and gets HTTP 206.
 
 ## Data and choices
 

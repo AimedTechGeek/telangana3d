@@ -600,7 +600,7 @@ details.table td { padding: 2px 0; border-bottom: 1px solid var(--hair); }
 @media (prefers-reduced-motion: reduce) { .panel, .right-stack, .sheet-handle .chev, .toast { transition: none; } }
 
 /* ---------- sketch a canal ---------- */
-body.sketch-off #sketch-card { display: none; }
+body.sketch-off:not(.sketch-failed) #sketch-card { display: none; }   /* sketch-failed: the card stays to say the plugin did not load */
 #sketch-profile { display: block; width: 100%; height: auto; overflow: visible; }
 #sketch-profile .grid, #sketch-profile .axis { stroke: var(--hair); stroke-width: 1; }
 #sketch-profile .tick { fill: var(--muted); font-family: var(--mono); font-size: 9.5px; }

@@ -1,6 +1,7 @@
 """Publish the atlas's static layers as Mapbox-hosted vector tilesets (Mapbox Tiling Service).
 
     export MAPBOX_SECRET_TOKEN=sk....        # needs tilesets:read, tilesets:write and tilesets:list
+                                             # (MAPBOX_ALL_ACCESS_TOKEN is used when MAPBOX_SECRET_TOKEN is not set)
     uv run python publish_tilesets.py                  # all layers
     uv run python publish_tilesets.py flow tanks       # some layers
     uv run python publish_tilesets.py --username me    # instead of the user decoded from the public token
@@ -146,6 +147,8 @@ def main() -> int:
     parser.add_argument("--username", help="Mapbox account name (default: the public token's JWT field u)")
     args = parser.parse_args()
 
+    if not os.environ.get("MAPBOX_SECRET_TOKEN", "").strip() and os.environ.get("MAPBOX_ALL_ACCESS_TOKEN", "").strip():
+        os.environ["MAPBOX_SECRET_TOKEN"] = os.environ["MAPBOX_ALL_ACCESS_TOKEN"].strip()    # fallback name
     if not os.environ.get("MAPBOX_SECRET_TOKEN", "").strip():
         print(MISSING_TOKEN_TEXT, file=sys.stderr)
         return 2

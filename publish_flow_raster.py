@@ -4,7 +4,7 @@
     uv run python publish_flow_raster.py     # uploads, creates and publishes <username>.tg-flow-particles
 
 Needs uv (it runs the Mapbox tilesets CLI as `uv run --with mapbox-tilesets tilesets ...`, as publish_tilesets.py does) and a SECRET token with the
-tilesets:write, tilesets:read and tilesets:list scopes in MAPBOX_SECRET_TOKEN. The username
+tilesets:write, tilesets:read and tilesets:list scopes in MAPBOX_SECRET_TOKEN (MAPBOX_ALL_ACCESS_TOKEN is used when it is not set). The username
 is read from the token (override with MAPBOX_USERNAME). Tokens are never printed.
 It waits for the tileset job to succeed, then the tileset URL is written to web/data/tilesets.json under "flow_particles";
 the map then draws particles instead of the canvas bubbles.
@@ -48,9 +48,9 @@ def run_cli(args: list[str], env: dict[str, str]) -> subprocess.CompletedProcess
 
 
 def main() -> int:
-    token = os.environ.get("MAPBOX_SECRET_TOKEN", "").strip()
+    token = (os.environ.get("MAPBOX_SECRET_TOKEN") or os.environ.get("MAPBOX_ALL_ACCESS_TOKEN") or "").strip()
     if not token:
-        print("MAPBOX_SECRET_TOKEN is not set. Publishing a tileset needs a secret Mapbox token (sk.…) with the\n"
+        print("MAPBOX_SECRET_TOKEN (or MAPBOX_ALL_ACCESS_TOKEN) is not set. Publishing a tileset needs a secret Mapbox token (sk.…) with the\n"
               "tilesets:write, tilesets:read and tilesets:list scopes; the public token in MAPBOX_TOKEN cannot do it.\n"
               "Create one at https://account.mapbox.com/access-tokens/, set it in your environment and run again.")
         return 2
@@ -71,18 +71,15 @@ def main() -> int:
     with tempfile.TemporaryDirectory() as folder:
         recipe_path = Path(folder) / "recipe.json"
         recipe_path.write_text(recipe, encoding="utf-8")
-        steps = [
-            ["upload-raster-source", "--replace", "--quiet", username, SOURCE_ID, str(GEOTIFF)],
-            ["create", tileset_id, "--recipe", str(recipe_path), "--name", "Telangana river flow particles"],
-        ]
-        for args in steps:
-            result = run_cli(args, env)
-            if result.returncode != 0 and args[0] == "create":
-                # The tileset already exists from an earlier run: update its recipe instead.
-                result = run_cli(["update-recipe", tileset_id, str(recipe_path)], env)
-            if result.returncode != 0:
-                print(result.stdout.replace(token, "***")[-600:], result.stderr.replace(token, "***")[-600:])
-                return 1
+        result = run_cli(["upload-raster-source", "--replace", "--quiet", username, SOURCE_ID, str(GEOTIFF)], env)
+        if result.returncode == 0:
+            # `create` on an existing tileset exits 0 without changing its recipe, so ask the account first (as publish_tilesets.py does).
+            exists = tileset_id in run_cli(["list", username], env).stdout
+            result = run_cli(["update-recipe", tileset_id, str(recipe_path)] if exists
+                             else ["create", tileset_id, "--recipe", str(recipe_path), "--name", "Telangana river flow particles"], env)
+        if result.returncode != 0:
+            print(result.stdout.replace(token, "***")[-600:], result.stderr.replace(token, "***")[-600:])
+            return 1
         result = run_cli(["publish", tileset_id], env)
         if result.returncode != 0:
             print(result.stdout.replace(token, "***")[-600:], result.stderr.replace(token, "***")[-600:])
