@@ -492,7 +492,7 @@ function flowParticleLayers(t) {
 function basemapConfig(theme) {
   const labels = { showPlaceLabels: false, showPointOfInterestLabels: false, showTransitLabels: false, showRoadLabels: roadLabelsShown };
   return basemap === 'satellite' ? labels : { ...labels, lightPreset: lightPresetFor(theme), theme: 'faded', show3dObjects: true,
-    showLandmarkIcons: true, show3dFacades: true, show3dTrees: true, ...MAP_THEMES[theme].basemapColours };
+    show3dFacades: true, show3dTrees: true, ...MAP_THEMES[theme].basemapColours };
 }
 function buildStyle(theme) {
   const t = MAP_THEMES[theme];
@@ -2371,9 +2371,8 @@ map.on('load', async () => {
       document.querySelector('[data-canal]').closest('.fgroup').hidden = true;
     }
     debug.notes.cropDistricts = cropland.districts.length;
-    const tilesets = await loadJson('data/tilesets.json').catch(() => ({}));   // absent until publish_flow_raster.py has run
-    if (tilesets.flow_particles) {
-      flowParticlesUrl = tilesets.flow_particles;
+    if (TILESETS.flow_particles) {                  // absent until publish_flow_raster.py has run
+      flowParticlesUrl = TILESETS.flow_particles;
       map.addSource('flow-particles', flowParticleSources()['flow-particles']);
       addLayers(flowParticleLayers(MAP_THEMES[currentTheme()]), 'flow-hit');
       debug.notes.flowParticles = flowParticlesUrl;

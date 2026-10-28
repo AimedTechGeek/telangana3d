@@ -182,7 +182,10 @@ account.mapbox.com, put it in `MAPBOX_SECRET_TOKEN` and run
 official rsms/inter release, uploads them to your Mapbox account through the
 Fonts API and writes `web/data/fonts.json`; with that file present the map asks
 for `Inter Medium` (label font constant `LABEL_FONT` in `web/app.js`), without
-it DIN Pro stays. Without the file the browser logs one harmless 404 for it.
+it DIN Pro stays. `serve.py` answers `data/fonts.json` and `data/tilesets.json` with an
+empty `{}` while they do not exist, so the default page load logs no console errors; a
+static host without that fallback (GitHub Pages) logs a harmless 404 for each file.
+`tilesets.json` is read once, by a synchronous request at load (the style needs it at once).
 
 ### Camera
 

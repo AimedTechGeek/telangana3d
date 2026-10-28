@@ -72,7 +72,7 @@ public and were downloaded by `fetch_data.py` into `data/raw/` (not committed);
   upload endpoint and the glyph name `Inter Medium` follow Mapbox's
   documentation and were not exercised against a real account (unverified).
 - **Basemap configuration (Standard only):** `basemapConfig()` passes
-  `showLandmarkIcons`, `show3dFacades`, `show3dTrees` (all true) and the
+  `show3dFacades`, `show3dTrees` (both true) and the
   `colorWater`, `colorGreenspace`, `colorLand`, `colorRoads`,
   `colorMotorways`, `colorTrunks`, `colorPlaceLabels`, `colorRoadLabels`
   config properties from `MAP_THEMES[theme].basemapColours`;
@@ -86,7 +86,8 @@ public and were downloaded by `fetch_data.py` into `data/raw/` (not committed);
   motorways `#4b4438`, trunks `#3b3933`, labels `#b5b0a8`. The colours are
   design choices checked by eye in screenshots, not derived from data. Place
   and road label colours only show where those labels are on. Landmark icons
-  were not clearly visible in the zoom-12 Hyderabad view; unverified.
+  (`showLandmarkIcons`) stay off: they were not clearly visible in the zoom-12
+  Hyderabad view and their `mapbox-landmark-pois-v1` tiles returned many 404s.
 - **Label states:** hovered and active labels use Mapbox style appearances
   (`appearances` on each symbol layer, conditions on `feature-state`), updated
   on a theme change with `map.setLayerProperty(id, 'appearances', ...)`

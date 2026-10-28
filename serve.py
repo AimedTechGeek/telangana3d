@@ -32,7 +32,23 @@ def write_token_file() -> None:
         print("MAPBOX_TOKEN is not set: the map will show a token notice instead of the basemap")
 
 
+OPTIONAL_JSON = ("/data/tilesets.json", "/data/fonts.json")   # written by the publish scripts; the page reads them at boot
+
+
 class QuietHandler(SimpleHTTPRequestHandler):
+    def do_GET(self) -> None:
+        """Answer an absent optional file with {} so the default page load logs no 404 in the console."""
+        path = self.path.split("?", 1)[0]
+        if path in OPTIONAL_JSON and not (WEB / path.lstrip("/")).exists():
+            body = b"{}"
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+        super().do_GET()
+
     def end_headers(self) -> None:
         self.send_header("Cache-Control", "no-cache")
         super().end_headers()
