@@ -146,9 +146,12 @@ uv run python serve.py      # http://127.0.0.1:8765/ opens in your browser
   else began; links, done, else water, began or planned; canals, era "after"
   counts as 2015 and "before" as 1970 (OSM has no dig date). Years are
   precomputed on the loaded GeoJSON, one shared `yearFilter()` composes with the
-  status and opening-year filters, and the readout ("By 1990: 12 dams · 3
-  links · canals after 2014 hidden") counts from the loaded data, not from the
-  rendered tiles. Pump houses are not filtered by year (they carry none)
+  status and opening-year filters, and the readout (with the shipped data,
+  "By 1990: 13 dams · 1 links · canals after 2014 hidden"; "By 2026" gives 32
+  dams and 18 links) counts dams and distinct links (a link's segments count
+  once, from its earliest dated segment) from the loaded data, not from the
+  rendered tiles. With no canal data the canal clause reads "canal years
+  unavailable". Pump houses are not filtered by year (they carry none)
 - Godavari and Krishna river-bed and flow profiles through the state; hover or
   drag the slider to follow the river on the map, click to fly there
 - Dams (arch icon) and barrages (gated-deck icon), including the Kaleshwaram

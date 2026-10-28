@@ -488,7 +488,10 @@ function setProposalMode(mode) {
   proposalMode = mode;
   for (const button of document.querySelectorAll('[data-proposal]')) button.setAttribute('aria-pressed', String(button.dataset.proposal === mode));
   document.body.classList.toggle('proposal-off', mode === 'off');
-  if (proposalLoaded) for (const layer of proposalLayers(MAP_THEMES[currentTheme()])) map.setLayoutProperty(layer.id, 'visibility', propVisibility());
+  if (proposalLoaded) {
+    const ids = [...proposalLayers(MAP_THEMES[currentTheme()]).map((layer) => layer.id), 'prop-labels-far', 'prop-labels-near'];
+    for (const id of ids) if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', propVisibility());
+  }
   if (mode === 'off') proposalPopup.remove();
 }
 for (const button of document.querySelectorAll('[data-proposal]')) button.addEventListener('click', () => setProposalMode(button.dataset.proposal));
@@ -1305,11 +1308,13 @@ function labelLayers(theme) {
   return layers;
 }
 /** Hover and click through the Interactions API: a pointer cursor and a hover state on the feature. */
+/** The Sketch tool owns map clicks: its vertices must not also open popups or fly the camera. */
+function sketching() { return !document.body.classList.contains('sketch-off'); }
 function interactive(layerId, onClick) {
   const target = { layerId };
   map.addInteraction(`${layerId}-enter`, { type: 'mouseenter', target, handler: ({ feature }) => { map.getCanvas().style.cursor = 'pointer'; if (feature) map.setFeatureState(feature, { hover: true }); } });
   map.addInteraction(`${layerId}-leave`, { type: 'mouseleave', target, handler: ({ feature }) => { map.getCanvas().style.cursor = ''; if (feature) map.setFeatureState(feature, { hover: false }); } });
-  if (onClick) map.addInteraction(`${layerId}-click`, { type: 'click', target, handler: (event) => { onClick(event.feature.properties, event.lngLat); return true; } });
+  if (onClick) map.addInteraction(`${layerId}-click`, { type: 'click', target, handler: (event) => { if (sketching()) return false; onClick(event.feature.properties, event.lngLat); return true; } });
 }
 function buildCityLabels(cities) {
   labelData.cities = collection(cities.map((city, i) => {
@@ -1370,6 +1375,8 @@ for (const button of document.querySelectorAll('[data-era]')) button.addEventLis
 // ---------- years slider: dams, links and canals by the year they were done ----------
 const linkYear = (p) => p.done || p.water || p.began || p.planned || null;
 const canalYear = (p) => CANAL_YEAR[p.era] || null;
+// Undated features carry no year property: 'year: null' makes ['get','year'] fail the number comparison in yearFilter.
+const setYearProperty = (p, year) => { if (year !== null) p.year = year; else delete p.year; };
 let yearData = { dams: [], links: [], canals: [] };   // sorted years of the dated features, from the loaded data
 let yearTimer = null;
 function yearReadout() {
@@ -1405,8 +1412,13 @@ function toggleYearPlay() {
 }
 function setupYears(dams, links, canals) {
   const years = (list, fn) => list.map(fn).filter((y) => y !== null).sort((a, b) => a - b);
-  yearData = { dams: years(dams, damYear), links: years(links.features, (f) => f.properties.year),
-               canals: canals ? years(canals.features, (f) => f.properties.year) : [] };
+  const firstYear = new Map();   // one entry per link: its earliest dated segment
+  for (const f of links.features) {
+    const key = linkKey(f.properties), y = f.properties.year;
+    if (y !== undefined && !(firstYear.get(key) <= y)) firstYear.set(key, y);
+  }
+  yearData = { dams: years(dams, damYear), links: [...firstYear.values()].sort((a, b) => a - b),
+               canals: canals ? years(canals.features, (f) => f.properties.year ?? null) : [] };
   const all = [...yearData.dams, ...yearData.links, ...yearData.canals];
   $('year').min = String(Math.min(...all));
   $('year').max = String(YEAR_MAX);
@@ -1646,7 +1658,7 @@ function openCanalPopup(p, lngLat) {
   content.appendChild(link);
   canalPopup.setLngLat(lngLat).setDOMContent(content).addTo(map);
 }
-map.on('click', 'canals-hit', (event) => { event.originalEvent.stopPropagation(); openCanalPopup(event.features[0].properties, event.lngLat); });
+map.on('click', 'canals-hit', (event) => { if (sketching()) return; event.originalEvent.stopPropagation(); openCanalPopup(event.features[0].properties, event.lngLat); });
 map.on('mouseenter', 'canals-hit', () => { map.getCanvas().style.cursor = 'pointer'; });
 map.on('mouseleave', 'canals-hit', () => { map.getCanvas().style.cursor = ''; });
 
@@ -1672,7 +1684,7 @@ function openTankPopup(p, lngLat) {
   tankPopup.setLngLat(lngLat).setDOMContent(content).addTo(map);
 }
 for (const id of ['tanks-fill', 'tanks-dots']) {
-  map.on('click', id, (event) => { event.originalEvent.stopPropagation(); openTankPopup(event.features[0].properties, event.lngLat); });
+  map.on('click', id, (event) => { if (sketching()) return; event.originalEvent.stopPropagation(); openTankPopup(event.features[0].properties, event.lngLat); });
   map.on('mouseenter', id, () => { map.getCanvas().style.cursor = 'pointer'; });
   map.on('mouseleave', id, () => { map.getCanvas().style.cursor = ''; });
 }
@@ -1806,10 +1818,10 @@ function openGwDistrictPopup(d, lngLat) {
   content.append(head, dl, textEl('p', 'fine', 'Click a well for its own readings.'), gwSourceLink());
   gwPopup.setLngLat(lngLat).setDOMContent(content).addTo(map);
 }
-map.on('click', 'gw-wells', (event) => { event.originalEvent.stopPropagation(); openGwPopup(event.features[0].properties, event.lngLat); });
+map.on('click', 'gw-wells', (event) => { if (sketching()) return; event.originalEvent.stopPropagation(); openGwPopup(event.features[0].properties, event.lngLat); });
 map.on('mouseenter', 'gw-wells', () => { map.getCanvas().style.cursor = 'pointer'; });
 map.on('mouseleave', 'gw-wells', () => { map.getCanvas().style.cursor = ''; });
-map.on('click', 'gw-districts', (event) => {
+map.on('click', 'gw-districts', (event) => { if (sketching()) return;
   const above = ['gw-wells', 'tanks-fill', 'tanks-dots'].filter((id) => map.getLayer(id));
   if (map.queryRenderedFeatures(event.point, { layers: above }).length) return;           // the well or tank popup takes the click
   const d = gwData && gwData.districts.find((row) => row.district === event.features[0].properties.shapeName);
@@ -1936,12 +1948,12 @@ function openProposalPopup(p, lngLat) {
   proposalPopup.setLngLat(lngLat).setDOMContent(content).addTo(map);
 }
 for (const id of ['prop-pool', 'prop-canal', 'prop-tunnel', 'prop-delivery', 'prop-pump', 'prop-trunk-new', 'prop-trunk-existing']) {
-  map.on('click', id, (event) => { event.originalEvent.stopPropagation(); openProposalPopup(event.features[0].properties, event.lngLat); });
+  map.on('click', id, (event) => { if (sketching()) return; event.originalEvent.stopPropagation(); openProposalPopup(event.features[0].properties, event.lngLat); });
   map.on('mouseenter', id, () => { map.getCanvas().style.cursor = 'pointer'; });
   map.on('mouseleave', id, () => { map.getCanvas().style.cursor = ''; });
 }
-map.on('click', 'prop-dam-walls', (event) => { event.originalEvent.stopPropagation(); openProposalPopup({ kind: 'pool', id: event.features[0].properties.id }, event.lngLat); });
-map.on('click', 'dam-walls', (event) => { event.originalEvent.stopPropagation(); const dam = damsData[event.features[0].properties.i]; if (dam) openDamPopup(dam); });
+map.on('click', 'prop-dam-walls', (event) => { if (sketching()) return; event.originalEvent.stopPropagation(); openProposalPopup({ kind: 'pool', id: event.features[0].properties.id }, event.lngLat); });
+map.on('click', 'dam-walls', (event) => { if (sketching()) return; event.originalEvent.stopPropagation(); const dam = damsData[event.features[0].properties.i]; if (dam) openDamPopup(dam); });
 for (const id of ['prop-dam-walls', 'dam-walls']) {
   map.on('mouseenter', id, () => { map.getCanvas().style.cursor = 'pointer'; });
   map.on('mouseleave', id, () => { map.getCanvas().style.cursor = ''; });
@@ -2148,7 +2160,7 @@ function openLinkPopup(p, lngLat) {
   content.appendChild(link);
   linkPopup.setLngLat(lngLat).setDOMContent(content).addTo(map);
 }
-map.on('click', 'links-hit', (event) => { event.originalEvent.stopPropagation(); openLinkPopup(event.features[0].properties, event.lngLat); });
+map.on('click', 'links-hit', (event) => { if (sketching()) return; event.originalEvent.stopPropagation(); openLinkPopup(event.features[0].properties, event.lngLat); });
 map.on('mouseenter', 'links-hit', () => { map.getCanvas().style.cursor = 'pointer'; });
 map.on('mouseleave', 'links-hit', () => { map.getCanvas().style.cursor = ''; });
 
@@ -2160,7 +2172,7 @@ function buildWorkInProgressLabels(links) {
     if (p.status === 'operational' || seen.has(linkKey(p))) continue;
     seen.add(linkKey(p));
     const coords = feature.geometry.coordinates, mid = coords[Math.floor(coords.length / 2)];
-    labelData.wip.features.push(pointFeature(mid[0], mid[1], { name: `${p.link} · ${STATUS_LABEL[p.status] || p.status}`, status: p.status, year: p.year, title: `${p.link}: ${p.from} → ${p.to} · ${p.note}` }));
+    labelData.wip.features.push(pointFeature(mid[0], mid[1], { name: `${p.link} · ${STATUS_LABEL[p.status] || p.status}`, status: p.status, ...(p.year !== undefined ? { year: p.year } : {}), title: `${p.link}: ${p.from} → ${p.to} · ${p.note}` }));
   }
 }
 
@@ -2772,7 +2784,7 @@ function setSketch(on) {
     $('sketch-card').open = true;
     $('sketch-card').scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   }
-  if (!on) { stopSketchControl(); renderSketchCard(null); }
+  if (!on) { stopSketchControl(); renderSketchCard(null); for (const popup of [damPopup, linkPopup, canalPopup, tankPopup, gwPopup, proposalPopup, notePopup]) popup.remove(); }
 }
 function sketchLine() {
   const line = sketchDraw && sketchDraw.getAll().features.find((f) => f.geometry.type === 'LineString' && f.geometry.coordinates.length >= 2);
@@ -2968,7 +2980,7 @@ map.on('load', async () => {
       loadJson('data/flow_summary.json'), loadJson('data/flow.geojson'), loadJson('data/dams.json'),
       loadJson('data/links.geojson'), loadJson('data/pumphouses.json'), loadJson('data/cropland.json'),
       loadJson('data/pending.json').catch(() => [])]);
-    for (const feature of links.features) feature.properties.year = linkYear(feature.properties);
+    for (const feature of links.features) setYearProperty(feature.properties, linkYear(feature.properties));
     linksData = links;
     map.getSource('links').setData(links);
     cropBounds = cropland.bounds;
@@ -2980,7 +2992,7 @@ map.on('load', async () => {
     const canalSummary = await loadJson('data/canals_summary.json').catch(() => null);
     if (canals || (tilesetFor('canals') && canalSummary)) {
       canalsLoaded = true;
-      if (canals) { for (const feature of canals.features) feature.properties.year = canalYear(feature.properties); canalsData = canals; }
+      if (canals) { for (const feature of canals.features) setYearProperty(feature.properties, canalYear(feature.properties)); canalsData = canals; }
       map.addSource('canals', canals ? { type: 'geojson', data: canals } : staticSource('canals', 'canals.geojson'));
       addLayers(canalLayers(MAP_THEMES[currentTheme()]), 'links-highlight');
       debug.notes.canals = canals ? canals.features.length : canalSummary.osm_ways;
