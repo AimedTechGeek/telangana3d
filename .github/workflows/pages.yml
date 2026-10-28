@@ -1,0 +1,42 @@
+# Publishes the built map on GitHub Pages. The gh-pages branch holds web/ as built locally (app, data);
+# this workflow adds the Mapbox token from the repository secret MAPBOX_TOKEN at deploy time, so the
+# token is never committed. It runs from the gh-pages branch itself: the deploy recipe in README.md
+# copies this file there along with web/.
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [gh-pages]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+      - name: Write the Mapbox token file from the repository secret
+        env:
+          MAPBOX_TOKEN: ${{ secrets.MAPBOX_TOKEN }}
+        run: |
+          test -n "$MAPBOX_TOKEN" || { echo "repository secret MAPBOX_TOKEN is not set"; exit 1; }
+          printf 'window.MAPBOX_TOKEN = "%s";\n' "$MAPBOX_TOKEN" > mapbox-token.js
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: .
+      - id: deployment
+        uses: actions/deploy-pages@v4

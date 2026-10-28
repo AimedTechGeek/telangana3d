@@ -28,14 +28,46 @@ public and were downloaded by `fetch_data.py` into `data/raw/` (not committed);
   Required credit: *“© DLR e.V. 2010-2014 and © Airbus Defence and Space GmbH
   2014-2018 provided under COPERNICUS by the European Union and ESA; all
   rights reserved.”*
-- **Used for:** terrain tiles of the web map (`web/tiles`, Terrarium PNG,
-  zoom 5–11), the elevation under the cursor, city elevations, river-bed
-  profiles, 100 m contours, the forge3d viewer DEM and the 3D block.
+- **Used for:** city elevations, river-bed profiles, 100 m contours, the
+  proposal model's terrain, the forge3d viewer DEM and the 3D block. The
+  Terrarium tiles (`web/tiles`, zoom 5–11) are still built but no longer
+  served: since October 2026 the web map draws its 3D surface, hillshade,
+  relief tint and cursor readout from Mapbox Terrain-DEM (section 1b).
 - **Processing:** mosaicked; values below 0 m (a few dozen reservoir
   artefacts) clamped to 0; Gaussian smoothing σ = 1 px to tame canopy and
   building noise; reprojected to Web Mercator for tiles and to a Lambert
   Conformal Conic grid at 200 m for the forge3d outputs (`prepare_data.py`,
   `build_web_data.py`).
+
+## 1b. Mapbox Terrain-DEM v1 and Mapbox Standard (web map surface and basemap)
+
+- **What:** Mapbox's hosted global elevation tileset
+  `mapbox://mapbox.mapbox-terrain-dem-v1` (RGB-encoded heights, up to zoom
+  14, built by Mapbox from several public DEMs) and the Mapbox Standard and
+  Standard Satellite styles (`mapbox://styles/mapbox/standard`,
+  `mapbox://styles/mapbox/standard-satellite`): roads, towns, water, land use,
+  3D buildings and landmarks from Mapbox Streets (OpenStreetMap and other
+  sources) and Mapbox Satellite imagery.
+- **Pages:** https://docs.mapbox.com/data/tilesets/reference/mapbox-terrain-dem-v1/ ·
+  https://docs.mapbox.com/map-styles/standard/ · https://www.mapbox.com/pricing
+- **Terms:** Mapbox Terms of Service (https://www.mapbox.com/legal/tos);
+  requires a Mapbox account and access token, the Mapbox wordmark and the
+  attribution control (“© Mapbox © OpenStreetMap”) kept visible; billed per
+  map load, free up to 50,000 loads a month. Not open data: the tiles may not
+  be cached or redistributed. Accessed from 28 October 2026 with Mapbox GL JS
+  v3.30.0.
+- **Used for:** the web map's 3D terrain mesh, hillshade and relief tint (the
+  same DEM tiles read as a raster and coloured by `raster-color` with the
+  Mapbox height decoding), the elevation under the cursor
+  (`map.queryTerrainElevation`, so the readout always matches the surface
+  drawn), and the basemap under the atlas layers (Standard with place and POI
+  labels off, theme *faded*, light preset *day* or *night* with the theme;
+  road labels only when zoomed in; Satellite as a switch). Labels are set in
+  Mapbox's DIN Pro fonts.
+- **Caveat:** Terrain-DEM and Copernicus differ by a few metres (Hyderabad
+  reads 504 m against the 508 m Copernicus median listed in the Cities card);
+  every figure in the panels, the profiles and the proposal model still comes
+  from Copernicus (section 1).
 
 ## 2. geoBoundaries gbOpen, India ADM1 and ADM2 (state and districts)
 
@@ -527,7 +559,7 @@ Hard-coded in `web/app.js` (`LANDMARKS`), checked on 2026-10-22:
 - **Water budget it is set against:** Godavari share 967.94 TMC, of which 758.76 cleared by the CWC, 148.82 cleared for availability and 60.26 reserve (Chief Minister's letter, September 2021, https://www.etvbharat.com/english/state/telangana/drop-telangana-irrigation-projects-from-unapproved-list-kcr/na20210907073309773); Krishna 299 TMC interim share against Andhra Pradesh's 512, pending the second tribunal (https://www.theweek.in/wire-updates/national/2025/07/14/mes38-tl-govt-river-waters.html); the state's June 2025 request to the Centre for 1,000 + 500 TMC (https://www.siasat.com/telangana-seeks-centres-nod-for-1500-tmc-of-godavari-krishna-water-3235979/). The Godavari draw exceeds even the 1,000 TMC asked for; HydroRIVERS puts the mean flow leaving the state at about 3,670 TMC a year, so the water exists in the monsoon, but using it needs a new inter-state award and flood-season capture. The Krishna draw fits the 500 TMC request but not today's 299 TMC share: flood water only.
 - **Caveats (from the review, shown in the card):** no survey, geology or hydrology; levels recalled, not verified; Medigadda, Annaram and Sundilla suffered structural distress in 2023; the demand overlaps ayacut already promised to existing schemes; energy is the dominant recurring cost (₹30,000–40,000 an acre a year for water lifted 450–600 m); routes may cross the Kawal and Amrabad tiger reserves; evaporation and seepage are a flat 12 %; villages inside pools are not counted; groundwater, tanks and treated Musi wastewater are not counted as sources; tapped canals are assumed to spare 20 % of their design discharge.
 - **Not modelled:** river regulation between states and environmental flows, real alignments and land along them, head-reservoir yields behind tapped canals, crop choice, phasing, and the operating cost of anything but power.
-- **Outputs:** `web/data/proposal.json` (norms, caveats, demand per district, water budget, works with their pumps, trunk systems with their stages, totals, gravity coverage per district) and `web/data/proposal.geojson` (pools, canal, cut, tunnel, pressure-main and aqueduct segments, pump houses, delivery points, trunk stage lines, gravity command areas). Rebuild with `uv run python propose_water.py` after `build_web_data.py`; it takes about five minutes.
+- **Outputs:** `web/data/proposal.json` (norms, caveats, demand per district, water budget, works with their pumps, trunk systems with their stages, totals, gravity coverage per district) and `web/data/proposal.geojson` (pools, canal, cut, tunnel, pressure-main and aqueduct segments, pump houses, delivery points, trunk stage lines, gravity command areas; every line carries the water's height above ground sampled along it, `hg`, by which the map lifts the line off the terrain: aqueducts and rising mains ride above the valleys, canals and tunnels stay on the ground). Rebuild with `uv run python propose_water.py` after `build_web_data.py`; it takes about five minutes.
 
 ## Derived files
 
@@ -549,7 +581,7 @@ Hard-coded in `web/app.js` (`LANDMARKS`), checked on 2026-10-22:
 
 | Component | Version | Licence | Role |
 |---|---|---|---|
-| MapLibre GL JS | 5.12.0 (unpkg CDN) | BSD-3-Clause | web map rendering, 3D terrain |
+| Mapbox GL JS | 3.30.0 (api.mapbox.com CDN) | Mapbox Terms of Service (proprietary, token required) | web map rendering, 3D terrain, Standard basemap, symbol labels, elevated lines, heatmap |
 | forge3d | 1.44.0 | Apache-2.0 OR MIT | native viewer and path-traced block |
 | rasterio / GDAL | 1.5.2 | BSD-3 / MIT | raster mosaic, reprojection, tiles |
 | geopandas, shapely, pyogrio, pyproj | 1.2.0, 2.2.0, 0.13.0, 3.8.0 | BSD / MIT | vector processing |
@@ -562,7 +594,9 @@ Exact versions of every Python dependency are pinned in `uv.lock`.
 
 ## Attribution line used in the web map
 
-“Copernicus DEM (ESA) · HydroRIVERS (HydroSHEDS, Lehner & Grill 2013) ·
-geoBoundaries · Natural Earth · © OpenStreetMap contributors”, plus a link to
-Wikipedia on each dam marker.
+“© Mapbox (Standard basemap, Terrain-DEM) · Copernicus DEM (ESA) · HydroRIVERS
+(HydroSHEDS, Lehner & Grill 2013) · GLAD cropland (Potapov et al. 2021) ·
+geoBoundaries · Natural Earth · India-WRIS groundwater levels (CGWB, Telangana
+GWD) · © OpenStreetMap contributors”, the Mapbox attribution control and
+wordmark on the map, plus a link to Wikipedia in each dam popup.
 

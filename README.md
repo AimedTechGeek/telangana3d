@@ -11,7 +11,7 @@ served from the `gh-pages` branch, which holds the built `web/` folder).
 
 | Theme | What the map shows | Where the numbers come from |
 |---|---|---|
-| Relief | 3D terrain with hillshade, 100 m contours, elevation under the cursor, city heights, Godavari and Krishna river-bed profiles | Copernicus GLO-90 DEM |
+| Relief | 3D terrain with hillshade and a relief tint over the Mapbox Standard or Satellite basemap, 100 m contours, elevation under the cursor, city heights, Godavari and Krishna river-bed profiles | Mapbox Terrain-DEM for the surface, Copernicus GLO-90 DEM for the figures |
 | River flow | Every stream drawn and animated by its long-term average discharge; peak flow where each river leaves the state; flow per district | HydroRIVERS (HydroSHEDS) |
 | Water works | Dams, barrages, reservoirs, pump houses and the links that move water between them, each with status (operating, under construction, proposed), years, heights and capacity; a "Still to be built" list | Wikipedia and Wikidata infoboxes, OpenStreetMap, CAG audit, CWC replies, news (every entry cites its source) |
 | Canals | Canals, tunnels and pressure mains dug after 2014 or all of them; the Kaleshwaram network figures against what OSM has mapped | OpenStreetMap, CAG |
@@ -64,7 +64,15 @@ real outlines of the tanks.
 
 ![Kaleshwaram reservoirs, canals and tanks](docs/screenshots/07-kaleshwaram-canals-tanks.jpg)
 
-## Web map (MapLibre, runs locally)
+## Web map (Mapbox GL JS)
+
+The map runs on Mapbox GL JS v3 with the Mapbox Standard basemap (or Standard
+Satellite) under the atlas layers and Mapbox Terrain-DEM as the 3D surface, so
+it needs a Mapbox public token. Create one at account.mapbox.com with the
+default public scopes, restrict it to `http://127.0.0.1:8765/*` (and the Pages
+URL, see below), and put it in a User environment variable `MAPBOX_TOKEN`.
+`serve.py` writes it into `web/mapbox-token.js`, which is git-ignored; nothing
+else needs the token.
 
 ```powershell
 uv run python serve.py      # http://127.0.0.1:8765/ opens in your browser
@@ -158,8 +166,10 @@ uv run python serve.py      # http://127.0.0.1:8765/ opens in your browser
 - Mouse: left-drag pans (switch "Left-drag" to *Rotates* for a full 360° orbit
   with tilt), right-drag or Ctrl-drag always rotates and tilts, scroll zooms
 
-Everything is served from `web/` (no API keys, no internet needed after the
-build apart from the MapLibre and font CDNs).
+Everything in `web/` is served as static files. The browser fetches Mapbox GL
+JS, the Standard basemap, the Terrain-DEM tiles and the label fonts from Mapbox
+(one map load per visit, free up to 50,000 a month) and the panel fonts from
+Google.
 
 ## forge3d (native)
 
@@ -181,27 +191,36 @@ uv run python fetch_data.py       # downloads into data/raw (~250 MB); the small
                                   # stable files (DEM, HydroRIVERS, boundaries, GLAD) are fetched
 uv run python prepare_data.py     # mosaic, reproject, clip -> data/
 uv run python make_overlay.py     # map colours and lines -> data/overlay.png (forge3d)
-uv run python build_web_data.py   # terrain tiles, profiles, contours -> web/ (~120 MB)
+uv run python build_web_data.py   # profiles, contours, layers -> web/data (and Terrarium tiles -> web/tiles, no longer used by the map)
 uv run python propose_water.py    # the Proposal view: reservoir sites, routes, pump houses -> web/data/proposal.*
 uv run python web_smoke_test.py   # headless Edge check of the web map -> out/web_home.png
 ```
 
 ## Publish to GitHub Pages
 
-The site is the `web/` folder as built above, pushed to the `gh-pages` branch
-(root, with a `.nojekyll` file so GitHub serves it as is). After rebuilding
-`web/`, redeploy from the repo root:
+The site is the `web/` folder as built above (without `tiles/`, which the
+Mapbox build no longer reads), pushed to the `gh-pages` branch together with
+`.github/workflows/pages.yml` and a `.nojekyll` file. On every push to
+`gh-pages` that workflow writes `mapbox-token.js` from the repository secret
+`MAPBOX_TOKEN` and deploys the folder with `actions/deploy-pages`, so the
+token is never committed (it is still visible to visitors, as any browser
+token is, which is why it must be URL-restricted). One-time setup in the repo
+settings: *Secrets and variables → Actions → New repository secret*
+`MAPBOX_TOKEN`, a public `pk.` token restricted to
+`https://aimedtechgeek.github.io/*`; and *Pages → Source: GitHub Actions*.
+After rebuilding `web/`, redeploy from the repo root:
 
 ```bash
 git worktree add ../telangana3d-pages gh-pages          # once per clone
 SRC=$(git rev-parse --short HEAD)
 rm -rf ../telangana3d-pages/data ../telangana3d-pages/tiles
-cp -r web/. ../telangana3d-pages/
+cp -r web/data web/index.html web/app.js web/style.css ../telangana3d-pages/
+mkdir -p ../telangana3d-pages/.github/workflows && cp .github/workflows/pages.yml ../telangana3d-pages/.github/workflows/
 cd ../telangana3d-pages && git add -A && git commit -m "Deploy the built map from $SRC" && git push
 ```
 
-The repo's Pages setting must point at `gh-pages` / root. Every URL in
-`web/` is relative, so the same files work locally and under the project path.
+Every URL in `web/` is relative, so the same files work locally and under the
+project path.
 
 ## Data and choices
 
@@ -212,7 +231,7 @@ and what stands in for them, are listed by topic in
 
 | Item | Source / value |
 |---|---|
-| Elevation | Copernicus GLO-90 DSM (AWS open data), smoothed (σ = 1 px); 200 m grid for forge3d, Terrarium tiles z5–11 for the web map |
+| Elevation | Copernicus GLO-90 DSM (AWS open data), smoothed (σ = 1 px); 200 m grid for forge3d, the river profiles, city heights and the proposal model. The web map's 3D surface, hillshade, relief tint and cursor readout come from Mapbox Terrain-DEM v1, so the readout always matches the surface drawn (Hyderabad reads 504 m there against 508 m in the Copernicus list) |
 | State and 33 districts | geoBoundaries gbOpen India ADM1/ADM2 |
 | Rivers | Natural Earth 10m centrelines (profiles, names) |
 | River flow | HydroRIVERS v1.0 (HydroSHEDS): `DIS_AV_CMS`, the long-term average *naturalised* discharge from the WaterGAP model, i.e. before dams and irrigation withdrawals; reaches ≥ 1 m³/s. Per-district values are length-weighted means of the main stem inside the district |
