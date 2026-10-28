@@ -13,6 +13,7 @@ Outputs:
 - web/data/flow.geojson       HydroRIVERS reaches with modelled average discharge (m3/s)
 - web/data/flow_summary.json  peak flow per river and average flow per district
 - web/data/dams.json          dams and barrages from Wikipedia infoboxes (height, river)
+- web/data/dam_lines.geojson  OSM dam crest lines of the dams above, with height, for the 3D walls
 - web/data/links.geojson      schematic Kaleshwaram water links between those structures
 - web/data/pumphouses.json    Kaleshwaram pump houses from OpenStreetMap
 - web/data/cropland_*.png     GLAD percent-cropland rasters (before/after 2014) and their change
@@ -394,6 +395,7 @@ def flow_summary(reaches: gpd.GeoDataFrame, districts: gpd.GeoDataFrame, state: 
 
 # --- dams and barrages (Wikipedia infoboxes) --------------------------------
 
+DAM_WALL_DEFAULT_M = 15            # wall height drawn for a dam whose height no source gives (flagged height_known false)
 DAM_CORRIDOR_M = 15000.0            # border dams (Srisailam, Nagarjuna Sagar) sit just outside the state
 EXCLUDED_TITLE_WORDS = ("lift irrigation", "scheme", "wildlife", "district")
 # Infobox dam_type codes are inconsistent ("B" marks Osman Sagar, a masonry dam), so only
@@ -862,6 +864,44 @@ def attach_inflow(dams: list[dict], reaches: gpd.GeoDataFrame) -> None:
             reach = projected.iloc[reach_idx[0]]
             dam["inflow_q"] = round(float(reach["DIS_AV_CMS"]))
             dam["inflow_name"] = reach["name"]
+
+
+def dam_key(name: str) -> str:
+    """'Sriram Sagar Project (Pochampad) Dam' -> 'sriramsagar': the words that differ between OSM and Wikipedia names are dropped."""
+    name = re.sub(r"\(.*?\)", " ", name.lower())
+    return re.sub(r"[^a-z]", "", re.sub(r"\b(dam|project|reservoir|barrage|weir|lake|the)\b", " ", name))
+
+
+# OSM names of dam ways that differ from the map's dam names beyond the words dam_key drops (checked by eye against the 42 dams).
+DAM_LINE_ALIASES = {"priyadarshinijurala": "jurala", "nagarjunsagar": "nagarjunasagar", "sriranganayakasagar": "ranganayakasagar",
+                    "sammakka": "sammakkasagar"}
+
+
+def build_dam_lines(dams: list[dict]) -> dict:
+    """OSM waterway=dam ways (data/raw/osm_dam_lines.json) joined by name to the dams on the map; dams without a line are skipped."""
+    elements = json.loads((RAW / "osm_dam_lines.json").read_text(encoding="utf-8"))["elements"]
+    by_key = {}
+    for i, dam in enumerate(dams):
+        by_key.setdefault(dam_key(dam["name"]), i)
+    features, used = [], set()
+    for e in elements:
+        tags = e.get("tags", {})
+        keys = [DAM_LINE_ALIASES.get(k, k) for k in (dam_key(tags[t]) for t in ("name", "alt_name", "name:en") if t in tags)]
+        i = next((by_key[k] for k in keys if k in by_key), None)
+        if i is None or len(e.get("geometry", [])) < 2:
+            continue
+        dam = dams[i]
+        height = dam["height"] if dam["height"] is not None else parse_height_m(tags.get("height"))
+        coords = [[round(p["lon"], 5), round(p["lat"], 5)] for p in e["geometry"]]
+        properties = {"i": i, "name": dam["name"], "status": dam["status"], "height": height if height is not None else DAM_WALL_DEFAULT_M,
+                      "height_known": height is not None}
+        year = dam["opened"] or dam["began"]
+        if year is not None:
+            properties["year"] = year
+        features.append({"type": "Feature", "geometry": {"type": "LineString", "coordinates": coords}, "properties": properties})
+        used.add(i)
+    print(f"dam lines: {len(features)} OSM dam ways joined to {len(used)} of {len(dams)} dams")
+    return {"type": "FeatureCollection", "features": features}
 
 
 def osm_reservoir_dams() -> list[dict]:
@@ -1340,6 +1380,10 @@ def main() -> None:
         print(f"  {dam['kind']:7} {dam['name'][:30]:30} {str(dam['height'] or '-'):>4} m  "
               f"{dam['began'] or '----'}-{dam['opened'] or '----'}  cap {str(dam['capacity_tmcft'] or '-'):>7} tmcft  "
               f"inflow {str(dam['inflow_q'] or '-'):>5} m3/s {dam['inflow_name'] or ''}")
+    if (RAW / "osm_dam_lines.json").exists():
+        (WEB_DATA / "dam_lines.geojson").write_text(json.dumps(build_dam_lines(dams)), encoding="utf-8")
+    else:
+        print("  warning: data/raw/osm_dam_lines.json missing (fetch_data.py); dam_lines.geojson not built")
     pumphouses = load_pumphouses()
     for node in [*dams, *pumphouses]:
         elevation = sampler.median(node["lon"], node["lat"], NODE_ELEV_RADIUS_PX)

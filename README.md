@@ -117,6 +117,11 @@ uv run python serve.py      # http://127.0.0.1:8765/ opens in your browser
   reservoirs. Labels show name and gross capacity; clicking one zooms in and
   opens a popup with height, construction-start–opening years, the average
   river inflow at that point (HydroRIVERS) and capacity
+- **Dams as 3D walls:** the Dams & reservoirs chip also extrudes the OpenStreetMap
+  crest line of 13 dams (Nagarjuna Sagar, Srisailam, Sriram Sagar, Nizam Sagar,
+  Jurala and others) into a wall as high as the dam; with the proposal on, each
+  proposed reservoir gets a wall as high as its dam. Click a wall for the
+  popup. Heights are exaggerated with the terrain, see DATA_SOURCES.md 6b.
 - **Still to be built:** every dam, reservoir, barrage, pump house, tunnel,
   water link and canal carries a status (operating, under construction,
   proposed). The Status filter on the right shows only the operating works or
