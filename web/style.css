@@ -17,6 +17,7 @@
   --tank-edge: #1b5a93;
   --gw: #2166ac;
   --prop: #0f766e;
+  --sketch: #e8590c;
   --prop-pool: #4f46e5;
   --prop-pump: #b45309;
   --prop-trunk: #7c3aed;
@@ -48,6 +49,7 @@
     --tank-edge: #bfe3ff;
     --gw: #7cc4ff;
     --prop: #2dd4bf;
+    --sketch: #ffd43b;
     --prop-pool: #818cf8;
     --prop-pump: #fbbf24;
     --prop-trunk: #c4b5fd;
@@ -77,6 +79,7 @@
   --tank-edge: #bfe3ff;
   --gw: #7cc4ff;
   --prop: #2dd4bf;
+  --sketch: #ffd43b;
   --prop-pool: #818cf8;
   --prop-pump: #fbbf24;
   --prop-trunk: #c4b5fd;
@@ -589,3 +592,24 @@ details.table td { padding: 2px 0; border-bottom: 1px solid var(--hair); }
   .mapboxgl-ctrl-scale, .mapboxgl-ctrl-attrib.mapboxgl-compact { font-size: 12px !important; }
 }
 @media (prefers-reduced-motion: reduce) { .panel, .toast { transition: none; } }
+
+/* ---------- sketch a canal ---------- */
+body.sketch-off #sketch-card { display: none; }
+#sketch-profile { display: block; width: 100%; height: auto; overflow: visible; }
+#sketch-profile .grid, #sketch-profile .axis { stroke: var(--hair); stroke-width: 1; }
+#sketch-profile .tick { fill: var(--muted); font-family: var(--mono); font-size: 9.5px; }
+#sketch-profile .area { fill: var(--river); fill-opacity: .1; }
+#sketch-profile .line { fill: none; stroke: var(--river); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+#sketch-profile .water { fill: none; stroke: var(--sketch); stroke-width: 1.5; stroke-dasharray: 5 3; }
+#sketch-profile .dig { fill: var(--sketch); fill-opacity: .35; }
+#sketch-profile .dig.tunnel { fill: var(--prop-trunk); fill-opacity: .45; }
+#sketch-profile .lm { fill: var(--ink-2); stroke: var(--panel-solid); stroke-width: 2; }
+#sketch-profile .lm-text { fill: var(--ink-2); font-size: 9.5px; font-weight: 500; }
+#sketch-verdict.ok b { color: var(--prop); }
+#sketch-verdict.lift b { color: var(--sketch); }
+.sketch-bar { display: flex; gap: 6px; }
+.sketch-bar button { width: 34px; height: 34px; border: 1px solid var(--border); border-radius: 8px; background-color: var(--chip); cursor: pointer; }
+.sketch-bar button:hover, .sketch-bar button.active { background-color: var(--accent-soft); }
+:root[data-theme="dark"] .sketch-bar button { filter: invert(1); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .sketch-bar button { filter: invert(1); } }
+body:not(.sketch-off) .mapboxgl-popup { display: none; }   /* clicks place vertices; the layers' popups stay out of the way */

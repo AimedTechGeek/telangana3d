@@ -62,6 +62,7 @@ const MAP_THEMES = {
     gwChange: [[-6, '#b2182b'], [-2, '#ef8a62'], [0, '#f4f1ea'], [2, '#67a9cf'], [6, '#2166ac']], gwStroke: '#ffffff',       // fell … rose
     prop: '#0f766e', propPool: '#4f46e5', propPump: '#b45309', propTrunk: '#7c3aed', propPulse: '#ffffff', propCmdExisting: 'rgba(34,197,94,0.22)', propCmdNew: 'rgba(20,184,166,0.32)',
     flow: ['#86d9e3', '#36aee6', '#2566d8', '#1a3aa6', '#5f2aa8'],   // FLOW_CLASSES: cyan -> blue -> navy -> purple
+    sketch: '#e8590c', sketchHalo: 'rgba(255,255,255,0.9)',   // the Sketch tool's dashed line and its outline
     shadow: '#2b2016', highlight: '#fff4e2', accent: '#4e3d2e',
     label: '#1f1d1a', labelMuted: '#6b6560', labelHalo: 'rgba(255,255,255,0.92)', labelActive: '#c2410c', iconBg: '#ffffff', damIcon: '#b4532a', barrageIcon: '#0f7f78', peakIcon: '#1a3aa6',
     // Standard basemap kept behind the atlas: water pale and desaturated under the tank/river blues, greenspace muted so it does not fight the relief tint
@@ -79,6 +80,7 @@ const MAP_THEMES = {
     gwChange: [[-6, '#ff6b6b'], [-2, '#c97a6a'], [0, '#2a2f38'], [2, '#5f9bd0'], [6, '#8fd0ff']], gwStroke: '#0b1a33',
     prop: '#2dd4bf', propPool: '#818cf8', propPump: '#fbbf24', propTrunk: '#c4b5fd', propPulse: '#ffffff', propCmdExisting: 'rgba(74,222,128,0.20)', propCmdNew: 'rgba(45,212,191,0.30)',
     flow: ['#2f96a8', '#3cbbea', '#6a9cff', '#a9bdff', '#dcaaff'],   // FLOW_CLASSES: teal -> sky -> blue -> lilac on the dark surface
+    sketch: '#ffd43b', sketchHalo: 'rgba(0,0,0,0.75)',
     shadow: '#000000', highlight: '#b9a68c', accent: '#000000',
     label: '#f1efe9', labelMuted: '#b5b0a8', labelHalo: 'rgba(14,15,18,0.9)', labelActive: '#fb923c', iconBg: '#1b1e26', damIcon: '#f2996b', barrageIcon: '#4fd1c5', peakIcon: '#a9bdff',
     basemapColours: { colorWater: '#1b2836', colorGreenspace: '#1a2320', colorLand: '#14161a', colorRoads: '#2b2e35', colorMotorways: '#4b4438', colorTrunks: '#3b3933', colorPlaceLabels: '#b5b0a8', colorRoadLabels: '#b5b0a8' },
@@ -103,7 +105,7 @@ function currentTheme() {
 function setTheme(theme) {
   document.documentElement.dataset.theme = theme;
   try { localStorage.setItem('theme', theme); } catch (_) { /* storage unavailable */ }
-  if (map && map.getLayer('relief')) ensureIcons(theme).then(() => { applyMapTheme(); renderFlowLegend(); renderGwLegend(); syncArrowImage(); });
+  if (map && map.getLayer('relief')) ensureIcons(theme).then(() => { applyMapTheme(); renderFlowLegend(); renderGwLegend(); syncArrowImage(); sketchRestyle(); });
 }
 try { const saved = localStorage.getItem('theme'); if (saved) document.documentElement.dataset.theme = saved; } catch (_) { /* ignore */ }
 
@@ -743,7 +745,8 @@ function setBasemap(mode) {
   // replaces the current one; the 3D walls are therefore added once the new style has loaded.
   const walls = style.layers.filter((layer) => layer.type === 'fill-extrusion');
   style.layers = style.layers.filter((layer) => layer.type !== 'fill-extrusion');
-  map.once('style.load', () => { addLayers(walls); styleReady = true; ensureIcons(currentTheme()); });   // a new style starts without our images
+  const sketchKept = sketchSuspend();                               // Draw's layers do not survive a style reload
+  map.once('style.load', () => { addLayers(walls); styleReady = true; ensureIcons(currentTheme()); sketchResume(sketchKept); });   // a new style starts without our images
   map.setStyle(style, { diff: false });                             // the Standard import cannot be diffed
 }
 for (const button of document.querySelectorAll('[data-base]')) button.addEventListener('click', () => setBasemap(button.dataset.base));
@@ -846,6 +849,7 @@ const toggles = {
   bands: () => { map.setPaintProperty('relief', 'raster-color', reliefExpression(currentTheme())); renderLegend(); },
   hillshade: (on) => map.setLayoutProperty('hillshade', 'visibility', on ? 'visible' : 'none'),
   contours: (on) => setVisible(['contours', 'contour-labels'], on),
+  sketch: (on) => setSketch(on),
   districts: (on) => { map.setLayoutProperty('districts', 'visibility', on ? 'visible' : 'none'); document.body.classList.toggle('districts-off', !on); },
   labels: (on) => setVisible(LABEL_LAYERS.labels, on),
   dams: (on) => setVisible(['dam-labels', 'dam-walls'], on),
@@ -2338,6 +2342,336 @@ for (const tab of document.querySelectorAll('[role="tab"]')) {
 }
 
 // ---------- data + boot ----------
+// ---------- sketch a canal (mapbox-gl-draw) ----------
+// A drawn line is measured (haversine), its ground read from the Terrain-DEM every 500 m, and judged against the proposal model's
+// norms: gravity works when the end sits below the start by the canal fall plus the stage loss and no ground climbs more than
+// tunnel_cover above the falling water line; otherwise the lift and the stretches that need a tunnel or deep cut are reported.
+const SKETCH_STEP_KM = 0.5, SKETCH_TANK_KM = 2, SKETCH_RETRIES = 15, SKETCH_LIST_MAX = 6;
+let sketchDraw = null;                     // the MapboxDraw control, only while the tool is on
+let sketchData = null;                     // { tanks, districts } read once, the first time the tool opens
+let sketchRun = 0;                         // a newer measurement makes older retries stop
+
+function haversineKm(a, b) {
+  const rad = Math.PI / 180, dLat = (b[1] - a[1]) * rad, dLng = (b[0] - a[0]) * rad;
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(a[1] * rad) * Math.cos(b[1] * rad) * Math.sin(dLng / 2) ** 2;
+  return 2 * 6371.0088 * Math.asin(Math.sqrt(h));
+}
+function lineLengthKm(coords) {
+  let total = 0;
+  for (let i = 1; i < coords.length; i++) total += haversineKm(coords[i - 1], coords[i]);
+  return total;
+}
+/** Points every `stepKm` along the line, from its start to its end: [{ d (km along), lng, lat }]. */
+function sketchSamples(coords, stepKm) {
+  const samples = [];
+  let before = 0, next = 0;
+  for (let i = 1; i < coords.length; i++) {
+    const a = coords[i - 1], b = coords[i], length = haversineKm(a, b);
+    for (; next <= before + length && length > 0; next += stepKm) {
+      const f = (next - before) / length;
+      samples.push({ d: next, lng: a[0] + (b[0] - a[0]) * f, lat: a[1] + (b[1] - a[1]) * f });
+    }
+    before += length;
+  }
+  const end = coords[coords.length - 1];
+  if (!samples.length || before - samples[samples.length - 1].d > 1e-6) samples.push({ d: before, lng: end[0], lat: end[1] });
+  return samples;
+}
+/** The gravity check on samples [{ d, elev }] under the proposal's norms; pure, so it can be tested with made-up ground. */
+function sketchAssess(samples, norms) {
+  const length = samples[samples.length - 1].d;
+  const start = samples[0].elev, end = samples[samples.length - 1].elev;
+  const needed = norms.canal_fall_m_per_km * length + norms.stage_loss_m;     // fall the water line spends on the way
+  const water = (d) => start - norms.canal_fall_m_per_km * d - (length ? norms.stage_loss_m * d / length : 0);
+  const high = samples.reduce((best, s) => (s.elev > best.elev ? s : best), samples[0]);
+  const excess = samples.map((s) => s.elev - water(s.d));                       // ground above the water line
+  const stretches = [];
+  let run = null;
+  samples.forEach((s, i) => {
+    const kind = excess[i] > norms.tunnel_cover_m ? 'tunnel' : excess[i] > norms.cut_cover_m ? 'cut' : null;
+    if (!kind) { run = null; return; }
+    if (!run || run.kind !== kind) { run = { kind, from: s.d, to: s.d, peak: 0 }; stretches.push(run); }
+    run.to = s.d; run.peak = Math.max(run.peak, excess[i]);
+  });
+  const fall = start - end, worst = Math.max(...excess);
+  return { length, start, end, fall, needed, high, water, stretches, worst,
+           gravity: fall >= needed && worst <= norms.tunnel_cover_m,
+           lift: Math.max(0, high.elev - start + needed) };
+}
+/** Distance in km from a point to a polyline, on a local flat projection (fine at 2 km). */
+function pointToLineKm(p, coords) {
+  const kmLat = 110.574, kmLng = 111.32 * Math.cos(p[1] * Math.PI / 180);
+  const at = (c) => [(c[0] - p[0]) * kmLng, (c[1] - p[1]) * kmLat];
+  let best = Infinity;
+  for (let i = 1; i < coords.length; i++) {
+    const [ax, ay] = at(coords[i - 1]), [bx, by] = at(coords[i]);
+    const dx = bx - ax, dy = by - ay, len2 = dx * dx + dy * dy;
+    const t = len2 ? Math.max(0, Math.min(1, -(ax * dx + ay * dy) / len2)) : 0;
+    best = Math.min(best, Math.hypot(ax + t * dx, ay + t * dy));
+  }
+  return best;
+}
+function inRing(point, ring) {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const [xi, yi] = ring[i], [xj, yj] = ring[j];
+    if ((yi > point[1]) !== (yj > point[1]) && point[0] < (xj - xi) * (point[1] - yi) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+function inDistrict(point, geometry) {
+  const polygons = geometry.type === 'Polygon' ? [geometry.coordinates] : geometry.coordinates;
+  return polygons.some((rings) => inRing(point, rings[0]) && !rings.slice(1).some((hole) => inRing(point, hole)));
+}
+
+function sketchStyles(t) {
+  const line = ['all', ['==', '$type', 'LineString'], ['!=', 'mode', 'static']];
+  const vertex = ['all', ['==', '$type', 'Point'], ['==', 'meta', 'vertex']];
+  const midpoint = ['all', ['==', '$type', 'Point'], ['==', 'meta', 'midpoint']];
+  const cap = { 'line-cap': 'round', 'line-join': 'round' };
+  return [
+    { id: 'gl-draw-line-halo', type: 'line', filter: line, layout: cap, paint: { 'line-color': t.sketchHalo, 'line-width': 6, 'line-emissive-strength': 1 } },
+    { id: 'gl-draw-line', type: 'line', filter: line, layout: cap, paint: { 'line-color': t.sketch, 'line-width': 3, 'line-dasharray': [2, 1.5], 'line-emissive-strength': 1 } },
+    { id: 'gl-draw-vertex-halo', type: 'circle', filter: vertex, paint: { 'circle-radius': 7, 'circle-color': t.sketchHalo, 'circle-emissive-strength': 1 } },
+    { id: 'gl-draw-vertex', type: 'circle', filter: vertex, paint: { 'circle-radius': 4.5, 'circle-color': t.sketch, 'circle-emissive-strength': 1 } },
+    { id: 'gl-draw-midpoint', type: 'circle', filter: midpoint, paint: { 'circle-radius': 3, 'circle-color': t.sketch, 'circle-emissive-strength': 1 } },
+  ].map((layer) => ({ ...layer, slot: 'top' }));
+}
+
+/** Adds the draw control (line and bin only) and puts back any kept features once Draw's own source exists. */
+function startSketchControl(kept, mode) {
+  const draw = new MapboxDraw({ displayControlsDefault: false, controls: { line_string: true, trash: true }, styles: sketchStyles(MAP_THEMES[currentTheme()]) });
+  sketchDraw = draw;
+  // Draw adds its layers only once map.loaded() is true, then never again; the flow animation keeps that false for good,
+  // so the map reports itself loaded for the instant it takes the control to attach (the style is ready by now).
+  const loaded = map.loaded;
+  map.loaded = () => true;
+  map.addControl(draw, 'bottom-right');
+  map.loaded = loaded;
+  // The right-hand cards sit over the map's control corners, so the two buttons live in the Sketch card instead.
+  const bar = document.querySelector('.mapboxgl-ctrl-group .mapbox-gl-draw_ctrl-draw-btn').parentElement;
+  bar.className = 'sketch-bar';
+  $('sketch-tools').appendChild(bar);
+  const wait = setInterval(() => {
+    if (sketchDraw !== draw) { clearInterval(wait); return; }
+    if (!map.getSource('mapbox-gl-draw-cold')) return;
+    clearInterval(wait);
+    if (kept && kept.features.length) draw.set(kept);
+    if (mode) draw.changeMode(mode);
+    refreshSketch();
+  }, 50);
+}
+function stopSketchControl() {
+  sketchRun++;
+  const draw = sketchDraw;
+  sketchDraw = null;
+  if (draw) map.removeControl(draw);
+}
+function sketchSuspend() {
+  if (!sketchDraw) return null;
+  const kept = sketchDraw.getAll();
+  stopSketchControl();
+  return kept;
+}
+function sketchResume(kept) { if (kept) startSketchControl(kept); }
+function sketchRestyle() { sketchResume(sketchSuspend()); }
+
+async function loadSketchData() {
+  if (sketchData) return;
+  const [tanks, districts] = await Promise.all([
+    tanksLoaded ? loadJson('data/tank_points.geojson').catch(() => null) : null,
+    loadJson('data/districts.geojson').catch(() => null)]);
+  sketchData = { tanks: tanks ? tanks.features.map((f) => f.properties) : null, districts: districts ? districts.features : null };
+  refreshSketch();
+}
+function setSketch(on) {
+  document.body.classList.toggle('sketch-off', !on);
+  if (on && !sketchDraw) {
+    startSketchControl(null, 'draw_line_string');
+    loadSketchData();
+    $('sketch-card').open = true;
+    $('sketch-card').scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }
+  if (!on) { stopSketchControl(); renderSketchCard(null); }
+}
+function sketchLine() {
+  const line = sketchDraw && sketchDraw.getAll().features.find((f) => f.geometry.type === 'LineString' && f.geometry.coordinates.length >= 2);
+  return line ? line.geometry.coordinates : null;
+}
+function refreshSketch() { sketchRun++; measureSketch(sketchRun, 0); }
+function measureSketch(run, attempt) {
+  if (run !== sketchRun) return;
+  const coords = sketchLine();
+  if (!coords) { renderSketchCard(null); return; }
+  const samples = sketchSamples(coords, SKETCH_STEP_KM);
+  for (const s of samples) s.elev = elevationAt([s.lng, s.lat]);
+  if (samples.some((s) => s.elev === null)) {
+    renderSketchCard({ coords, loading: attempt < SKETCH_RETRIES });
+    if (attempt >= SKETCH_RETRIES) return;
+    if (attempt === 0) {       // the terrain tiles load for what is in view, so bring the whole line into it
+      const bounds = coords.reduce((b, c) => b.extend(c), new mapboxgl.LngLatBounds(coords[0], coords[0]));
+      map.fitBounds(bounds, { padding: 80, maxZoom: 11, duration: 600, essential: true });
+    }
+    let waiting = true;
+    const retry = () => { if (!waiting) return; waiting = false; map.off('idle', retry); clearTimeout(timer); measureSketch(run, attempt + 1); };
+    const timer = setTimeout(retry, 700);   // the flow animation can keep the map from ever going idle
+    map.once('idle', retry);
+    return;
+  }
+  const norms = proposalData && proposalData.norms;
+  renderSketchCard({ coords, samples, assessment: norms ? sketchAssess(samples, norms) : null, norms });
+}
+
+const fmtKm = (km) => km.toFixed(km < 10 ? 2 : 1);
+function sketchCrossings(coords, samples) {
+  const out = { tanks: null, districts: null };
+  if (!sketchData) return out;
+  if (sketchData.tanks) {
+    const lons = coords.map((c) => c[0]), lats = coords.map((c) => c[1]), pad = 0.03;
+    const near = sketchData.tanks.filter((t) => t.lon > Math.min(...lons) - pad && t.lon < Math.max(...lons) + pad && t.lat > Math.min(...lats) - pad && t.lat < Math.max(...lats) + pad
+                                                  && pointToLineKm([t.lon, t.lat], coords) <= SKETCH_TANK_KM);
+    out.tanks = near.sort((a, b) => b.area_ha - a.area_ha);
+  }
+  if (sketchData.districts) {
+    const seen = [];
+    for (const point of [...coords, ...samples.map((s) => [s.lng, s.lat])]) {
+      const district = sketchData.districts.find((f) => inDistrict(point, f.geometry));
+      if (district && !seen.includes(district.properties.shapeName)) seen.push(district.properties.shapeName);
+    }
+    out.districts = seen;
+  }
+  return out;
+}
+
+function renderSketchCard(state) {
+  const summary = $('sketch-summary'), svg = $('sketch-profile'), facts = $('sketch-facts'), verdict = $('sketch-verdict'), crossings = $('sketch-crossings');
+  $('sketch-stretches').textContent = '';
+  for (const el of [facts, verdict, crossings]) el.hidden = true;
+  svg.setAttribute('hidden', '');                                   // an SVG element has no .hidden property
+  $('sketch-count').textContent = '';
+  verdict.className = 'summary';
+  if (!state) {
+    summary.textContent = "Click the map to place the canal's vertices, double-click to finish. Drag a vertex to edit; the bin deletes the selected line.";
+    return;
+  }
+  const length = lineLengthKm(state.coords);
+  $('sketch-count').textContent = `${fmtKm(length)} km`;
+  summary.textContent = '';
+  summary.append('Line of ', bold(`${fmtKm(length)} km`), ` over ${state.coords.length} vertices`);
+  if (!state.samples) {
+    summary.append(state.loading ? ' · terrain still loading' : ' · no terrain could be read here; zoom in on the line');
+    return;
+  }
+  const a = state.assessment;
+  if (!a) { summary.append(' · proposal norms are not loaded, so there is no verdict'); }
+  renderSketchChart(svg, state.samples, a, state.norms);
+  svg.removeAttribute('hidden');
+  const tbody = facts.tBodies[0];
+  tbody.textContent = '';
+  const row = (label, value) => {
+    const tr = document.createElement('tr'), th = document.createElement('td'), td = document.createElement('td');
+    th.textContent = label; td.textContent = value; tr.append(th, td); tbody.appendChild(tr);
+  };
+  const first = state.samples[0].elev, last = state.samples[state.samples.length - 1].elev;
+  const high = state.samples.reduce((best, s) => (s.elev > best.elev ? s : best), state.samples[0]);
+  row('Length', `${fmtKm(length)} km`);
+  row('Start elevation', `${Math.round(first)} m`);
+  row('End elevation', `${Math.round(last)} m`);
+  row('Net fall', first >= last ? `${Math.round(first - last)} m` : `rises ${Math.round(last - first)} m`);
+  row('Highest point', `${Math.round(high.elev)} m at km ${high.d.toFixed(1)}`);
+  if (a) row('Fall needed', `${a.needed.toFixed(1)} m (${state.norms.canal_fall_m_per_km} m/km canal fall + ${state.norms.stage_loss_m} m stage loss)`);
+  facts.hidden = false;
+  if (a) {
+    verdict.textContent = '';
+    if (a.gravity) {
+      verdict.classList.add('ok');
+      verdict.append(bold('Gravity is feasible.'), ` The end is ${Math.round(a.fall)} m below the start against ${a.needed.toFixed(1)} m needed, and the ground never stands more than ${Math.round(Math.max(0, a.worst))} m above the water line (limit ${state.norms.tunnel_cover_m} m).`);
+    } else {
+      verdict.classList.add('lift');
+      const why = [];
+      if (a.fall < a.needed) why.push(`the end is only ${Math.round(a.fall)} m below the start, ${a.needed.toFixed(1)} m are needed`);
+      if (a.worst > state.norms.tunnel_cover_m) why.push(`ground stands ${Math.round(a.worst)} m above the water line, more than ${state.norms.tunnel_cover_m} m of tunnel cover`);
+      verdict.append(bold(`Needs a lift of about ${Math.round(a.lift)} m.`), ` Highest point ${Math.round(a.high.elev)} m, ${Math.round(a.high.elev - a.start)} m above the start, plus ${a.needed.toFixed(1)} m of canal fall and stage loss; ${why.join(' and ')}.`);
+    }
+    verdict.hidden = false;
+    const list = $('sketch-stretches');
+    for (const s of a.stretches.slice(0, SKETCH_LIST_MAX)) {
+      const li = document.createElement('li');
+      const span = s.from === s.to ? `km ${s.from.toFixed(1)}` : `km ${s.from.toFixed(1)}–${s.to.toFixed(1)}`;
+      li.textContent = s.kind === 'tunnel'
+        ? `Tunnel, ${span}: ground up to ${Math.round(s.peak)} m above the water line (more than ${state.norms.tunnel_cover_m} m)`
+        : `Deep cut, ${span}: ground up to ${Math.round(s.peak)} m above the water line (more than ${state.norms.cut_cover_m} m)`;
+      list.appendChild(li);
+    }
+    if (a.stretches.length > SKETCH_LIST_MAX) {
+      const li = document.createElement('li');
+      li.textContent = `and ${a.stretches.length - SKETCH_LIST_MAX} more stretches`;
+      list.appendChild(li);
+    }
+  }
+  const cross = sketchCrossings(state.coords, state.samples);
+  crossings.textContent = '';
+  if (cross.tanks) {
+    const largest = cross.tanks.slice(0, 3).map((t) => `${t.name || 'unnamed tank'} (${Math.round(t.area_ha)} ha)`);
+    crossings.append(bold(`${cross.tanks.length} tanks`), ` within ${SKETCH_TANK_KM} km${largest.length ? `, largest: ${largest.join(', ')}` : ''}. `);
+  }
+  if (cross.districts) crossings.append('Crosses ', bold(cross.districts.length ? cross.districts.join(', ') : 'no district'), '.');
+  crossings.hidden = !(cross.tanks || cross.districts);
+}
+
+/** The elevation profile, drawn with the river profile's helpers and classes: ground (blue), the falling water line (dashed), digs shaded. */
+function renderSketchChart(svg, samples, a, norms) {
+  while (svg.lastChild && svg.lastChild.tagName !== 'title') svg.removeChild(svg.lastChild);
+  const { w, h, l, r, t, b } = CHART;
+  const maxD = samples[samples.length - 1].d || SKETCH_STEP_KM;
+  const lows = samples.map((s) => s.elev), highs = samples.map((s) => s.elev);
+  if (a) lows.push(a.water(maxD));
+  const lo = Math.min(...lows), hi = Math.max(...highs);
+  const yStep = Math.max(1, niceStep(hi - lo || 1, 3));
+  const yMin = Math.floor(lo / yStep) * yStep, yMax = Math.ceil(hi / yStep) * yStep;
+  const x = (d) => l + d / maxD * (w - l - r);
+  const y = (e) => t + (1 - (e - yMin) / (yMax - yMin || 1)) * (h - t - b);
+  for (let e = yMin; e <= yMax; e += yStep) {
+    svg.appendChild(svgEl('line', { class: 'grid', x1: l, x2: w - r, y1: y(e), y2: y(e) }));
+    svg.appendChild(svgEl('text', { class: 'tick', x: l - 5, y: y(e) + 3, 'text-anchor': 'end' }, String(Math.round(e))));
+  }
+  const xStep = niceStep(maxD, 4);
+  for (let i = 0; i * xStep <= maxD + 1e-9; i++) {
+    const d = i * xStep;
+    svg.appendChild(svgEl('text', { class: 'tick', x: x(d), y: h - 8, 'text-anchor': i === 0 ? 'start' : 'middle' }, i === 0 ? '0 km' : String(+d.toFixed(2))));
+  }
+  svg.appendChild(svgEl('line', { class: 'axis', x1: l, x2: w - r, y1: y(yMin), y2: y(yMin) }));
+  if (a) {
+    for (const s of a.stretches) {
+      const x1 = x(Math.max(0, s.from - SKETCH_STEP_KM / 2)), x2 = x(Math.min(maxD, s.to + SKETCH_STEP_KM / 2));
+      svg.appendChild(svgEl('rect', { class: `dig ${s.kind}`, x: x1, y: t, width: Math.max(2, x2 - x1), height: y(yMin) - t }));
+    }
+  }
+  const path = samples.map((s, i) => `${i ? 'L' : 'M'}${x(s.d).toFixed(1)} ${y(s.elev).toFixed(1)}`).join(' ');
+  svg.appendChild(svgEl('path', { class: 'area', d: `${path} L${x(maxD).toFixed(1)} ${y(yMin)} L${l} ${y(yMin)} Z` }));
+  svg.appendChild(svgEl('path', { class: 'line', d: path }));
+  if (a) svg.appendChild(svgEl('path', { class: 'water', d: `M${x(0).toFixed(1)} ${y(a.start).toFixed(1)} L${x(maxD).toFixed(1)} ${y(a.water(maxD)).toFixed(1)}` }));
+  const top = samples.reduce((best, s) => (s.elev > best.elev ? s : best), samples[0]);
+  const anchor = x(top.d) < l + 40 ? 'start' : x(top.d) > w - r - 40 ? 'end' : 'middle';
+  svg.appendChild(svgEl('circle', { class: 'lm', cx: x(top.d), cy: y(top.elev), r: 4 }));
+  svg.appendChild(svgEl('text', { class: 'lm-text', x: x(top.d), y: y(top.elev) - 9, 'text-anchor': anchor }, `${Math.round(top.elev)} m`));
+}
+
+$('sketch-clear').addEventListener('click', () => {
+  if (!sketchDraw) return;
+  sketchDraw.deleteAll();
+  sketchDraw.changeMode('draw_line_string');
+  refreshSketch();
+});
+map.on('draw.create', (event) => {
+  const keep = event.features[0].id, older = sketchDraw.getAll().features.filter((f) => f.id !== keep).map((f) => f.id);
+  if (older.length) sketchDraw.delete(older);   // one canal at a time
+  refreshSketch();
+});
+map.on('draw.update', refreshSketch);
+map.on('draw.delete', refreshSketch);
+document.body.classList.add('sketch-off');
+
 async function loadJson(url) { const response = await fetch(url); if (!response.ok) throw new Error(`${url}: ${response.status}`); return response.json(); }
 
 map.on('load', async () => {

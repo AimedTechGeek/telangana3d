@@ -159,6 +159,24 @@ uv run python serve.py      # http://127.0.0.1:8765/ opens in your browser
   TMC; the Proposal card gives the water budget against the Godavari and
   Krishna shares, every system and work with its lift, route and indicative
   cost, the per-district need, the engineering caveats and the norms
+- **Sketch a canal** (off by default): the "Sketch" chip in the Navigation card
+  turns on [mapbox-gl-draw](https://github.com/mapbox/mapbox-gl-draw) with only
+  its line and bin buttons, in a Sketch card at the top of the left column.
+  Click vertices, double-click to finish; dragging a vertex or deleting the
+  line updates the card, "Clear" removes it, and switching the chip off leaves
+  no layers behind. For the line it shows the length in km (haversine over the
+  vertices), an elevation profile read from the Terrain-DEM every 500 m (it
+  fits the line in view and says "terrain still loading" until every sample
+  is a number), start and end elevation, net fall and highest point, and a
+  verdict under the proposal model's norms (`norms` in `web/data/proposal.json`):
+  gravity is feasible when the end is lower than the start by the canal fall
+  plus the stage loss and no ground stands more than the tunnel cover above
+  the falling water line; otherwise it gives the lift needed (highest point
+  minus start plus those losses) and the stretches that would need a tunnel
+  (ground above the water line by more than the tunnel cover) or a deep cut
+  (more than the cut cover). It also lists the districts crossed and the
+  tanks within 2 km. Layer popups are hidden while the tool is on, since
+  clicks place vertices. `web_sketch_test.py` runs the tool headless
 - 27 cities and towns ranked by elevation, with the lowest river beds for
   comparison; click one to fly to it
 - Both side columns are stacks of small collapsible cards, one per category.
@@ -167,7 +185,7 @@ uv run python serve.py      # http://127.0.0.1:8765/ opens in your browser
   Groundwater and Cities. Right: Terrain (exaggeration, hillshade, contours), Layers
   (districts, place labels, flow animation, dams, water links, canals,
   tanks, groundwater, cropland), Filters (works status, dams' opening year) and Navigation (drag
-  mode, orbit, reset); the Cropland card opens beneath them. Click a card's
+  mode, orbit, sketch, reset); the Cropland card opens beneath them. Click a card's
   title to fold it away. Light/dark theme follows the OS setting; the toggle
   in the left panel overrides it
 - Mouse: left-drag pans (switch "Left-drag" to *Rotates* for a full 360° orbit
@@ -225,6 +243,7 @@ uv run python publish_flow_raster.py # optional: publish it as a Mapbox raster-a
                                      # the map then draws river particles instead of the canvas bubbles (see DATA_SOURCES.md 5b)
 uv run python propose_water.py    # the Proposal view: reservoir sites, routes, pump houses -> web/data/proposal.*
 uv run python web_smoke_test.py   # headless Edge check of the web map -> out/web_home.png
+uv run python web_sketch_test.py  # headless Edge check of the Sketch tool -> out/web_sketch.png
 ```
 
 ## Publish to GitHub Pages

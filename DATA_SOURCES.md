@@ -669,6 +669,7 @@ Hard-coded in `web/app.js` (`LANDMARKS`), checked on 2026-10-22:
 | Component | Version | Licence | Role |
 |---|---|---|---|
 | Mapbox GL JS | 3.33.0 (api.mapbox.com CDN) | Mapbox Terms of Service (proprietary, token required) | web map rendering, 3D terrain, Standard basemap, symbol labels, elevated lines, heatmap |
+| mapbox-gl-draw | 1.5.1 (api.mapbox.com plugin CDN) | ISC | the Sketch tool: drawing and editing a canal line (line and bin controls only) |
 | forge3d | 1.44.0 | Apache-2.0 OR MIT | native viewer and path-traced block |
 | rasterio / GDAL | 1.5.2 | BSD-3 / MIT | raster mosaic, reprojection, tiles |
 | geopandas, shapely, pyogrio, pyproj | 1.2.0, 2.2.0, 0.13.0, 3.8.0 | BSD / MIT | vector processing |
@@ -678,6 +679,18 @@ Hard-coded in `web/app.js` (`LANDMARKS`), checked on 2026-10-22:
 | Inter, JetBrains Mono (Google Fonts CDN) | — | SIL OFL 1.1 | web typography; Inter TTFs (rsms/inter 4.1) are also what `upload_font.py` sends to Mapbox for map labels |
 
 Exact versions of every Python dependency are pinned in `uv.lock`.
+
+The web map also loads mapbox-gl-draw 1.5.1 (ISC licence, from the Mapbox plugin CDN
+`api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-draw/v1.5.1/`) for the Sketch tool. It is
+the version the Mapbox mapbox-gl-draw example page names; it is loaded on every page view
+but draws nothing until the Sketch chip is on. The tool's verdict uses the proposal
+model's norms from `web/data/proposal.json` (`canal_fall_m_per_km`, `stage_loss_m`,
+`tunnel_cover_m`, `cut_cover_m`; the proposal section above says where they come from), so
+it is a screening check: ground is the Mapbox Terrain-DEM at the zoom the map has loaded,
+sampled every 500 m, and a narrow ridge between samples can be missed. Tanks within 2 km
+and districts crossed come from `tank_points.geojson` and `districts.geojson` (sections
+above), the tanks only when the tank layer is loaded. Those norms are the model's, not a
+design code, and the tool has not been checked against a surveyed canal.
 
 ## Attribution line used in the web map
 
