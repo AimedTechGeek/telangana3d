@@ -55,7 +55,7 @@ public and were downloaded by `fetch_data.py` into `data/raw/` (not committed);
   attribution control (“© Mapbox © OpenStreetMap”) kept visible; billed per
   map load, free up to 50,000 loads a month. Not open data: the tiles may not
   be cached or redistributed. Accessed from 28 October 2026 with Mapbox GL JS
-  v3.30.0.
+  v3.33.0.
 - **Used for:** the web map's 3D terrain mesh, hillshade and relief tint (the
   same DEM tiles read as a raster and coloured by `raster-color` with the
   Mapbox height decoding), the elevation under the cursor
@@ -608,7 +608,7 @@ Hard-coded in `web/app.js` (`LANDMARKS`), checked on 2026-10-22:
 
 | Component | Version | Licence | Role |
 |---|---|---|---|
-| Mapbox GL JS | 3.30.0 (api.mapbox.com CDN) | Mapbox Terms of Service (proprietary, token required) | web map rendering, 3D terrain, Standard basemap, symbol labels, elevated lines, heatmap |
+| Mapbox GL JS | 3.33.0 (api.mapbox.com CDN) | Mapbox Terms of Service (proprietary, token required) | web map rendering, 3D terrain, Standard basemap, symbol labels, elevated lines, heatmap |
 | forge3d | 1.44.0 | Apache-2.0 OR MIT | native viewer and path-traced block |
 | rasterio / GDAL | 1.5.2 | BSD-3 / MIT | raster mosaic, reprojection, tiles |
 | geopandas, shapely, pyogrio, pyproj | 1.2.0, 2.2.0, 0.13.0, 3.8.0 | BSD / MIT | vector processing |
