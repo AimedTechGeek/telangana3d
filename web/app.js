@@ -11,7 +11,27 @@ const labelData = {};              // label source id -> GeoJSON, built from the
 const FONT = ['DIN Pro Medium', 'Arial Unicode MS Regular'];   // Mapbox-hosted fonts for every label
 let scrubPoint = { type: 'FeatureCollection', features: [] };   // the river profile position on the map
 const TILE_PX = 256;               // Web Mercator tile width the metres-per-pixel formula is written for
-const HOME = { center: [79.35, 17.75], zoom: 7.05, pitch: 56, bearing: -18 };
+const HOME = { center: [79.35, 17.75], zoom: 7.3, pitch: 66, bearing: -18 };
+// Telangana's relief is about 1 km across a 500 km state, so the exaggeration follows the zoom: the slider value applies
+// at district level, more than twice that at state level so the plateau stands out, half of it in towns where streets stay true.
+const EXAGGERATION_BY_ZOOM = [[6, 2.2], [8, 1.6], [10, 1], [12.5, 0.5]];
+let terrainRise = 1;                       // 0–1 while the terrain rises into a 3D view
+function terrainExaggeration() {
+  const scale = Number($('exag').value) * terrainRise;
+  return ['interpolate', ['linear'], ['zoom'], ...EXAGGERATION_BY_ZOOM.flatMap(([z, f]) => [z, Math.max(0.01, scale * f)])];
+}
+/** Raises the terrain from flat to full over `ms`, so the switch into 3D shows the elevation differences growing. */
+function riseTerrain(ms = 1800) {
+  const start = performance.now();
+  const step = (now) => {
+    terrainRise = Math.min(1, (now - start) / ms);
+    terrainRise = 1 - (1 - terrainRise) ** 3;
+    map.setTerrain({ source: 'mapbox-dem', exaggeration: terrainExaggeration() });
+    if (terrainRise < 1) requestAnimationFrame(step); else terrainRise = 1;
+  };
+  terrainRise = 0.05;
+  requestAnimationFrame(step);
+}
 const RELIEF_STOPS = [              // metres above sea level -> colour (hypsometric tint)
   [1, '#27624a'], [75, '#3b7f55'], [150, '#6ea263'], [250, '#a9c279'], [350, '#d6d48e'],
   [450, '#dcc07e'], [550, '#cfa06a'], [650, '#b8805a'], [750, '#a0664f'], [850, '#cfbfb3'], [950, '#f4f1ec'],
@@ -87,8 +107,13 @@ try { const saved = localStorage.getItem('theme'); if (saved) document.documentE
 // (Mapbox encoding, channels 0–1): height = −10000 + (R·256² + G·256 + B)·0.1.
 const DEM_COLOR_MIX = [255 * 6553.6, 255 * 25.6, 255 * 0.1, -10000];
 const RELIEF_RANGE_M = 1000;        // the colour ramp is sampled over 0–1000 m
+const BAND_M = 100;
+const bandsOn = () => document.querySelector('.chip[data-toggle="bands"]').getAttribute('aria-pressed') === 'true';
 function reliefExpression(theme) {
-  return ['interpolate', ['linear'], ['raster-value'], 0, MAP_THEMES[theme].background, ...RELIEF_STOPS.flat()];
+  if (!bandsOn()) return ['interpolate', ['linear'], ['raster-value'], 0, MAP_THEMES[theme].background, ...RELIEF_STOPS.flat()];
+  const bands = [];                        // each 100 m band takes the ramp colour of its middle height, so steps are countable
+  for (let m = BAND_M; m < RELIEF_RANGE_M; m += BAND_M) bands.push(m, rampColour(RELIEF_STOPS, m + BAND_M / 2));
+  return ['step', ['raster-value'], rampColour(RELIEF_STOPS, BAND_M / 2), ...bands];
 }
 
 // River flow styling: width and colour follow log10 of the average discharge.
@@ -248,11 +273,11 @@ function tankLayers(t) {
       paint: { 'line-color': t.tankEdge, 'line-width': 0.8, 'line-opacity': 0.8 } },
     { id: 'tanks-heat', type: 'heatmap', source: 'tank-points', maxzoom: TANK_HEAT_ZOOM, layout: { visibility: vis }, paint: {
         'heatmap-weight': ['interpolate', ['linear'], ['sqrt', ['get', 'area_ha']], 0, 0.05, 30, 1],
-        'heatmap-radius': ['interpolate', ['linear'], ['zoom'], 5.6, 9, TANK_HEAT_ZOOM, 26],
-        'heatmap-intensity': 0.7,
+        'heatmap-radius': ['interpolate', ['linear'], ['zoom'], 5.6, 20, TANK_HEAT_ZOOM, 38],   // wide enough to merge into a density field
+        'heatmap-intensity': 0.45,
         'heatmap-color': ['interpolate', ['linear'], ['heatmap-density'], 0, 'rgba(0,0,0,0)', 0.2, t.heat[0], 0.6, t.heat[1], 1, t.heat[2]],
-        'heatmap-opacity': ['interpolate', ['linear'], ['zoom'], TANK_HEAT_ZOOM - 1, 0.65, TANK_HEAT_ZOOM, 0] } },
-    { id: 'tanks-dots', type: 'circle', source: 'tank-points', minzoom: TANK_HEAT_ZOOM - 1.2, maxzoom: TANK_POLYGON_ZOOM, layout: { visibility: vis },
+        'heatmap-opacity': ['interpolate', ['linear'], ['zoom'], TANK_HEAT_ZOOM - 1, 0.42, TANK_HEAT_ZOOM, 0] } },
+    { id: 'tanks-dots', type: 'circle', source: 'tank-points', minzoom: TANK_HEAT_ZOOM - 1, maxzoom: TANK_POLYGON_ZOOM, layout: { visibility: vis },
       paint: { 'circle-radius': radius, 'circle-color': t.tank, 'circle-opacity': 0.85, 'circle-stroke-color': t.tankEdge, 'circle-stroke-width': 0.5 } },
   ];
 }
@@ -493,7 +518,7 @@ function buildStyle(theme) {
       { id: 'scrub', type: 'circle', source: 'scrub', paint: { 'circle-radius': 6, 'circle-color': t.labelActive, 'circle-stroke-color': t.iconBg, 'circle-stroke-width': 2 } },
       ...labelLayers(theme),
     ],
-    terrain: { source: 'mapbox-dem', exaggeration: Number($('exag').value) },
+    terrain: { source: 'mapbox-dem', exaggeration: terrainExaggeration() },
     fog: t.fog,
   };
   for (const layer of style.layers) decorate(layer);
@@ -522,14 +547,15 @@ if (!window.MAPBOX_TOKEN) {
   throw new Error('MAPBOX_TOKEN missing');
 }
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
-const INTRO = { zoom: HOME.zoom - 0.9, pitch: 0, bearing: 0 };          // where the opening flight starts
+const INTRO = { zoom: HOME.zoom - 0.9, pitch: 0, bearing: 0 };          // where the opening flight starts, on flat terrain
 const playIntro = !location.hash && !reducedMotion && !DEBUG;
+if (playIntro) terrainRise = 0.05;
 const map = new mapboxgl.Map({
   container: 'map', accessToken: window.MAPBOX_TOKEN,
   style: buildStyle(currentTheme()),
   center: HOME.center, ...(playIntro ? INTRO : { zoom: HOME.zoom, pitch: HOME.pitch, bearing: HOME.bearing }),
-  minZoom: 5.6, maxZoom: 13.5, maxPitch: 75,
-  maxBounds: [[76.4, 14.5], [82.6, 20.6]],
+  minZoom: 5.6, maxZoom: 13.5, maxPitch: 80,
+  maxBounds: [[72.5, 11.5], [86.5, 23.5]],   // generous: Mapbox keeps the whole tilted view inside the bounds by zooming in, so a tight box would push the state view past zoom 7
   attributionControl: false, logoPosition: 'bottom-left', hash: true, antialias: true,   // the URL carries the view, so views can be shared
 });
 map.addControl(new mapboxgl.AttributionControl({ compact: true }), 'bottom-right');
@@ -703,8 +729,14 @@ function clearCursor() {
 map.on('mouseout', () => { if (!flight) clearCursor(); });
 
 // ---------- legend ----------
+function renderLegend() {
+  const pct = (m) => `${(m / LEGEND_MAX * 100).toFixed(1)}%`;
+  $('ramp').style.background = bandsOn()
+    ? `linear-gradient(90deg, ${Array.from({ length: LEGEND_MAX / BAND_M }, (_, i) => { const c = rampColour(RELIEF_STOPS, i * BAND_M + BAND_M / 2); return `${c} ${pct(i * BAND_M)}, ${c} ${pct((i + 1) * BAND_M)}`; }).join(', ')})`
+    : `linear-gradient(90deg, ${RELIEF_STOPS.map(([m, c]) => `${c} ${pct(m)}`).join(', ')})`;
+}
 (function buildLegend() {
-  $('ramp').style.background = `linear-gradient(90deg, ${RELIEF_STOPS.map(([m, c]) => `${c} ${(m / LEGEND_MAX * 100).toFixed(1)}%`).join(', ')})`;
+  renderLegend();
   const ticks = $('ramp-ticks');
   for (const metres of LEGEND_TICKS) {
     const span = document.createElement('span');
@@ -718,7 +750,7 @@ map.on('mouseout', () => { if (!flight) clearCursor(); });
 $('exag').addEventListener('input', (event) => {
   const value = Number(event.target.value);
   $('exag-out').value = `${value}×`;
-  map.setTerrain({ source: 'mapbox-dem', exaggeration: value });
+  map.setTerrain({ source: 'mapbox-dem', exaggeration: terrainExaggeration() });
   map.triggerRepaint();
 });
 
@@ -731,6 +763,7 @@ function orbitStep() {
 }
 const toggles = {
   relief: (on) => map.setLayoutProperty('relief', 'visibility', on ? 'visible' : 'none'),
+  bands: () => { map.setPaintProperty('relief', 'raster-color', reliefExpression(currentTheme())); renderLegend(); },
   hillshade: (on) => map.setLayoutProperty('hillshade', 'visibility', on ? 'visible' : 'none'),
   contours: (on) => setVisible(['contours', 'contour-labels'], on),
   districts: (on) => { map.setLayoutProperty('districts', 'visibility', on ? 'visible' : 'none'); document.body.classList.toggle('districts-off', !on); },
@@ -976,7 +1009,11 @@ window.addEventListener('mousemove', (event) => {
 window.addEventListener('mouseup', () => { rotateDrag = null; $('map').classList.remove('rotating'); });
 $('reset').addEventListener('click', () => map.flyTo({ ...HOME, duration: 1800, essential: true }));
 $('view-2d').addEventListener('click', () => { stopFlight(); map.easeTo({ pitch: 0, bearing: 0, duration: 1200, essential: true }); });
-$('view-3d').addEventListener('click', () => { stopFlight(); map.easeTo({ pitch: HOME.pitch, bearing: HOME.bearing, duration: 1200, essential: true }); });
+$('view-3d').addEventListener('click', () => {
+  stopFlight();
+  if (map.getPitch() < 30) riseTerrain(1800);                       // from top-down: let the relief grow as the view tilts
+  map.easeTo({ pitch: HOME.pitch, bearing: HOME.bearing, duration: 1800, essential: true });
+});
 $('theme').addEventListener('click', () => setTheme(currentTheme() === 'dark' ? 'light' : 'dark'));
 $('collapse').addEventListener('click', () => { $('panel').classList.add('hidden'); $('expand').hidden = false; });
 $('expand').addEventListener('click', () => { $('panel').classList.remove('hidden'); $('expand').hidden = true; });
@@ -2179,7 +2216,7 @@ function flightStep(now) {
   const ahead = pointAtKm(flight.points, Math.min(flight.total, flight.d + FLIGHT.aheadKm));
   const ground = map.queryTerrainElevation([behind.lon, behind.lat], { exaggerated: true });
   const camera = map.getFreeCameraOptions();
-  camera.position = mapboxgl.MercatorCoordinate.fromLngLat([behind.lon, behind.lat], (ground === null ? here.elev * Number($('exag').value) : ground) + FLIGHT.aboveGroundM);
+  camera.position = mapboxgl.MercatorCoordinate.fromLngLat([behind.lon, behind.lat], (ground === null ? here.elev * Number($('exag').value) * 1.6 : ground) + FLIGHT.aboveGroundM);
   const dx = (ahead.lon - behind.lon) * Math.cos((behind.lat * Math.PI) / 180), dy = ahead.lat - behind.lat;
   camera.setPitchBearing(FLIGHT.pitch, (Math.atan2(dx, dy) * 180) / Math.PI);   // a fixed tilt, heading downstream
   map.setFreeCameraOptions(camera);
@@ -2305,7 +2342,7 @@ map.on('load', async () => {
   const settle = () => {
     if (!map.loaded()) { map.once('render', settle); return; }
     $('toast').classList.add('gone');
-    if (playIntro) map.easeTo({ ...HOME, duration: 3600, easing: (x) => 1 - (1 - x) ** 3, essential: true });   // the terrain rises into view
+    if (playIntro) { map.easeTo({ ...HOME, duration: 3600, easing: (x) => 1 - (1 - x) ** 3, essential: true }); riseTerrain(3600); }   // the terrain rises into view
     if (flowAnimating) requestAnimationFrame(animateFlow);
     debug.phase = 'ready';
     if (DEBUG) {
