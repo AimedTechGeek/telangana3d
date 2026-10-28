@@ -422,6 +422,7 @@ body.proposal-off #proposal-card { display: none; }
 .dam-popup dt { color: var(--muted); }
 .dam-popup dd { margin: 0; font-family: var(--mono); font-size: 12px; }
 .dam-popup a { font-size: 11px; color: var(--ink-2); }
+.dam-popup .orbit-btn { display: block; margin: 8px 0 0; padding: 4px 10px; font-size: 11px; }
 .dam-popup.mapboxgl-popup-anchor-bottom .mapboxgl-popup-tip { border-top-color: var(--panel-solid); }
 .dam-popup.mapboxgl-popup-anchor-top .mapboxgl-popup-tip { border-bottom-color: var(--panel-solid); }
 .dam-popup.mapboxgl-popup-anchor-left .mapboxgl-popup-tip { border-right-color: var(--panel-solid); }

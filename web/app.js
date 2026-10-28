@@ -11,6 +11,8 @@ const labelData = {};              // label source id -> GeoJSON, built from the
 const INTER_FONT = ['Inter Medium', 'Arial Unicode MS Regular'];   // exists only after upload_font.py has put Inter into the Mapbox account
 let LABEL_FONT = ['DIN Pro Medium', 'Arial Unicode MS Regular'];  // Mapbox-hosted default for every label; Inter when data/fonts.json says it is uploaded
 const fontsInfo = fetch('data/fonts.json').then((r) => (r.ok ? r.json() : null)).catch(() => null);
+let profileLine = { type: 'FeatureCollection', features: [] };
+let profileGradient = ['interpolate', ['linear'], ['line-progress'], 0, '#888888', 1, '#888888'];   // relief colour along the bed, set once profiles load   // the active river's bed as one line, coloured by its elevation
 let scrubPoint = { type: 'FeatureCollection', features: [] };   // the river profile position on the map
 const TILE_PX = 256;               // Web Mercator tile width the metres-per-pixel formula is written for
 const HOME = { center: [79.35, 17.75], zoom: 7.3, pitch: 66, bearing: -18 };
@@ -55,7 +57,7 @@ const MAP_THEMES = {
   light: {
     background: '#e9e6df', mask: '#efece5', maskOpacity: 0.5,
     district: '#3b3a36', districtOpacity: 0.55, state: '#161616', stateCasing: '#ffffff',
-    contour: '#5a4634', flowGlow: '#ffffff', flowDash: '#eef7ff', link: '#c2410c', linkDash: '#fff4e8', cropOpacity: 0.82,
+    contour: '#5a4634', flowGlow: '#ffffff', flowDash: '#eef7ff', link: '#c2410c', linkDash: '#fff4e8', profileCasing: 'rgba(20,28,40,0.9)', cropOpacity: 0.82,
     canal: '#c2187f', canalOld: '#8a6f84', canalDash: '#fff0fa', canalCasing: '#ffffff',
     tank: '#3b95dc', tankEdge: '#1b5a93', tankRamp: ['#e6eef5', '#1d5f99'],
     gwDepth: [[0, '#0b5fa5'], [2, '#4f9bd8'], [5, '#a9d4ef'], [10, '#f2e2b8'], [20, '#d98b3c'], [40, '#7a2e0d']],   // metres below ground
@@ -72,7 +74,7 @@ const MAP_THEMES = {
   dark: {
     background: '#0e0f12', mask: '#0e0f12', maskOpacity: 0.58,
     district: '#d8d4cc', districtOpacity: 0.38, state: '#f0efec', stateCasing: '#000000',
-    contour: '#d8d4cc', flowGlow: '#0b1a33', flowDash: '#ffffff', link: '#fb923c', linkDash: '#fff7ed', cropOpacity: 0.9,
+    contour: '#d8d4cc', flowGlow: '#0b1a33', flowDash: '#ffffff', link: '#fb923c', linkDash: '#fff7ed', profileCasing: 'rgba(0,0,0,0.9)', cropOpacity: 0.9,
     canal: '#ff6fd0', canalOld: '#d2b4c8', canalDash: '#fff0fa', canalCasing: '#2a0d20',
     tank: '#4fb3ff', tankEdge: '#bfe3ff', tankRamp: ['#161c26', '#3f8fd0'],
     gwDepth: [[0, '#9fd8ff'], [2, '#5eb0ea'], [5, '#2f6f9f'], [10, '#4a4238'], [20, '#b86b2a'], [40, '#ff9d5c']],
@@ -421,6 +423,22 @@ let damLinesLoaded = false;
 // The width is 60 m at close range and grows towards the state view so the wall stays a visible line.
 const WALL_WIDTH_M = ['interpolate', ['linear'], ['zoom'], 8, 240, 10, 120, 12.5, 60];
 const wallHeight = (property) => ['interpolate', ['linear'], ['zoom'], ...EXAGGERATION_BY_ZOOM.flatMap(([z, f]) => [z, ['*', ['get', property], Math.max(0.01, Number($('exag').value) * f)]])];
+// The links are schematic straight lines, so they are drawn as overhead pipes: lifted above the ground by LINK_LIFT_M at district level,
+// scaled by the same zoom-dependent exaggeration as the terrain so the gap between pipe and hills stays the same at every zoom.
+// line-z-offset cannot take a zoom expression, so the offset is a number re-set when the zoom or the slider moves it noticeably.
+const LINK_LIFT_M = 120;
+let linkZoom = HOME.zoom, linkLift = 0;
+function exaggerationFactorAt(zoom) {
+  const stops = EXAGGERATION_BY_ZOOM;
+  if (zoom <= stops[0][0]) return stops[0][1];
+  for (let i = 1; i < stops.length; i++) {
+    if (zoom <= stops[i][0]) return stops[i - 1][1] + (stops[i][1] - stops[i - 1][1]) * (zoom - stops[i - 1][0]) / (stops[i][0] - stops[i - 1][0]);
+  }
+  return stops[stops.length - 1][1];
+}
+const linkLiftAt = (zoom) => LINK_LIFT_M * Math.max(0.01, Number($('exag').value) * exaggerationFactorAt(zoom));
+const linkLayout = () => ({ 'line-elevation-reference': 'ground', 'line-z-offset': (linkLift = linkLiftAt(linkZoom)) });
+const LINK_LIFTED = ['links-highlight', 'links-casing', 'links-line', 'links-pulse', 'links-hit'];
 const wallPaint = (colour, property) => ({
   'fill-extrusion-color': colour, 'fill-extrusion-height': wallHeight(property), 'fill-extrusion-base': 0, 'fill-extrusion-line-width': WALL_WIDTH_M,
   'fill-extrusion-opacity': 1, 'fill-extrusion-emissive-strength': 0.6, 'fill-extrusion-vertical-gradient': true,
@@ -519,6 +537,7 @@ function buildStyle(theme) {
       ...(damLinesLoaded ? { 'dam-lines': { type: 'geojson', data: 'data/dam_lines.geojson' } } : {}),
       ...Object.fromEntries(Object.entries(labelData).map(([id, data]) => [id, { type: 'geojson', data, generateId: true }])),
       scrub: { type: 'geojson', data: scrubPoint },
+      profile: { type: 'geojson', data: profileLine, lineMetrics: true },
     },
     layers: [
       { id: 'relief', type: 'raster', source: 'relief-dem', layout: { visibility: chipOn('relief') }, paint: {
@@ -561,17 +580,17 @@ function buildStyle(theme) {
       ...canalLayers(t),
       // Kaleshwaram links: solid where water flows today, dashed where the link is still being built.
       { id: 'links-highlight', type: 'line', source: 'links', filter: ['==', ['get', 'link'], ''],
-        layout: { 'line-join': 'round', 'line-cap': 'round', visibility: chipOn('links') },
+        layout: { 'line-join': 'round', 'line-cap': 'round', visibility: chipOn('links'), ...linkLayout() },
         paint: { 'line-color': t.link, 'line-width': 12, 'line-opacity': 0.25, 'line-blur': 2 } },
-      { id: 'links-casing', type: 'line', source: 'links', filter: linkStatusFilter(), layout: { 'line-join': 'round', 'line-cap': 'round', visibility: chipOn('links') },
+      { id: 'links-casing', type: 'line', source: 'links', filter: linkStatusFilter(), layout: { 'line-join': 'round', 'line-cap': 'round', visibility: chipOn('links'), ...linkLayout() },
         paint: { 'line-color': t.linkDash, 'line-width': ['interpolate', ['linear'], ['zoom'], 6, 5, 10, 7.5], 'line-opacity': 0.8 } },
-      { id: 'links-line', type: 'line', source: 'links', filter: linkStatusFilter(), layout: { 'line-join': 'round', 'line-cap': 'round', visibility: chipOn('links') },
+      { id: 'links-line', type: 'line', source: 'links', filter: linkStatusFilter(), layout: { 'line-join': 'round', 'line-cap': 'round', visibility: chipOn('links'), ...linkLayout() },
         paint: { 'line-color': t.link, 'line-width': ['interpolate', ['linear'], ['zoom'], 6, 2.6, 10, 4.2],
                  'line-opacity': ['case', ['==', ['get', 'status'], 'operational'], 0.9, 0.6],
                  'line-dasharray': ['case', ['==', ['get', 'status'], 'operational'], ['literal', [1, 0]], ['==', ['get', 'status'], 'planned'], ['literal', [0.6, 2.4]], ['literal', [2, 2]]] } },
       // Operating links carry a pulse of light travelling in the direction of pumping: a line-trim window moved every frame.
       { id: 'links-pulse', type: 'line', source: 'links', filter: ['all', ['==', ['get', 'status'], 'operational'], linkStatusFilter()],
-        layout: { 'line-join': 'round', 'line-cap': 'round', visibility: chipOn('links') },
+        layout: { 'line-join': 'round', 'line-cap': 'round', visibility: chipOn('links'), ...linkLayout() },
         paint: { 'line-color': 'rgba(0,0,0,0)', 'line-width': ['interpolate', ['linear'], ['zoom'], 6, 3.4, 10, 5.6],
                  'line-trim-offset': pulseWindow(0), 'line-trim-color': t.linkDash, 'line-trim-fade-range': [0.45, 0.45] } },
       // Static arrows give direction on links still being built.
@@ -579,8 +598,13 @@ function buildStyle(theme) {
         layout: { 'symbol-placement': 'line', 'symbol-spacing': 70, 'icon-image': 'arrow', 'icon-size': ['interpolate', ['linear'], ['zoom'], 6, 0.4, 10, 0.6],
                   'icon-rotation-alignment': 'map', 'icon-allow-overlap': true, 'icon-ignore-placement': true, visibility: chipOn('links') },
         paint: { 'icon-opacity': 0.7 } },
-      { id: 'links-hit', type: 'line', source: 'links', filter: linkStatusFilter(), layout: { visibility: chipOn('links') },
+      { id: 'links-hit', type: 'line', source: 'links', filter: linkStatusFilter(), layout: { visibility: chipOn('links'), ...linkLayout() },
         paint: { 'line-color': '#000000', 'line-opacity': 0, 'line-width': 16 } },
+      // The active river's bed, coloured along its length by the relief tint of its elevation (updated when the Rivers tab changes).
+      { id: 'profile-casing', type: 'line', source: 'profile', layout: { 'line-join': 'round', 'line-cap': 'round' },
+        paint: { 'line-color': t.profileCasing, 'line-width': 8, 'line-opacity': 0.85 } },
+      { id: 'profile-line', type: 'line', source: 'profile', layout: { 'line-join': 'round', 'line-cap': 'round' },
+        paint: { 'line-color': '#888888', 'line-width': 5, 'line-gradient': profileGradient } },
       { id: 'scrub', type: 'circle', source: 'scrub', paint: { 'circle-radius': 6, 'circle-color': t.labelActive, 'circle-stroke-color': t.iconBg, 'circle-stroke-width': 2 } },
       ...damWallLayers(t),
       ...labelLayers(theme),
@@ -617,6 +641,7 @@ if (!window.MAPBOX_TOKEN) {
 }
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const INTRO = { zoom: 5.2, pitch: 0, bearing: 0 };                      // where the opening flight starts: high above the state, on flat terrain
+const MAX_ZOOM = 13.5;
 const MIN_ZOOM = 5.6;                                                    // the intro lowers it to 4 so it can start higher, then it is restored
 const playIntro = !location.hash && !reducedMotion && !DEBUG;
 if (playIntro) terrainRise = 0.05;
@@ -624,7 +649,7 @@ const map = new mapboxgl.Map({
   container: 'map', accessToken: window.MAPBOX_TOKEN,
   style: buildStyle(currentTheme()),
   center: HOME.center, ...(playIntro ? INTRO : { zoom: HOME.zoom, pitch: HOME.pitch, bearing: HOME.bearing }),
-  minZoom: playIntro ? 4 : MIN_ZOOM, maxZoom: 13.5, maxPitch: 80,
+  minZoom: playIntro ? 4 : MIN_ZOOM, maxZoom: MAX_ZOOM, maxPitch: 80,
   maxBounds: [[72.5, 11.5], [86.5, 23.5]],   // generous: Mapbox keeps the whole tilted view inside the bounds by zooming in, so a tight box would push the state view past zoom 7
   attributionControl: false, logoPosition: 'bottom-left', hash: true, antialias: true,   // the URL carries the view, so views can be shared
 });
@@ -826,11 +851,21 @@ function renderLegend() {
 })();
 
 // ---------- controls ----------
+const LINK_LIFT_STEP_M = 8;                // re-set the overhead links' height only when it changed by this much (each change re-tiles the lines)
+function refreshLinkLift(force) {
+  linkZoom = map.getZoom();
+  const lift = linkLiftAt(linkZoom);
+  if (!force && Math.abs(lift - linkLift) < LINK_LIFT_STEP_M) return;
+  linkLift = lift;
+  for (const id of LINK_LIFTED) if (map.getLayer(id)) map.setLayoutProperty(id, 'line-z-offset', lift);
+}
+map.on('zoom', () => refreshLinkLift(false));
 $('exag').addEventListener('input', (event) => {
   const value = Number(event.target.value);
   $('exag-out').value = `${value}×`;
   map.setTerrain({ source: 'mapbox-dem', exaggeration: terrainExaggeration() });
   for (const id of ['dam-walls', 'prop-dam-walls']) if (map.getLayer(id)) map.setPaintProperty(id, 'fill-extrusion-height', wallHeight(id === 'dam-walls' ? 'height' : 'crest_m'));
+  refreshLinkLift(true);
   map.triggerRepaint();
 });
 
@@ -853,7 +888,7 @@ const toggles = {
     setVisible(['links-highlight', 'links-casing', 'links-line', 'links-pulse', 'links-arrows', 'links-hit', ...LABEL_LAYERS.links], on);
     if (!on) linkPopup.remove();
   },
-  orbit: (on) => { orbiting = on; if (on) orbitStep(); },
+  orbit: (on) => { orbiting = on; if (on) { stopStructureOrbit(); orbitStep(); } },
   flow: (on) => {
     flowAnimating = on;
     map.setLayoutProperty('flow-dash', 'visibility', on ? 'visible' : 'none');
@@ -1005,7 +1040,7 @@ function renderFlowLegend() {
   legend.appendChild(unit);
 }
 function textEl(tag, className, text) { const node = document.createElement(tag); node.className = className; node.textContent = text; return node; }
-function flyToPoint(lon, lat, zoom) { map.flyTo({ center: [lon, lat], zoom, pitch: 60, bearing: -20, duration: 2200, essential: true }); }
+function flyToPoint(lon, lat, zoom) { stopStructureOrbit(); map.flyTo({ center: [lon, lat], zoom, pitch: 60, bearing: -20, duration: 2200, essential: true }); }
 function renderPeaks(summary) {
   const box = $('peaks');
   box.textContent = '';
@@ -1726,6 +1761,7 @@ function openProposalPopup(p, lngLat) {
     if (work.over_cap) row('Water', 'No intake had this much to spare under the surplus rule; the cheapest route is shown anyway.');
   }
   content.append(head, dl, textEl('p', 'fine', 'Computed from the 200 m terrain model under planning norms; routes are straight lines, not alignments. Method and norms in the Proposal card.'));
+  if (p.kind === 'pool') content.appendChild(orbitButton(work.lon === undefined ? lngLat.lng : work.lon, work.lat === undefined ? lngLat.lat : work.lat));
   proposalPopup.setLngLat(lngLat).setDOMContent(content).addTo(map);
 }
 for (const id of ['prop-pool', 'prop-canal', 'prop-tunnel', 'prop-delivery', 'prop-pump', 'prop-trunk-new', 'prop-trunk-existing']) {
@@ -2086,6 +2122,7 @@ function openDamPopup(dam) {
   link.href = dam.url; link.target = '_blank'; link.rel = 'noopener';
   link.textContent = dam.url.includes('wikipedia.org') ? 'Source: Wikipedia ↗' : dam.url.includes('wikidata.org') ? 'Source: Wikidata ↗' : 'Source ↗';
   content.appendChild(link);
+  content.appendChild(orbitButton(dam.lon, dam.lat));
   damPopup.setLngLat([dam.lon, dam.lat]).setDOMContent(content).addTo(map);
 }
 function flyToCity(city) {
@@ -2139,6 +2176,31 @@ function niceStep(range, target) {
   return [1, 2, 5, 10].map((m) => m * magnitude).find((step) => step >= raw);
 }
 
+/** line-gradient along the river: the relief colour of the bed at up to PROFILE_STOPS points, by distance along the line. */
+const PROFILE_STOPS = 60;
+function profileGradientFor(profile) {
+  const points = profile.points, total = points[points.length - 1].d;
+  const step = Math.max(1, Math.ceil((points.length - 1) / (PROFILE_STOPS - 1)));
+  const stops = [];
+  for (let i = 0; i < points.length; i += step) stops.push(points[i]);
+  if (stops[stops.length - 1] !== points[points.length - 1]) stops.push(points[points.length - 1]);
+  const expression = ['interpolate', ['linear'], ['line-progress']];
+  let last = -1;
+  for (const p of stops) {
+    const progress = Math.min(1, p.d / total);
+    if (progress <= last) continue;                       // line-progress stops must rise strictly
+    expression.push(progress, rampColour(RELIEF_STOPS, p.elev));
+    last = progress;
+  }
+  return expression;
+}
+function updateProfileLine() {
+  const profile = profileState.profiles[profileState.river];
+  profileGradient = profileGradientFor(profile);
+  profileLine = collection([{ type: 'Feature', properties: { river: profileState.river }, geometry: { type: 'LineString', coordinates: profile.points.map((p) => [p.lon, p.lat]) } }]);
+  if (map.getSource('profile')) map.getSource('profile').setData(profileLine);
+  if (map.getLayer('profile-line')) map.setPaintProperty('profile-line', 'line-gradient', profileGradient);
+}
 function renderProfile() {
   const profile = profileState.profiles[profileState.river];
   const svg = $('profile');
@@ -2201,6 +2263,7 @@ function renderProfile() {
     tbody.appendChild(tr);
   }
   $('scrub').max = String(points.length - 1);
+  updateProfileLine();
   highlightProfile(Math.min(profileState.index, points.length - 1), false);
 }
 const FLOW_CHART = { w: 328, h: 110, l: 38, r: 10, t: 10, b: 22 };
@@ -2274,6 +2337,54 @@ function highlightProfile(index, showTip) {
 }
 function spanText(text) { const el = document.createElement('span'); el.textContent = text; return el; }
 
+// ---------- orbit around a structure: the free camera circles a dam or reservoir from its popup ----------
+// A free camera that low is further in than MAX_ZOOM allows (zoom follows the distance to the look-at point and Mapbox pulls the camera back),
+// so the orbit raises the limit while it runs and eases back under MAX_ZOOM when it stops.
+const STRUCTURE_ORBIT = { radiusM: 4000, aboveGroundM: 2500, seconds: 24, maxZoom: 17 };
+let structureOrbit = null;                  // { lon, lat, angle, last, button }
+function startStructureOrbit(lon, lat, button) {
+  stopFlight();
+  stopOrbit();
+  map.stop();
+  map.setMaxZoom(STRUCTURE_ORBIT.maxZoom);
+  structureOrbit = { lon, lat, angle: (map.getBearing() + 180) % 360, last: 0, button };   // begin on the side the camera already looks from
+  button.textContent = 'Stop orbit';
+  requestAnimationFrame(structureOrbitStep);
+}
+function stopStructureOrbit() {
+  if (!structureOrbit) return;
+  structureOrbit.button.textContent = 'Orbit';
+  structureOrbit = null;
+  map.easeTo({ zoom: Math.min(map.getZoom(), MAX_ZOOM), duration: 600, essential: true });
+  map.once('moveend', () => { if (!structureOrbit) map.setMaxZoom(MAX_ZOOM); });
+}
+function structureOrbitStep(now) {
+  if (!structureOrbit) return;
+  const o = structureOrbit;
+  if (o.last) o.angle = (o.angle + 360 * Math.min((now - o.last) / 1000, 0.1) / STRUCTURE_ORBIT.seconds) % 360;
+  o.last = now;
+  const radians = (o.angle * Math.PI) / 180;
+  const metresPerDegree = 111320;
+  const lon = o.lon + (STRUCTURE_ORBIT.radiusM * Math.sin(radians)) / (metresPerDegree * Math.cos((o.lat * Math.PI) / 180));
+  const lat = o.lat + (STRUCTURE_ORBIT.radiusM * Math.cos(radians)) / metresPerDegree;
+  const centreGround = map.queryTerrainElevation([o.lon, o.lat], { exaggerated: true }) || 0;
+  const cameraGround = map.queryTerrainElevation([lon, lat], { exaggerated: true }) || 0;
+  const altitude = Math.max(centreGround, cameraGround) + STRUCTURE_ORBIT.aboveGroundM;
+  const camera = map.getFreeCameraOptions();
+  camera.position = mapboxgl.MercatorCoordinate.fromLngLat([lon, lat], altitude);
+  const pitch = (Math.atan2(STRUCTURE_ORBIT.radiusM, altitude - centreGround) * 180) / Math.PI;   // aim at the structure's own height
+  camera.setPitchBearing(Math.min(pitch, map.getMaxPitch()), (o.angle + 180) % 360);
+  map.setFreeCameraOptions(camera);
+  requestAnimationFrame(structureOrbitStep);
+}
+function orbitButton(lon, lat) {
+  const button = textEl('button', 'chip orbit-btn', 'Orbit');
+  button.type = 'button';
+  button.title = 'Circle this structure with the camera. Drag, scroll or Esc to stop.';
+  button.addEventListener('click', () => (structureOrbit && structureOrbit.button === button ? stopStructureOrbit() : startStructureOrbit(lon, lat, button)));
+  return button;
+}
+
 // ---------- flight along a river: a free camera follows the river bed downstream, the chart and readout follow the camera ----------
 const FLIGHT = { kmPerSecond: 9, aboveGroundM: 2600, behindKm: 5, aheadKm: 7, pitch: 62 };
 let flight = null;                          // { points, total, d, last, fov }
@@ -2286,6 +2397,7 @@ function pointAtKm(points, d) {
 }
 function startFlight() {
   stopOrbit();
+  stopStructureOrbit();
   const points = profileState.profiles[profileState.river].points;
   flight = { points, total: points[points.length - 1].d, d: Math.max(0, points[profileState.index].d), last: 0, fov: map.transform.fov };
   map.easeTo({ fov: FLIGHT_FOV, duration: 600, essential: true });
@@ -2295,6 +2407,7 @@ function startFlight() {
   requestAnimationFrame(flightStep);
 }
 function stopFlight() {
+  stopStructureOrbit();                      // one stop handler (drag, wheel, touch, Esc, 2D button) ends either kind of camera animation
   if (!flight) return;
   map.easeTo({ fov: flight.fov, duration: 600, essential: true });
   flight = null;

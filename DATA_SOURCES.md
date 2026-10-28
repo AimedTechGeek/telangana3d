@@ -281,6 +281,7 @@ public and were downloaded by `fetch_data.py` into `data/raw/` (not committed);
 
 ## 6c. Water links, pump houses and intakes
 
+- **Drawing of the links:** the lines are schematic (straight between the two structures, not canal alignments) and are drawn overhead, lifted about 120 m above the ground at district level (`LINK_LIFT_M`, scaled by the zoom-aware terrain exaggeration) so they stay visible over the hills. The lift is a drawing choice, not a measured height or a claim about any pipe. The river-bed line and the Orbit button use no new data: the line is the existing river profile coloured with the relief tint, the orbit circles a popup's own coordinates (4 km radius, 2,500 m above the terrain, constants chosen for the view, not from a source).
 - **Edges** (`LINKS` in `build_web_data.py`), each with years *planned /
   construction began / first water / complete* where a source gives them:
   - *Kaleshwaram* — the "Links" section of

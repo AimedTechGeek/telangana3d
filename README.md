@@ -96,7 +96,16 @@ uv run python serve.py      # http://127.0.0.1:8765/ opens in your browser
   a work-in-progress cone. Click a link (on the map or in the list) for its
   status, years (planned, construction, first water, complete), terrain
   heights at both ends, straight-line distance and source. Lines are
-  schematic, not real canal alignments
+  schematic, not real canal alignments, and are drawn as overhead pipes: lifted
+  about 120 m above the ground at district level (scaled with the terrain
+  exaggeration) so they clear the hills
+- **River bed on the map:** the river selected in the River profiles card is
+  drawn on the map as a line that takes the relief colours of its bed, from the
+  profile's elevations; it follows the Godavari / Krishna tab
+- **Orbit:** the dam popup and the proposal reservoir popup have an Orbit
+  button; the free camera circles the structure at a 4 km radius about 2,500 m
+  above the exaggerated terrain, one turn in 24 s. Drag, scroll, touch, Esc or
+  starting a river flight stops it
 - **Canals, tunnels and pressure mains** (OpenStreetMap): thin magenta
   dashed lines whose dashes move with the flow; canal tunnels are dotted
   with a wide casing, pressurised tunnels/pipes solid. The Canals control
