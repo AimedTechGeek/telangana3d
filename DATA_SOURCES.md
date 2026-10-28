@@ -64,7 +64,13 @@ public and were downloaded by `fetch_data.py` into `data/raw/` (not committed);
   labels off, theme *faded*, light preset *day* or *night* with the theme;
   road labels only when zoomed in; Satellite as a switch). Labels are set in
   Mapbox's DIN Pro fonts.
-<<<<<<< HEAD
+  Optionally the labels use Inter instead: `upload_font.py` downloads Inter
+  Regular, Medium and Bold (TTF, SIL OFL 1.1) from the official rsms/inter
+  GitHub release (v4.1 at the time of writing) and uploads them to the Mapbox
+  account through the Fonts API (`POST https://api.mapbox.com/fonts/v1/{username}`,
+  secret token with `fonts:write`); it then writes `web/data/fonts.json`. The
+  upload endpoint and the glyph name `Inter Medium` follow Mapbox's
+  documentation and were not exercised against a real account (unverified).
 - **Basemap configuration (Standard only):** `basemapConfig()` passes
   `showLandmarkIcons`, `show3dFacades`, `show3dTrees` (all true) and the
   `colorWater`, `colorGreenspace`, `colorLand`, `colorRoads`,
@@ -85,15 +91,6 @@ public and were downloaded by `fetch_data.py` into `data/raw/` (not committed);
   (`appearances` on each symbol layer, conditions on `feature-state`), updated
   on a theme change with `map.setLayerProperty(id, 'appearances', ...)`
   (supported in v3.30.0).
-=======
-  Optionally the labels use Inter instead: `upload_font.py` downloads Inter
-  Regular, Medium and Bold (TTF, SIL OFL 1.1) from the official rsms/inter
-  GitHub release (v4.1 at the time of writing) and uploads them to the Mapbox
-  account through the Fonts API (`POST https://api.mapbox.com/fonts/v1/{username}`,
-  secret token with `fonts:write`); it then writes `web/data/fonts.json`. The
-  upload endpoint and the glyph name `Inter Medium` follow Mapbox's
-  documentation and were not exercised against a real account (unverified).
->>>>>>> wf/r510
 - **Caveat:** Terrain-DEM and Copernicus differ by a few metres (Hyderabad
   reads 504 m against the 508 m Copernicus median listed in the Cities card);
   every figure in the panels, the profiles and the proposal model still comes
