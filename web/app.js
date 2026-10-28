@@ -738,8 +738,13 @@ function setBasemap(mode) {
   for (const button of document.querySelectorAll('[data-base]')) button.setAttribute('aria-pressed', String(button.dataset.base === mode));
   document.querySelector('.chip[data-toggle="relief"]').setAttribute('aria-pressed', String(mode === 'standard'));   // imagery shows only without the tint
   styleReady = false;                                               // the flow animation leaves the style alone while it loads
-  map.once('style.load', () => { styleReady = true; ensureIcons(currentTheme()); });   // a new style starts without our images
-  map.setStyle(buildStyle(currentTheme()), { diff: false });        // the Standard import cannot be diffed
+  const style = buildStyle(currentTheme());
+  // Mapbox GL JS 3.33 throws inside its render loop (placement, raster pass) when a style that already holds fill-extrusion layers
+  // replaces the current one; the 3D walls are therefore added once the new style has loaded.
+  const walls = style.layers.filter((layer) => layer.type === 'fill-extrusion');
+  style.layers = style.layers.filter((layer) => layer.type !== 'fill-extrusion');
+  map.once('style.load', () => { addLayers(walls); styleReady = true; ensureIcons(currentTheme()); });   // a new style starts without our images
+  map.setStyle(style, { diff: false });                             // the Standard import cannot be diffed
 }
 for (const button of document.querySelectorAll('[data-base]')) button.addEventListener('click', () => setBasemap(button.dataset.base));
 
