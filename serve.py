@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import argparse
 import functools
+import json
+import os
 import threading
 import webbrowser
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
@@ -17,6 +19,16 @@ from pathlib import Path
 
 WEB = Path(__file__).parent / "web"
 HOST, PORT = "127.0.0.1", 8765
+TOKEN_FILE = WEB / "mapbox-token.js"      # git-ignored; the GitHub Pages workflow writes the same file from a repository secret
+
+
+def write_token_file() -> None:
+    """The map needs a Mapbox public token: taken from the MAPBOX_TOKEN environment variable, never from the repo."""
+    token = os.environ.get("MAPBOX_TOKEN", "").strip()
+    if token:
+        TOKEN_FILE.write_text(f"window.MAPBOX_TOKEN = {json.dumps(token)};\n", encoding="utf-8")
+    elif not TOKEN_FILE.exists():
+        print("MAPBOX_TOKEN is not set: the map will show a token notice instead of the basemap")
 
 
 class QuietHandler(SimpleHTTPRequestHandler):
@@ -38,8 +50,9 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--no-browser", action="store_true")
     args = parser.parse_args()
-    if not (WEB / "tiles").is_dir():
-        raise SystemExit("web/tiles is missing: run `uv run python build_web_data.py` first")
+    if not (WEB / "data").is_dir():
+        raise SystemExit("web/data is missing: run `uv run python build_web_data.py` first")
+    write_token_file()
 
     server = ThreadingHTTPServer((HOST, PORT), functools.partial(QuietHandler, directory=str(WEB)))
     url = f"http://{HOST}:{PORT}/"

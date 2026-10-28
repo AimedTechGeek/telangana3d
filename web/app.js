@@ -1,10 +1,10 @@
-/* Telangana Relief: MapLibre 3D terrain served from local Terrarium tiles. */
+/* Telangana Relief: Mapbox GL JS, the Standard basemap under the atlas layers, Mapbox Terrain-DEM for the 3D surface. */
 'use strict';
 
-const TILE_URL = 'tiles/{z}/{x}/{y}.png';
-const TILE_MAX_ZOOM = 11;          // must match build_web_data.MAX_ZOOM
-const TILE_PX = 256;
-const DEM_BOUNDS = [77, 15, 82, 20];
+const DEM_TILESET = 'mapbox://mapbox.mapbox-terrain-dem-v1';   // 3D surface, hillshade, relief tint and the cursor readout
+const BASEMAPS = { standard: 'mapbox://styles/mapbox/standard', satellite: 'mapbox://styles/mapbox/standard-satellite' };
+let basemap = 'standard';          // standard | satellite
+const TILE_PX = 256;               // Web Mercator tile width the metres-per-pixel formula is written for
 const HOME = { center: [79.35, 17.75], zoom: 7.05, pitch: 56, bearing: -18 };
 const RELIEF_STOPS = [              // metres above sea level -> colour (hypsometric tint)
   [1, '#27624a'], [75, '#3b7f55'], [150, '#6ea263'], [250, '#a9c279'], [350, '#d6d48e'],
@@ -35,7 +35,7 @@ const MAP_THEMES = {
     prop: '#0f766e', propPool: '#4f46e5', propPump: '#b45309', propTrunk: '#7c3aed', propCmdExisting: 'rgba(34,197,94,0.22)', propCmdNew: 'rgba(20,184,166,0.32)',
     flow: ['#86d9e3', '#36aee6', '#2566d8', '#1a3aa6', '#5f2aa8'],   // FLOW_CLASSES: cyan -> blue -> navy -> purple
     shadow: '#2b2016', highlight: '#fff4e2', accent: '#4e3d2e',
-    sky: { 'sky-color': '#cfe3f6', 'horizon-color': '#eef3f8', 'fog-color': '#e9e6df' },
+    lightPreset: 'day', reliefOpacity: 0.62, heat: ['#9fd0f0', '#3b95dc', '#1b5a93'],
   },
   dark: {
     background: '#0e0f12', mask: '#0e0f12', maskOpacity: 0.58,
@@ -48,7 +48,7 @@ const MAP_THEMES = {
     prop: '#2dd4bf', propPool: '#818cf8', propPump: '#fbbf24', propTrunk: '#c4b5fd', propCmdExisting: 'rgba(74,222,128,0.20)', propCmdNew: 'rgba(45,212,191,0.30)',
     flow: ['#2f96a8', '#3cbbea', '#6a9cff', '#a9bdff', '#dcaaff'],   // FLOW_CLASSES: teal -> sky -> blue -> lilac on the dark surface
     shadow: '#000000', highlight: '#b9a68c', accent: '#000000',
-    sky: { 'sky-color': '#0b1020', 'horizon-color': '#1b2233', 'fog-color': '#0e0f12' },
+    lightPreset: 'night', reliefOpacity: 0.55, heat: ['#1f3b55', '#3f8fd0', '#bfe3ff'],
   },
 };
 
@@ -73,9 +73,12 @@ function setTheme(theme) {
 try { const saved = localStorage.getItem('theme'); if (saved) document.documentElement.dataset.theme = saved; } catch (_) { /* ignore */ }
 
 // ---------- style ----------
+// Relief tint: the Terrain-DEM tiles read as a plain raster and decoded by raster-color-mix
+// (Mapbox encoding, channels 0–1): height = −10000 + (R·256² + G·256 + B)·0.1.
+const DEM_COLOR_MIX = [255 * 6553.6, 255 * 25.6, 255 * 0.1, -10000];
+const RELIEF_RANGE_M = 1000;        // the colour ramp is sampled over 0–1000 m
 function reliefExpression(theme) {
-  // Exactly 0 m only occurs on the flat plane outside the DEM, so it takes the page colour.
-  return ['interpolate', ['linear'], ['elevation'], 0, MAP_THEMES[theme].background, ...RELIEF_STOPS.flat()];
+  return ['interpolate', ['linear'], ['raster-value'], 0, MAP_THEMES[theme].background, ...RELIEF_STOPS.flat()];
 }
 
 // River flow styling: width and colour follow log10 of the average discharge.
@@ -367,16 +370,25 @@ function chipOn(name) {
   return chip.getAttribute('aria-pressed') === 'true' ? 'visible' : 'none';
 }
 
+/** Which Mapbox Standard slot an atlas layer renders in: polygons and rasters under the basemap's roads, lines above them, labels on top. */
+function slotFor(layer) {
+  if (layer.type === 'symbol') return 'top';
+  return ['line', 'circle'].includes(layer.type) ? 'middle' : 'bottom';
+}
+function basemapConfig(theme) {
+  const labels = { showPlaceLabels: false, showPointOfInterestLabels: false, showTransitLabels: false, showRoadLabels: true };
+  return basemap === 'satellite' ? labels : { ...labels, lightPreset: MAP_THEMES[theme].lightPreset, theme: 'faded', show3dObjects: true };
+}
 function buildStyle(theme) {
   const t = MAP_THEMES[theme];
-  return {
+  const style = {
     version: 8,
+    imports: [{ id: 'basemap', url: BASEMAPS[basemap], config: basemapConfig(theme) }],
+    glyphs: 'mapbox://fonts/mapbox/{fontstack}/{range}.pbf',
+    projection: { name: 'mercator' },
     sources: {
-      // MapLibre wants the terrain mesh and the shading layers on separate sources.
-      dem: { type: 'raster-dem', tiles: [TILE_URL], tileSize: TILE_PX, encoding: 'terrarium',
-             minzoom: 5, maxzoom: TILE_MAX_ZOOM, bounds: DEM_BOUNDS },
-      shade: { type: 'raster-dem', tiles: [TILE_URL], tileSize: TILE_PX, encoding: 'terrarium',
-               minzoom: 5, maxzoom: TILE_MAX_ZOOM, bounds: DEM_BOUNDS },
+      'mapbox-dem': { type: 'raster-dem', url: DEM_TILESET, tileSize: 512, maxzoom: 14 },
+      'relief-dem': { type: 'raster', url: DEM_TILESET, tileSize: 512, maxzoom: 14 },   // the same tiles read as colours for the relief tint
       mask: { type: 'geojson', data: 'data/mask.geojson' },
       state: { type: 'geojson', data: 'data/state.geojson' },
       districts: { type: 'geojson', data: 'data/districts.geojson' },
@@ -390,10 +402,11 @@ function buildStyle(theme) {
       ...(proposalLoaded ? { proposal: { type: 'geojson', data: proposalGeo } } : {}),
     },
     layers: [
-      { id: 'background', type: 'background', paint: { 'background-color': t.background } },
-      { id: 'relief', type: 'color-relief', source: 'shade', paint: { 'color-relief-color': reliefExpression(theme) } },
-      { id: 'hillshade', type: 'hillshade', source: 'shade', layout: { visibility: chipOn('hillshade') }, paint: {
-          'hillshade-method': 'standard', 'hillshade-illumination-direction': 315, 'hillshade-exaggeration': 0.75,
+      { id: 'relief', type: 'raster', source: 'relief-dem', layout: { visibility: chipOn('relief') }, paint: {
+          'raster-color': reliefExpression(theme), 'raster-color-mix': DEM_COLOR_MIX, 'raster-color-range': [0, RELIEF_RANGE_M],
+          'raster-opacity': t.reliefOpacity, 'raster-resampling': 'linear', 'raster-fade-duration': 0 } },
+      { id: 'hillshade', type: 'hillshade', source: 'mapbox-dem', layout: { visibility: chipOn('hillshade') }, paint: {
+          'hillshade-illumination-direction': 315, 'hillshade-exaggeration': 0.75,
           'hillshade-shadow-color': t.shadow, 'hillshade-highlight-color': t.highlight, 'hillshade-accent-color': t.accent } },
       ...cropLayers(t),                      // under the mask so land outside the state stays dimmed
       { id: 'mask', type: 'fill', source: 'mask', paint: { 'fill-color': t.mask, 'fill-opacity': t.maskOpacity } },
@@ -440,22 +453,35 @@ function buildStyle(theme) {
       { id: 'links-hit', type: 'line', source: 'links', filter: linkStatusFilter(), layout: { visibility: chipOn('links') },
         paint: { 'line-color': '#000000', 'line-opacity': 0, 'line-width': 16 } },
     ],
-    terrain: { source: 'dem', exaggeration: Number($('exag').value) },
-    sky: { ...t.sky, 'fog-ground-blend': 0.6, 'horizon-fog-blend': 0.7, 'sky-horizon-blend': 0.85,
-           'atmosphere-blend': ['interpolate', ['linear'], ['zoom'], 0, 1, 9, 1, 12, 0] },
+    terrain: { source: 'mapbox-dem', exaggeration: Number($('exag').value) },
   };
+  for (const layer of style.layers) layer.slot = slotFor(layer);
+  return style;
+}
+/** addLayer with a `before` only when both layers share a slot (Mapbox refuses to order across slots). */
+function addLayers(layers, beforeId) {
+  for (const layer of layers) {
+    layer.slot = slotFor(layer);
+    const before = beforeId && map.getLayer(beforeId) && slotFor(map.getLayer(beforeId)) === layer.slot ? beforeId : undefined;
+    map.addLayer(layer, before);
+  }
 }
 
-const map = new maplibregl.Map({
-  container: 'map',
+if (!window.MAPBOX_TOKEN) {
+  $('toast').textContent = 'Mapbox token missing: set the MAPBOX_TOKEN environment variable and restart serve.py (see the README).';
+  throw new Error('MAPBOX_TOKEN missing');
+}
+const map = new mapboxgl.Map({
+  container: 'map', accessToken: window.MAPBOX_TOKEN,
   style: buildStyle(currentTheme()),
   center: HOME.center, zoom: HOME.zoom, pitch: HOME.pitch, bearing: HOME.bearing,
   minZoom: 5.6, maxZoom: 13.5, maxPitch: 75,
   maxBounds: [[76.4, 14.5], [82.6, 20.6]],
-  attributionControl: false, hash: true, antialias: true,   // the URL carries the view, so views can be shared
+  attributionControl: false, logoPosition: 'bottom-left', hash: true, antialias: true,   // the URL carries the view, so views can be shared
 });
-map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'bottom-right');
-map.addControl(new maplibregl.ScaleControl({ maxWidth: 140, unit: 'metric' }), 'bottom-right');
+map.addControl(new mapboxgl.AttributionControl({ compact: true }), 'bottom-right');
+map.addControl(new mapboxgl.NavigationControl({ visualizePitch: true }), 'bottom-right');
+map.addControl(new mapboxgl.ScaleControl({ maxWidth: 140, unit: 'metric' }), 'bottom-right');
 map.on('error', (event) => { const message = event && event.error ? event.error.message : String(event); debug.errors.push(message); console.error(message); writeDebug(); });
 debug.phase = 'map-created'; writeDebug();
 
@@ -481,53 +507,17 @@ function applyMapTheme() {
   map.setStyle(buildStyle(currentTheme()), { diff: true });
 }
 
-// ---------- elevation under the cursor (decoded from the Terrarium tiles) ----------
-const tileCache = new Map();        // "z/x/y" -> Uint8ClampedArray | Promise
-const TILE_CACHE_LIMIT = 48;
-
-function loadTilePixels(key) {
-  if (tileCache.has(key)) return tileCache.get(key);
-  const promise = new Promise((resolve) => {
-    const image = new Image();
-    image.onload = () => {
-      const canvas = document.createElement('canvas');
-      canvas.width = canvas.height = TILE_PX;
-      const context = canvas.getContext('2d', { willReadFrequently: true });
-      context.drawImage(image, 0, 0);
-      const pixels = context.getImageData(0, 0, TILE_PX, TILE_PX).data;
-      if (tileCache.size >= TILE_CACHE_LIMIT) tileCache.delete(tileCache.keys().next().value);
-      tileCache.set(key, pixels);
-      resolve(pixels);
-    };
-    image.onerror = () => { tileCache.delete(key); resolve(null); };
-    image.src = TILE_URL.replace('{z}/{x}/{y}', key);
-  });
-  tileCache.set(key, promise);
-  return promise;
-}
-
-/** Elevation in metres above sea level; null while the tile loads, undefined outside the DEM. */
-function elevationAt(lng, lat) {
-  if (lng < DEM_BOUNDS[0] || lng > DEM_BOUNDS[2] || lat < DEM_BOUNDS[1] || lat > DEM_BOUNDS[3]) return undefined;
-  const n = 2 ** TILE_MAX_ZOOM;
-  const x = (lng + 180) / 360 * n;
-  const latRad = lat * Math.PI / 180;
-  const y = (1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2 * n;
-  const tx = Math.floor(x), ty = Math.floor(y);
-  const px = Math.min(TILE_PX - 1, Math.floor((x - tx) * TILE_PX));
-  const py = Math.min(TILE_PX - 1, Math.floor((y - ty) * TILE_PX));
-  const entry = tileCache.get(`${TILE_MAX_ZOOM}/${tx}/${ty}`);
-  if (!(entry instanceof Uint8ClampedArray)) { loadTilePixels(`${TILE_MAX_ZOOM}/${tx}/${ty}`); return null; }
-  const i = (py * TILE_PX + px) * 4;
-  return entry[i] * 256 + entry[i + 1] + entry[i + 2] / 256 - 32768;
+// ---------- elevation under the cursor (the terrain the map is drawing, so the number always matches the surface) ----------
+/** Elevation in metres above sea level from the loaded terrain tiles; null where none is loaded yet. */
+function elevationAt(lngLat) {
+  const elevation = map.queryTerrainElevation(lngLat, { exaggerated: false });
+  return elevation === null || elevation === undefined ? null : elevation;
 }
 
 const cursorElev = $('cursor-elev'), cursorPos = $('cursor-pos');
-let pendingCursor = null;
 function showCursor(lngLat) {
-  const elevation = elevationAt(lngLat.lng, lngLat.lat);
-  if (elevation === undefined) { clearCursor(); return; }
-  if (elevation === null) { pendingCursor = lngLat; setTimeout(() => { if (pendingCursor === lngLat) showCursor(lngLat); }, 120); return; }
+  const elevation = elevationAt(lngLat);
+  if (elevation === null) { clearCursor(); return; }
   cursorElev.textContent = Math.round(elevation).toLocaleString('en-IN');
   cursorPos.textContent = `${Math.abs(lngLat.lat).toFixed(3)}°${lngLat.lat >= 0 ? 'N' : 'S'}  ${Math.abs(lngLat.lng).toFixed(3)}°${lngLat.lng >= 0 ? 'E' : 'W'}`;
   showComparison(elevation);
@@ -592,7 +582,7 @@ map.on('mouseout', clearCursor);
 $('exag').addEventListener('input', (event) => {
   const value = Number(event.target.value);
   $('exag-out').value = `${value}×`;
-  map.setTerrain({ source: 'dem', exaggeration: value });
+  map.setTerrain({ source: 'mapbox-dem', exaggeration: value });
   map.triggerRepaint();
 });
 
@@ -603,6 +593,7 @@ function orbitStep() {
   requestAnimationFrame(orbitStep);
 }
 const toggles = {
+  relief: (on) => map.setLayoutProperty('relief', 'visibility', on ? 'visible' : 'none'),
   hillshade: (on) => map.setLayoutProperty('hillshade', 'visibility', on ? 'visible' : 'none'),
   contours: (on) => map.setLayoutProperty('contours', 'visibility', on ? 'visible' : 'none'),
   districts: (on) => { map.setLayoutProperty('districts', 'visibility', on ? 'visible' : 'none'); document.body.classList.toggle('districts-off', !on); },
@@ -784,7 +775,7 @@ function drawBubble(x, y, radius, alpha) {
 map.on('resize', resizeBubbleCanvas);
 
 // Hovering a stream shows its average flow.
-const flowPopup = new maplibregl.Popup({ closeButton: false, closeOnClick: false, offset: 14, className: 'flow-popup' });
+const flowPopup = new mapboxgl.Popup({ closeButton: false, closeOnClick: false, offset: 14, className: 'flow-popup' });
 map.on('mousemove', 'flow-hit', (event) => {
   const reach = event.features[0].properties;
   const node = document.createElement('div');
@@ -840,7 +831,7 @@ function addPeakMarker(river, peak) {
   label.appendChild(textEl('span', 'e', `${peak.q.toLocaleString('en-IN')} m³/s`));
   node.append(textEl('span', 'ring', ''), textEl('span', 'core', ''), label);
   node.addEventListener('click', () => flyToPoint(peak.lon, peak.lat, 10));
-  new maplibregl.Marker({ element: node, anchor: 'center' }).setLngLat([peak.lon, peak.lat]).addTo(map);
+  new mapboxgl.Marker({ element: node, anchor: 'center' }).setLngLat([peak.lon, peak.lat]).addTo(map);
 }
 function renderDistrictFlow(summary) {
   const list = $('district-flow');
@@ -922,7 +913,7 @@ function addCityMarker(city) {
   const elev = document.createElement('span'); elev.className = 'e'; elev.textContent = `${city.elev} m`;
   label.append(name, elev); el.append(dot, label);
   el.addEventListener('click', () => flyToCity(city));
-  const marker = new maplibregl.Marker({ element: el, anchor: 'left', offset: [-5, 0] }).setLngLat([city.lon, city.lat]).addTo(map);
+  const marker = new mapboxgl.Marker({ element: el, anchor: 'left', offset: [-5, 0] }).setLngLat([city.lon, city.lat]).addTo(map);
   cityMarkers.set(city.name, marker);
 }
 function addDistrictLabels(points, cityNames) {
@@ -933,7 +924,7 @@ function addDistrictLabels(points, cityNames) {
     el.append(textEl('span', 'nm', name), textEl('b', 'cnt', ''));
     districtLabels.set(name, el);
     districtCentres.set(name, feature.geometry.coordinates);
-    new maplibregl.Marker({ element: el, anchor: 'center' }).setLngLat(feature.geometry.coordinates).addTo(map);
+    new mapboxgl.Marker({ element: el, anchor: 'center' }).setLngLat(feature.geometry.coordinates).addTo(map);
   }
 }
 // ---------- dams: markers and the year filter (Telangana was formed in 2014) ----------
@@ -1003,7 +994,7 @@ function statusBadge() {
 }
 
 // The label carries name and capacity; while a dam's popup is open it shrinks to the name.
-const damPopup = new maplibregl.Popup({ closeButton: true, closeOnClick: true, offset: 16, className: 'dam-popup', maxWidth: '320px' });
+const damPopup = new mapboxgl.Popup({ closeButton: true, closeOnClick: true, offset: 16, className: 'dam-popup', maxWidth: '320px' });
 let openDamNode = null;
 damPopup.on('close', () => { if (openDamNode) openDamNode.classList.remove('open'); openDamNode = null; });
 
@@ -1023,7 +1014,7 @@ function addDamMarker(dam) {
   node.title = `${damKindLabel(dam)}${dam.river && !dam.river.includes('off-river') ? ` on the ${dam.river}` : ''}${isPending(dam.status) ? ` · ${STATUS_LABEL[dam.status]}` : ''}`
              + `${dam.approx ? ` · position approximate (${dam.approx})` : ''} · click for details`;
   node.addEventListener('click', (event) => { event.stopPropagation(); openDamPopup(dam, node); flyToPoint(dam.lon, dam.lat, 11.5); });
-  new maplibregl.Marker({ element: node, anchor: 'left', offset: [-11, 0] }).setLngLat([dam.lon, dam.lat]).addTo(map);
+  new mapboxgl.Marker({ element: node, anchor: 'left', offset: [-11, 0] }).setLngLat([dam.lon, dam.lat]).addTo(map);
 }
 
 // ---------- Kaleshwaram links: pump houses, tunnel portals and the link list ----------
@@ -1040,7 +1031,7 @@ function addPumpMarker(house) {
   node.append(icon, label);
   node.title = `${house.name}${house.elev_m ? ` · terrain ${house.elev_m} m` : ''}${house.since ? ` · pumping since ${house.since}` : ''}`
              + `${house.approx ? ` · position approximate (${house.approx})` : ''} · ${house.source === 'OpenStreetMap' ? 'OpenStreetMap' : 'see the link popup for the source'}`;
-  new maplibregl.Marker({ element: node, anchor: 'left', offset: [-10, 0] }).setLngLat([house.lon, house.lat]).addTo(map);
+  new mapboxgl.Marker({ element: node, anchor: 'left', offset: [-10, 0] }).setLngLat([house.lon, house.lat]).addTo(map);
 }
 
 // ---------- cropland panel and mode ----------
@@ -1162,7 +1153,7 @@ function renderCanalNetwork(summary) {
 }
 
 // ---------- canal popup ----------
-const canalPopup = new maplibregl.Popup({ closeButton: true, closeOnClick: true, offset: 8, className: 'dam-popup canal-popup', maxWidth: '300px' });
+const canalPopup = new mapboxgl.Popup({ closeButton: true, closeOnClick: true, offset: 8, className: 'dam-popup canal-popup', maxWidth: '300px' });
 function openCanalPopup(p, lngLat) {
   const content = document.createElement('div');
   const head = textEl('div', 'head', '');
@@ -1186,7 +1177,7 @@ map.on('mouseenter', 'canals-hit', () => { map.getCanvas().style.cursor = 'point
 map.on('mouseleave', 'canals-hit', () => { map.getCanvas().style.cursor = ''; });
 
 // ---------- tank popup and the Tanks card ----------
-const tankPopup = new maplibregl.Popup({ closeButton: true, closeOnClick: true, offset: 8, className: 'dam-popup tank-popup', maxWidth: '300px' });
+const tankPopup = new mapboxgl.Popup({ closeButton: true, closeOnClick: true, offset: 8, className: 'dam-popup tank-popup', maxWidth: '300px' });
 const indian = (value) => Number(value).toLocaleString('en-IN');
 function openTankPopup(p, lngLat) {
   const content = document.createElement('div');
@@ -1258,7 +1249,7 @@ function renderTanks(data) {
 }
 
 // ---------- groundwater: well and district popups, legend, year curve and the Groundwater card ----------
-const gwPopup = new maplibregl.Popup({ closeButton: true, closeOnClick: true, offset: 8, className: 'dam-popup gw-popup', maxWidth: '320px' });
+const gwPopup = new mapboxgl.Popup({ closeButton: true, closeOnClick: true, offset: 8, className: 'dam-popup gw-popup', maxWidth: '320px' });
 const metres = (value) => `${Number(value).toFixed(1)} m`;
 const signedMetres = (value) => `${value > 0 ? '+' : value < 0 ? '−' : ''}${Math.abs(value).toFixed(1)} m`;
 const gwYears = (window) => `${window.years[0]}–${String(window.years[1]).slice(2)}`;
@@ -1407,7 +1398,7 @@ function renderGroundwater(data) {
 }
 
 // ---------- proposal: popups, map labels and the Proposal card ----------
-const proposalPopup = new maplibregl.Popup({ closeButton: true, closeOnClick: true, offset: 8, className: 'dam-popup prop-popup', maxWidth: '330px' });
+const proposalPopup = new mapboxgl.Popup({ closeButton: true, closeOnClick: true, offset: 8, className: 'dam-popup prop-popup', maxWidth: '330px' });
 const crore = (value) => `₹${indian(Math.round(value))} crore`;
 const proposalWork = (id) => proposalData && proposalData.works.find((w) => w.id === id);
 const PROP_KIND_LABEL = { pool: 'proposed reservoir', delivery: 'proposed lift delivery', tunnel: 'proposed tunnel', canal: 'proposed canal', cut: 'proposed deep cut', aqueduct: 'proposed aqueduct or siphon', 'pressure main': 'proposed pressure main' };
@@ -1488,7 +1479,7 @@ function propMarker(kind, symbol, lngLat, title, detail, onClick) {
   node.append(propIcon(symbol), label);
   node.title = `${title} · proposed, not built · click for details`;
   node.addEventListener('click', (event) => { event.stopPropagation(); onClick(); });
-  proposalMarkers.push(new maplibregl.Marker({ element: node, anchor: 'left', offset: [-11, 0] }).setLngLat(lngLat).addTo(map));
+  proposalMarkers.push(new mapboxgl.Marker({ element: node, anchor: 'left', offset: [-11, 0] }).setLngLat(lngLat).addTo(map));
 }
 /** Midpoint of a lon/lat polyline, for the canal and tunnel labels. */
 function lineMidpoint(coords) {
@@ -1640,7 +1631,7 @@ function renderProposal(data) {
 }
 
 // ---------- link popup ----------
-const linkPopup = new maplibregl.Popup({ closeButton: true, closeOnClick: true, offset: 10, className: 'dam-popup link-popup', maxWidth: '340px' });
+const linkPopup = new mapboxgl.Popup({ closeButton: true, closeOnClick: true, offset: 10, className: 'dam-popup link-popup', maxWidth: '340px' });
 linkPopup.on('close', () => map.setFilter('links-highlight', ['==', ['get', 'link'], '']));
 const linkKey = (p) => `${p.scheme} · ${p.link}`;
 
@@ -1703,7 +1694,7 @@ function addWorkInProgressMarkers(links) {
     node.append(icon, textEl('span', 'lbl', `${p.link} · ${STATUS_LABEL[p.status] || p.status}`));
     node.title = `${p.link}: ${p.from} → ${p.to} · ${p.note}`;
     wipMarkers.push({ status: p.status, element: node });
-    new maplibregl.Marker({ element: node, anchor: 'left', offset: [-11, 0] }).setLngLat(mid).addTo(map);
+    new mapboxgl.Marker({ element: node, anchor: 'left', offset: [-11, 0] }).setLngLat(mid).addTo(map);
   }
 }
 
@@ -1722,7 +1713,7 @@ function groupLinks(links) {
 }
 function focusLinkGroup(group, button) {
   for (const other of document.querySelectorAll('.link-list .row')) other.classList.toggle('active', other === button);
-  const bounds = new maplibregl.LngLatBounds();
+  const bounds = new mapboxgl.LngLatBounds();
   for (const feature of group.features) for (const coord of feature.geometry.coordinates) bounds.extend(coord);
   map.fitBounds(bounds, { padding: { top: 80, bottom: 80, left: 400, right: 340 }, pitch: 50, bearing: -15, duration: 1800, maxZoom: 10.5 });
   const first = group.features[0], mid = first.geometry.coordinates[Math.floor(first.geometry.coordinates.length / 2)];
@@ -2023,7 +2014,7 @@ function highlightProfile(index, showTip) {
   }
   if (!profileState.marker) {
     const el = document.createElement('div'); el.className = 'mk-scrub';
-    profileState.marker = new maplibregl.Marker({ element: el }).setLngLat([point.lon, point.lat]).addTo(map);
+    profileState.marker = new mapboxgl.Marker({ element: el }).setLngLat([point.lon, point.lat]).addTo(map);
   } else {
     profileState.marker.setLngLat([point.lon, point.lat]);
   }
@@ -2052,13 +2043,13 @@ map.on('load', async () => {
       loadJson('data/pending.json').catch(() => [])]);
     cropBounds = cropland.bounds;
     for (const [id, source] of Object.entries(cropSources())) map.addSource(id, source);
-    for (const layer of cropLayers(MAP_THEMES[currentTheme()])) map.addLayer(layer, 'mask');
+    addLayers(cropLayers(MAP_THEMES[currentTheme()]), 'mask');
     renderCropland(cropland);
     const canals = await loadJson('data/canals.geojson').catch(() => null);   // absent until fetch_data.py gets OSM canals
     if (canals) {
       canalsLoaded = true;
       map.addSource('canals', { type: 'geojson', data: canals });
-      for (const layer of canalLayers(MAP_THEMES[currentTheme()])) map.addLayer(layer, 'links-highlight');
+      addLayers(canalLayers(MAP_THEMES[currentTheme()]), 'links-highlight');
       debug.notes.canals = canals.features.length;
       const canalSummary = await loadJson('data/canals_summary.json').catch(() => null);
       if (canalSummary) renderCanalNetwork(canalSummary);
@@ -2087,7 +2078,7 @@ map.on('load', async () => {
       tankSummary = tanks;
       map.addSource('tanks', { type: 'geojson', data: 'data/tanks.geojson' });
       map.addSource('tank-points', { type: 'geojson', data: 'data/tank_points.geojson' });
-      for (const layer of tankLayers(MAP_THEMES[currentTheme()])) map.addLayer(layer, 'districts');
+      addLayers(tankLayers(MAP_THEMES[currentTheme()]), 'districts');
       renderTanks(tanks);
       debug.notes.tanks = tanks.osm_tanks;
     } else {
@@ -2099,7 +2090,7 @@ map.on('load', async () => {
       gwLoaded = true;
       gwData = groundwater;
       map.addSource('groundwater', { type: 'geojson', data: 'data/groundwater.geojson' });
-      for (const layer of gwLayers(MAP_THEMES[currentTheme()])) map.addLayer(layer, 'districts');
+      addLayers(gwLayers(MAP_THEMES[currentTheme()]), 'districts');
       renderGroundwater(groundwater);
       debug.notes.groundwater = groundwater.state.wells;
     } else {
@@ -2111,7 +2102,7 @@ map.on('load', async () => {
       proposalLoaded = true;
       proposalGeo = await loadJson('data/proposal.geojson');
       map.addSource('proposal', { type: 'geojson', data: proposalGeo });
-      for (const layer of proposalLayers(MAP_THEMES[currentTheme()])) map.addLayer(layer, 'districts');
+      addLayers(proposalLayers(MAP_THEMES[currentTheme()]), 'districts');
       renderProposal(proposal);
       addProposalMarkers(proposal, proposalGeo);
       debug.notes.proposal = proposal.works.length;
@@ -2127,11 +2118,9 @@ map.on('load', async () => {
     debug.notes.flowDistricts = flowSummary.districts.length;
     debug.phase = 'data-loaded'; writeDebug();
     if (DEBUG) {
-      const hyderabad = cities.find((c) => c.name === 'Hyderabad');
-      await loadTilePixels(tileKeyFor(hyderabad.lon, hyderabad.lat));
-      debug.notes.hyderabad = { listed: hyderabad.elev, decoded: Math.round(elevationAt(hyderabad.lon, hyderabad.lat)) };
       debug.notes.cities = cities.length;
       debug.notes.profiles = Object.fromEntries(Object.entries(profiles).map(([k, v]) => [k, v.points.length]));
+      debug.hyderabad = cities.find((c) => c.name === 'Hyderabad');
     }
   } catch (error) {
     debug.errors.push(String(error));
@@ -2145,11 +2134,11 @@ map.on('load', async () => {
     $('toast').classList.add('gone');
     if (flowAnimating) requestAnimationFrame(animateFlow);
     debug.phase = 'ready';
-    if (DEBUG) { debug.notes.terrain = Boolean(map.getTerrain()); debug.notes.layers = map.getStyle().layers.map((l) => l.id); writeDebug(); document.title = 'READY ' + document.title; }
+    if (DEBUG) {
+      const h = debug.hyderabad, decoded = elevationAt([h.lon, h.lat]);
+      debug.notes.hyderabad = { listed: h.elev, decoded: decoded === null ? null : Math.round(decoded) };   // listed = Copernicus 1 km median, decoded = Mapbox Terrain-DEM
+      debug.notes.terrain = Boolean(map.getTerrain()); debug.notes.layers = map.getStyle().layers.map((l) => l.id); writeDebug(); document.title = 'READY ' + document.title;
+    }
   };
   settle();
 });
-function tileKeyFor(lng, lat) {
-  const n = 2 ** TILE_MAX_ZOOM, latRad = lat * Math.PI / 180;
-  return `${TILE_MAX_ZOOM}/${Math.floor((lng + 180) / 360 * n)}/${Math.floor((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2 * n)}`;
-}

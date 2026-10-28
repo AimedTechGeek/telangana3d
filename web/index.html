@@ -9,9 +9,9 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap">
-<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.12.0/dist/maplibre-gl.css">
+<link rel="stylesheet" href="https://api.mapbox.com/mapbox-gl-js/v3.30.0/mapbox-gl.css">
 <link rel="stylesheet" href="style.css">
-<script src="https://unpkg.com/maplibre-gl@5.12.0/dist/maplibre-gl.js"></script>
+<script src="https://api.mapbox.com/mapbox-gl-js/v3.30.0/mapbox-gl.js"></script>
 </head>
 <body>
 <div id="map" role="application" aria-label="3D terrain map of Telangana"></div>
@@ -221,7 +221,7 @@
     </div>
   </details>
 
-  <footer class="credits">Copernicus DEM (ESA) · HydroRIVERS (HydroSHEDS, Lehner &amp; Grill 2013) · GLAD cropland (Potapov et al. 2021) · geoBoundaries · Natural Earth · India-WRIS groundwater levels (CGWB, Telangana GWD) · © OpenStreetMap contributors</footer>
+  <footer class="credits">© Mapbox (Standard basemap, Terrain-DEM) · Copernicus DEM (ESA) · HydroRIVERS (HydroSHEDS, Lehner &amp; Grill 2013) · GLAD cropland (Potapov et al. 2021) · geoBoundaries · Natural Earth · India-WRIS groundwater levels (CGWB, Telangana GWD) · © OpenStreetMap contributors</footer>
 </aside>
 
 <div class="right-stack">
@@ -242,6 +242,7 @@
       <output id="exag-out" for="exag">3×</output>
       </label>
       <div class="chips">
+      <button class="chip" type="button" data-toggle="relief" aria-pressed="true">Relief colours</button>
       <button class="chip" type="button" data-toggle="hillshade" aria-pressed="true">Hillshade</button>
       <button class="chip" type="button" data-toggle="contours" aria-pressed="false">Contours 100 m</button>
     </div>
@@ -405,6 +406,8 @@
 </svg>
 <pre id="debug" hidden></pre>
 
+<!-- mapbox-token.js is not in git: serve.py writes it from the MAPBOX_TOKEN environment variable, the Pages workflow from the repository secret -->
+<script src="mapbox-token.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
