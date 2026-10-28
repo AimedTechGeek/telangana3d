@@ -64,6 +64,13 @@ public and were downloaded by `fetch_data.py` into `data/raw/` (not committed);
   labels off, theme *faded*, light preset *day* or *night* with the theme;
   road labels only when zoomed in; Satellite as a switch). Labels are set in
   Mapbox's DIN Pro fonts.
+  Optionally the labels use Inter instead: `upload_font.py` downloads Inter
+  Regular, Medium and Bold (TTF, SIL OFL 1.1) from the official rsms/inter
+  GitHub release (v4.1 at the time of writing) and uploads them to the Mapbox
+  account through the Fonts API (`POST https://api.mapbox.com/fonts/v1/{username}`,
+  secret token with `fonts:write`); it then writes `web/data/fonts.json`. The
+  upload endpoint and the glyph name `Inter Medium` follow Mapbox's
+  documentation and were not exercised against a real account (unverified).
 - **Caveat:** Terrain-DEM and Copernicus differ by a few metres (Hyderabad
   reads 504 m against the 508 m Copernicus median listed in the Cities card);
   every figure in the panels, the profiles and the proposal model still comes
@@ -588,7 +595,7 @@ Hard-coded in `web/app.js` (`LANDMARKS`), checked on 2026-10-22:
 | numpy, scipy, contourpy, matplotlib, Pillow | 2.5.4, 1.18.1, 1.4.0, 3.11.2, 13.0.0 | BSD / HPND | arrays, smoothing, contours, images |
 | requests | 2.34.2 | Apache-2.0 | downloads |
 | Playwright (dev) | 1.64.1 | Apache-2.0 | headless smoke test |
-| Inter, JetBrains Mono (Google Fonts CDN) | — | SIL OFL 1.1 | web typography |
+| Inter, JetBrains Mono (Google Fonts CDN) | — | SIL OFL 1.1 | web typography; Inter TTFs (rsms/inter 4.1) are also what `upload_font.py` sends to Mapbox for map labels |
 
 Exact versions of every Python dependency are pinned in `uv.lock`.
 
