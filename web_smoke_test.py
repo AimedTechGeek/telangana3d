@@ -7,6 +7,7 @@ Needs the Playwright dev dependency (uv sync) and Microsoft Edge.
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 import time
@@ -16,7 +17,8 @@ from playwright.sync_api import sync_playwright
 
 ROOT = Path(__file__).parent
 OUT = ROOT / "out"
-URL = "http://127.0.0.1:8765/?debug"
+PORT = int(os.environ.get("ATLAS_PORT", "8765"))   # serve.py reads the same variable
+URL = f"http://127.0.0.1:{PORT}/?debug"
 ELEVATION_TOLERANCE_M = 15      # listed city value is a Copernicus 1 km median; decoded is Mapbox Terrain-DEM under the map's surface
 
 

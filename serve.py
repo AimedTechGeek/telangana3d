@@ -18,7 +18,8 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 WEB = Path(__file__).parent / "web"
-HOST, PORT = "127.0.0.1", 8765
+HOST = "127.0.0.1"
+PORT = int(os.environ.get("ATLAS_PORT", "8765"))     # tests and parallel work can pick another port
 TOKEN_FILE = WEB / "mapbox-token.js"      # git-ignored; the GitHub Pages workflow writes the same file from a repository secret
 
 
@@ -49,13 +50,14 @@ class QuietHandler(SimpleHTTPRequestHandler):
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--no-browser", action="store_true")
+    parser.add_argument("--port", type=int, default=PORT)
     args = parser.parse_args()
     if not (WEB / "data").is_dir():
         raise SystemExit("web/data is missing: run `uv run python build_web_data.py` first")
     write_token_file()
 
-    server = ThreadingHTTPServer((HOST, PORT), functools.partial(QuietHandler, directory=str(WEB)))
-    url = f"http://{HOST}:{PORT}/"
+    server = ThreadingHTTPServer((HOST, args.port), functools.partial(QuietHandler, directory=str(WEB)))
+    url = f"http://{HOST}:{args.port}/"
     print(f"Serving {url}  (Ctrl+C to stop)")
     if not args.no_browser:
         threading.Timer(0.5, webbrowser.open, [url]).start()
