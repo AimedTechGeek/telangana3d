@@ -124,13 +124,14 @@ const FLOW_CLASSES = [
   { from: 1000, label: '1K–2K' }, { from: 2000, label: '2K+' },
 ];
 const FLOW_LOG_Q = ['log10', ['max', ['get', 'q'], 0.1]];
-// Animation: changing line-dasharray makes MapLibre rebuild the source tiles, so
-// the page carries one layer per dash phase and only cycles their opacity.
+// Animation: since Mapbox GL JS v3.33 line-dasharray is a cheap uniform, so ONE flow-dash layer
+// and ONE canals-dash layer have their dasharray set with setPaintProperty every FLOW_TICK_MS,
+// stepping through dashPatternAt(flowStep) / canalDashAt(flowStep).
 // Dashes are measured in line widths, so wider rivers get longer dashes that
 // cover more pixels per tick: that is the speed difference. Every class moves
 // one tenth of a period per tick, which always reads as forward motion.
 const FLOW_DASH = { length: 2.2, gap: 2.4 };          // in line widths
-const FLOW_DASH_STEPS = 10;                           // phase layers, all drawn every frame: keep small
+const FLOW_DASH_STEPS = 10;                           // phases per dash period
 const FLOW_DASH_MIN_CMS = 20;                         // animate streams from 20 m³/s; smaller ones stay static
 const FLOW_TICK_MS = 70;
 const PULSE_MS = 2600, PULSE_LENGTH = 0.22;          // one pulse runs the length of a link or trunk stage in 2.6 s
@@ -214,11 +215,10 @@ function canalLayers(t) {
       paint: { 'line-color': ['case', isNew, t.canal, t.canalOld], 'line-width': width({ canal: 1, tunnel: 1.6, main: 1.2 }),
                'line-opacity': ['case', isNew, 0.95, 0.7],
                'line-dasharray': ['case', isTunnel, ['literal', [0.6, 1.1]], isMain, ['literal', [1, 0]], ['literal', CANAL_DASH]] } },
-    ...Array.from({ length: FLOW_DASH_STEPS }, (_, k) => ({
-      id: `canals-dash-${k}`, type: 'line', source: 'canals', filter: ['all', canalFilter(), ['==', ['get', 'directed'], true]],
+    { id: 'canals-dash', type: 'line', source: 'canals', filter: ['all', canalFilter(), ['==', ['get', 'directed'], true]],
       layout: { 'line-join': 'round', 'line-cap': 'butt', visibility: vis },
       paint: { 'line-color': t.canalDash, 'line-width': width({ canal: 0.45, tunnel: 0.7, main: 0.45 }),
-               'line-dasharray': ['literal', canalDashAt(k)], 'line-opacity': k === flowStep ? 0.9 : 0 } })),
+               'line-dasharray': ['literal', canalDashAt(flowStep)], 'line-opacity': 0.9 } },
     { id: 'canals-hit', type: 'line', source: 'canals', filter: canalFilter(), layout: { visibility: vis },
       paint: { 'line-color': '#000000', 'line-opacity': 0, 'line-width': 12 } },
   ];
@@ -235,10 +235,10 @@ function canalDashAt(step) {
 function applyCanalFilters() {
   if (!canalsLoaded) return;
   const vis = canalMode === 'off' ? 'none' : 'visible';
-  const ids = ['canals-casing', 'canals-line', 'canals-hit', ...Array.from({ length: FLOW_DASH_STEPS }, (_, k) => `canals-dash-${k}`)];
+  const ids = ['canals-casing', 'canals-line', 'canals-hit', 'canals-dash'];
   for (const id of ids) {
     map.setLayoutProperty(id, 'visibility', vis);
-    map.setFilter(id, id.startsWith('canals-dash') ? ['all', canalFilter(), ['==', ['get', 'directed'], true]] : canalFilter());
+    map.setFilter(id, id === 'canals-dash' ? ['all', canalFilter(), ['==', ['get', 'directed'], true]] : canalFilter());
   }
 }
 function setCanalMode(mode) {
@@ -486,11 +486,10 @@ function buildStyle(theme) {
           'line-color': t.flowGlow, 'line-width': flowWidthExpr(2.2), 'line-opacity': 0.55, 'line-blur': 3 } },
       { id: 'flow-lines', type: 'line', source: 'flow', layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: {
           'line-color': flowColorExpr(theme), 'line-width': flowWidthExpr(1), 'line-opacity': 0.95 } },
-      ...Array.from({ length: FLOW_DASH_STEPS }, (_, k) => ({
-        id: `flow-dash-${k}`, type: 'line', source: 'flow', filter: ['>=', ['get', 'q'], FLOW_DASH_MIN_CMS],
+      { id: 'flow-dash', type: 'line', source: 'flow', filter: ['>=', ['get', 'q'], FLOW_DASH_MIN_CMS],
         layout: { 'line-join': 'round', 'line-cap': 'butt', visibility: chipOn('flow') },
-        paint: { 'line-color': t.flowDash, 'line-width': flowWidthExpr(0.5), 'line-dasharray': dashPatternAt(k),
-                 'line-opacity': k === flowStep ? FLOW_DASH_OPACITY : 0 } })),
+        paint: { 'line-color': t.flowDash, 'line-width': flowWidthExpr(0.5), 'line-dasharray': dashPatternAt(flowStep),
+                 'line-opacity': FLOW_DASH_OPACITY } },
       { id: 'flow-hit', type: 'line', source: 'flow', paint: { 'line-color': '#000000', 'line-opacity': 0, 'line-width': 12 } },
       ...canalLayers(t),
       // Kaleshwaram links: solid where water flows today, dashed where the link is still being built.
@@ -776,27 +775,21 @@ const toggles = {
   orbit: (on) => { orbiting = on; if (on) orbitStep(); },
   flow: (on) => {
     flowAnimating = on;
-    for (let k = 0; k < FLOW_DASH_STEPS; k++) map.setLayoutProperty(`flow-dash-${k}`, 'visibility', on ? 'visible' : 'none');
+    map.setLayoutProperty('flow-dash', 'visibility', on ? 'visible' : 'none');
     if (on) { flowLast = 0; requestAnimationFrame(animateFlow); }
   },
 };
 
-// Flow animation: show the next phase layer, hide the previous one (opacity only, no tile reload),
-// and move the bubbles every frame.
+// Flow animation: advance the dash phase on the two dash layers every tick, and move the bubbles every frame.
 let flowLast = 0, bubbleLast = 0;
 function animateFlow(now) {
   if (!flowAnimating) { clearBubbles(); return; }
   if (!styleReady) { requestAnimationFrame(animateFlow); return; }
   if (now - flowLast >= FLOW_TICK_MS) {
     flowLast = now;
-    const previous = flowStep;
     flowStep = (flowStep + 1) % FLOW_DASH_STEPS;
-    map.setPaintProperty(`flow-dash-${previous}`, 'line-opacity', 0);
-    map.setPaintProperty(`flow-dash-${flowStep}`, 'line-opacity', FLOW_DASH_OPACITY);
-    if (canalsLoaded && canalMode !== 'off') {
-      map.setPaintProperty(`canals-dash-${previous}`, 'line-opacity', 0);
-      map.setPaintProperty(`canals-dash-${flowStep}`, 'line-opacity', 0.9);
-    }
+    map.setPaintProperty('flow-dash', 'line-dasharray', dashPatternAt(flowStep));
+    if (canalsLoaded && canalMode !== 'off') map.setPaintProperty('canals-dash', 'line-dasharray', canalDashAt(flowStep));
   }
   drawBubbles(bubbleLast ? Math.min((now - bubbleLast) / 1000, 0.1) : 0);
   bubbleLast = now;
