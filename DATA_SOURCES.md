@@ -196,6 +196,37 @@ public and were downloaded by `fetch_data.py` into `data/raw/` (not committed);
   district; profile flow is the nearest named reach within 6 km, forced
   non-decreasing downstream.
 
+### 5b. River particles (Mapbox raster-array tileset, optional)
+
+- **What:** the HydroRIVERS reaches of section 5 rasterised by `build_flow_raster.py`
+  into `data/flow_velocity.tif` (EPSG:3857, 250 m, two float bands: u east, v north).
+  Each reach is painted with its downstream unit vector (HydroRIVERS lines are
+  digitised downstream) times a speed of `1 + 2 log10(q)` (q = mean discharge in
+  m3/s), one pixel wide plus a 1-pixel buffer, bigger rivers winning at crossings;
+  0 elsewhere. The speed is a display scale, not a measured velocity.
+- **Publishing:** `publish_flow_raster.py` uploads it with the tilesets CLI
+  (`upload-raster-source`, `create`, `publish`) using the recipe
+  `recipes/flow_particles.json`, as tileset `<username>.tg-flow-particles`, and
+  writes `web/data/tilesets.json` (`flow_particles`). Needs the `mapbox-tilesets`
+  CLI and a secret token (`MAPBOX_SECRET_TOKEN`, tilesets scopes). Terms: Mapbox
+  Tiling Service usage and storage fall under the account's Mapbox plan.
+- **Used for:** when `tilesets.json` lists `flow_particles`, the map adds a
+  `raster-array` source and a `raster-particle` layer (`flow-particles`) and skips
+  the canvas bubbles; without it nothing changes.
+- **Pages:** https://docs.mapbox.com/mapbox-gl-js/example/raster-particle-layer/ ·
+  https://docs.mapbox.com/style-spec/reference/layers/#raster-particle ·
+  https://docs.mapbox.com/mapbox-tiling-service/recipe-specification/rasterarray.md ·
+  https://docs.mapbox.com/mapbox-tiling-service/raster/raster-recipes-details.md ·
+  https://docs.mapbox.com/mapbox-tiling-service/examples/raster-mts-basic-recipe.md ·
+  https://github.com/mapbox/tilesets-cli
+- **Unverified:** the tileset has not been published (no secret token was available),
+  so the particle look is unseen. The recipe follows the documented rasterarray
+  fields, but two details are not confirmed by the docs read: that selecting both
+  bands under one `name` ("flow") makes them the u/v pair of one vector band, and
+  the `"name": ["literal", "flow"]` expression. The layer leaves
+  `raster-particle-array-band` unset (first band). If the published tileset shows
+  no particles, check the band names in its TileJSON.
+
 ## 6. Wikipedia (dams and barrages)
 
 - **What:** wikitext of
