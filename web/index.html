@@ -350,6 +350,20 @@
         </div>
         <p class="hint">Construction start is used when the opening year is unknown</p>
     </div>
+    <div class="fgroup" id="year-group">
+        <p class="eyebrow">Years</p>
+        <label class="slider">
+          <span>Show what exists by</span>
+          <output id="year-out" for="year">all</output>
+          <input type="range" id="year" min="1950" max="2026" step="1" value="2026" aria-label="Show works done by this year">
+        </label>
+        <div class="year-row">
+          <button type="button" class="chip" id="year-play" aria-pressed="false">Play</button>
+          <button type="button" class="chip" id="year-reset">All years</button>
+        </div>
+        <p class="hint year-readout" id="year-readout" aria-live="polite">All years</p>
+        <p class="hint">Dams: opened, else began. Links: done, else water, began or planned, in that order. Canals: those dug after 2014 count as 2015 and older ones as 1970. Works without a year hide while the slider is active. Play advances one year every 0.6 s.</p>
+    </div>
       <div class="fgroup">
         <p class="eyebrow">Proposal · river water for 85 % of farmland</p>
         <div class="tabs" role="group" aria-label="Proposal view">
@@ -394,6 +408,11 @@
   </header>
   <div class="crop-body">
     <p class="summary" id="crop-summary">Loading…</p>
+    <label class="slider" id="crop-blend-row" hidden>
+      <span>Blend · 2008–11 to 2016–19</span>
+      <output id="crop-blend-out" for="crop-blend">100 / 0</output>
+      <input type="range" id="crop-blend" min="0" max="100" step="1" value="0" aria-label="Blend between the two cropland periods">
+    </label>
     <div class="crop-legend" id="crop-legend"></div>
     <p class="hint">Water projects are one reason; groundwater recovery, rainfall and the Mission Kakatiya tank restoration also contributed, so the map shows change, not cause.</p>
     <table class="official" id="crop-official"><thead><tr><th>Official figure</th><th>Before</th><th>After</th></tr></thead><tbody></tbody></table>

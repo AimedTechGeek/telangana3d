@@ -537,6 +537,20 @@ announced, not a forecast.
   projects, groundwater recovery, rainfall, tank restoration), which the data
   cannot separate.
 
+### 6d-i. Cropland blend and the Years slider (derived, no new data)
+
+- The Cropland card's Blend slider only changes the opacities of the existing
+  2008–2011 and 2016–2019 rasters (complementary, lifted slightly toward 1 in
+  the middle so the mix does not look thinner); it is a visual cross-fade, not
+  an interpolated cropland estimate for the years in between.
+- The Years slider (Filters card) uses years already in the atlas: dams
+  `opened` else `began` (section 6), links `done`, `water`, `began`, `planned`
+  in that order (6c), and, for canals, a rule of the atlas's own: OSM era
+  "after" counts as 2015 and "before" as 1970 because OSM does not record a dig
+  date. The canal year is therefore a bucket, not a measured year. Features
+  with no year are hidden while the slider is active. Not verified: that the
+  link `done`/`water` years are complete for every link.
+
 ## 6e. Official irrigation and cropping figures (Cropland panel table)
 
 - Gross irrigated area 62.48 lakh acres (2014-15) → 135 lakh acres (2021-22):

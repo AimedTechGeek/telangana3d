@@ -94,9 +94,17 @@ def tilesets(*args: str) -> str:
     return result.stdout
 
 
-def line_delimited(source: Path, target: Path) -> int:
+CANAL_YEAR = {"after": 2015, "before": 1970}    # the years slider treats canals by era; keep in step with CANAL_YEAR in web/app.js
+
+
+def line_delimited(source: Path, target: Path, layer: str = "") -> int:
     """Tileset sources are line-delimited GeoJSON: one feature per line."""
     features = json.loads(source.read_text(encoding="utf-8"))["features"]
+    if layer == "canals":                      # the map's years filter reads a numeric year property
+        for feature in features:
+            year = CANAL_YEAR.get(feature["properties"].get("era"))
+            if year is not None:
+                feature["properties"]["year"] = year
     with target.open("w", encoding="utf-8") as out:
         for feature in features:
             out.write(json.dumps(feature, separators=(",", ":")) + "\n")
@@ -110,7 +118,7 @@ def tileset_exists(tileset_id: str, username: str) -> bool:
 def publish_layer(username: str, layer: str, workdir: Path) -> dict:
     file_name, max_zoom = LAYERS[layer]
     tileset_id = f"{username}.tg-{layer}"
-    count = line_delimited(DATA / file_name, workdir / f"{layer}.ndjson")
+    count = line_delimited(DATA / file_name, workdir / f"{layer}.ndjson", layer)
     print(f"[{layer}] {count} features")
     tilesets("upload-source", username, f"tg-{layer}", str(workdir / f"{layer}.ndjson"), "--replace", "--no-validation")
     recipe_path = workdir / f"{layer}.recipe.json"

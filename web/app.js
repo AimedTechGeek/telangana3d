@@ -183,12 +183,21 @@ function cropCoords() {
   const [w, s, e, n] = cropBounds;
   return [[w, n], [e, n], [e, s], [w, s]];
 }
+let cropBlend = 0;                         // 0 = 2008-11 only, 100 = 2016-19 only; both rasters show in before and after mode
+const cropVisible = (mode) => (cropMode === 'before' || cropMode === 'after' ? mode !== 'change' : cropMode === mode);
+/** Complementary opacities; the sum is lifted toward 1 in the middle, where two translucent rasters would otherwise look thinner. */
+function cropOpacityFor(mode, t) {
+  if (mode === 'change') return t.cropOpacity;
+  const w = (mode === 'after' ? cropBlend : 100 - cropBlend) / 100;
+  const cover = t.cropOpacity + (1 - t.cropOpacity) * 4 * (cropBlend / 100) * (1 - cropBlend / 100);
+  return w * cover;
+}
 function cropLayers(t) {
   if (!cropBounds) return [];
   return ['before', 'after', 'change'].map((mode) => ({
     id: `crop-${mode}`, type: 'raster', source: `crop-${mode}`,
-    layout: { visibility: cropMode === mode ? 'visible' : 'none' },
-    paint: { 'raster-opacity': t.cropOpacity, 'raster-resampling': 'linear', 'raster-fade-duration': 0 },
+    layout: { visibility: cropVisible(mode) ? 'visible' : 'none' },
+    paint: { 'raster-opacity': cropOpacityFor(mode, t), 'raster-resampling': 'linear', 'raster-fade-duration': 0 },
   }));
 }
 function cropSources() {
@@ -200,6 +209,7 @@ function cropSources() {
 // Canals (OpenStreetMap): thin dashed cyan lines, dashes sliding in the flow direction.
 let canalMode = 'after';                   // off | after | all
 let canalsLoaded = false;
+let linksData = null, canalsData = null;   // GeoJSON with the precomputed 'year' property, reused when the basemap reloads the style
 // Optional Mapbox tilesets, listed in data/tilesets.json by publish_flow_raster.py. Without the key the canvas bubbles stay.
 let flowParticlesUrl = null;
 const CANAL_DASH = [3, 2.2];               // in line widths, longer than the river dashes
@@ -208,9 +218,14 @@ let statusMode = 'all';
 const isPending = (status) => status !== 'operational';
 const statusShown = (status) => statusMode === 'all' || (statusMode === 'pending') === isPending(status);
 const STATUS_LABEL = { operational: 'operating', 'in progress': 'under construction', 'under construction': 'under construction', planned: 'planned', proposed: 'proposed' };
+// Years slider: features show when their year <= yearValue; undated features hide while it is active.
+let yearActive = false, yearValue = 2026;
+const YEAR_MAX = 2026, CANAL_YEAR = { after: 2015, before: 1970 };
+const yearFilter = () => (yearActive ? ['all', ['has', 'year'], ['<=', ['get', 'year'], yearValue]] : ['literal', true]);
 const linkStatusFilter = () => (statusMode === 'all' ? ['literal', true] : [statusMode === 'built' ? '==' : '!=', ['get', 'status'], 'operational']);
 // OSM marks the Sitarama canals under construction; every other canal counts as built.
-const canalFilter = () => ['all', canalMode === 'all' ? ['literal', true] : ['==', ['get', 'era'], 'after'],
+const linkFilter = () => ['all', linkStatusFilter(), yearFilter()];
+const canalFilter = () => ['all', canalMode === 'all' ? ['literal', true] : ['==', ['get', 'era'], 'after'], yearFilter(),
                            statusMode === 'all' ? ['literal', true] : ['==', ['get', 'construction'], statusMode === 'pending']];
 function canalLayers(t) {
   if (!canalsLoaded) return [];
@@ -530,9 +545,9 @@ function buildStyle(theme) {
       flow: staticSource('flow', 'flow.geojson', { generateId: true }),   // flow.geojson has no id property; vector tiles carry none either, so reach hover works on the GeoJSON path only
       ...flowParticleSources(),
       contours: staticSource('contours', 'contours.geojson'),
-      links: { type: 'geojson', data: 'data/links.geojson', lineMetrics: true },
+      links: { type: 'geojson', data: linksData || 'data/links.geojson', lineMetrics: true },
       ...cropSources(),
-      ...(canalsLoaded ? { canals: staticSource('canals', 'canals.geojson') } : {}),
+      ...(canalsLoaded ? { canals: canalsData ? { type: 'geojson', data: canalsData } : staticSource('canals', 'canals.geojson') } : {}),
       ...(tanksLoaded ? { tanks: staticSource('tanks', 'tanks.geojson'), 'tank-points': staticSource('tank-points', 'tank_points.geojson') } : {}),
       ...(gwLoaded ? { groundwater: staticSource('groundwater', 'groundwater.geojson') } : {}),
       ...(proposalLoaded ? { proposal: { type: 'geojson', data: proposalGeo, lineMetrics: true } } : {}),
@@ -588,23 +603,23 @@ function buildStyle(theme) {
       { id: 'links-highlight', type: 'line', source: 'links', filter: ['==', ['get', 'link'], ''],
         layout: { 'line-join': 'round', 'line-cap': 'round', visibility: chipOn('links') },
         paint: { 'line-color': t.link, 'line-width': 12, 'line-opacity': 0.25, 'line-blur': 2 } },
-      { id: 'links-casing', type: 'line', source: 'links', filter: linkStatusFilter(), layout: { 'line-join': 'round', 'line-cap': 'round', visibility: chipOn('links') },
+      { id: 'links-casing', type: 'line', source: 'links', filter: linkFilter(), layout: { 'line-join': 'round', 'line-cap': 'round', visibility: chipOn('links') },
         paint: { 'line-color': t.linkDash, 'line-width': ['interpolate', ['linear'], ['zoom'], 6, 5, 10, 7.5], 'line-opacity': 0.8 } },
-      { id: 'links-line', type: 'line', source: 'links', filter: linkStatusFilter(), layout: { 'line-join': 'round', 'line-cap': 'round', visibility: chipOn('links') },
+      { id: 'links-line', type: 'line', source: 'links', filter: linkFilter(), layout: { 'line-join': 'round', 'line-cap': 'round', visibility: chipOn('links') },
         paint: { 'line-color': t.link, 'line-width': ['interpolate', ['linear'], ['zoom'], 6, 2.6, 10, 4.2],
                  'line-opacity': ['case', ['==', ['get', 'status'], 'operational'], 0.9, 0.6],
                  'line-dasharray': ['case', ['==', ['get', 'status'], 'operational'], ['literal', [1, 0]], ['==', ['get', 'status'], 'planned'], ['literal', [0.6, 2.4]], ['literal', [2, 2]]] } },
       // Operating links carry a pulse of light travelling in the direction of pumping: a line-trim window moved every frame.
-      { id: 'links-pulse', type: 'line', source: 'links', filter: ['all', ['==', ['get', 'status'], 'operational'], linkStatusFilter()],
+      { id: 'links-pulse', type: 'line', source: 'links', filter: ['all', ['==', ['get', 'status'], 'operational'], linkFilter()],
         layout: { 'line-join': 'round', 'line-cap': 'round', visibility: chipOn('links') },
         paint: { 'line-color': 'rgba(0,0,0,0)', 'line-width': ['interpolate', ['linear'], ['zoom'], 6, 3.4, 10, 5.6],
                  'line-trim-offset': pulseWindow(0), 'line-trim-color': t.linkDash, 'line-trim-fade-range': [0.45, 0.45] } },
       // Static arrows give direction on links still being built.
-      { id: 'links-arrows', type: 'symbol', source: 'links', filter: ['all', ['!=', ['get', 'status'], 'operational'], linkStatusFilter()],
+      { id: 'links-arrows', type: 'symbol', source: 'links', filter: ['all', ['!=', ['get', 'status'], 'operational'], linkFilter()],
         layout: { 'symbol-placement': 'line', 'symbol-spacing': 70, 'icon-image': 'arrow', 'icon-size': ['interpolate', ['linear'], ['zoom'], 6, 0.4, 10, 0.6],
                   'icon-rotation-alignment': 'map', 'icon-allow-overlap': true, 'icon-ignore-placement': true, visibility: chipOn('links') },
         paint: { 'icon-opacity': 0.7 } },
-      { id: 'links-hit', type: 'line', source: 'links', filter: linkStatusFilter(), layout: { visibility: chipOn('links') },
+      { id: 'links-hit', type: 'line', source: 'links', filter: linkFilter(), layout: { visibility: chipOn('links') },
         paint: { 'line-color': '#000000', 'line-opacity': 0, 'line-width': 16 } },
       { id: 'scrub', type: 'circle', source: 'scrub', paint: { 'circle-radius': 6, 'circle-color': t.labelActive, 'circle-stroke-color': t.iconBg, 'circle-stroke-width': 2 } },
       ...damWallLayers(t),
@@ -1198,7 +1213,7 @@ function pointFeature(lon, lat, properties) { return { type: 'Feature', geometry
 function collection(features) { return { type: 'FeatureCollection', features }; }
 const muted = (t, scale) => ({ 'font-scale': scale, 'text-color': t.labelMuted });
 const eraFilter = () => (eraMode === 'all' ? ['literal', true] : ['all', ['has', 'year'], [eraMode === 'before' ? '<' : '>=', ['get', 'year'], ERA_YEAR]]);
-const damFilter = () => ['all', linkStatusFilter(), eraFilter()];
+const damFilter = () => ['all', linkStatusFilter(), eraFilter(), yearFilter()];
 const districtFilter = () => (tankMode === 'kakatiya' ? ['literal', true] : ['!', ['get', 'named_by_city']]);
 const districtText = (t) => (tankMode === 'kakatiya'
   ? ['format', ['upcase', ['get', 'name']], {}, '\n', {}, ['get', 'mk'], { 'font-scale': 1.05, 'text-color': t.label }]
@@ -1237,7 +1252,7 @@ function labelLayers(theme) {
     layers.push(labelLayer('pump-labels', 'pumphouses', t, { icon: ic(['get', 'icon']), text, sort: 5, filter: withDeclutter(linkStatusFilter()), layout: { visibility: chipOn('links') } }));
   }
   if (labelData.wip) {
-    layers.push(labelLayer('wip-labels', 'wip', t, { icon: ic('ic|wip|link|'), text: ['get', 'name'], sort: 6, filter: linkStatusFilter(), size: [10.5, 12], layout: { visibility: chipOn('links') } }));
+    layers.push(labelLayer('wip-labels', 'wip', t, { icon: ic('ic|wip|link|'), text: ['get', 'name'], sort: 6, filter: linkFilter(), size: [10.5, 12], layout: { visibility: chipOn('links') } }));
   }
   if (labelData.peaks) {
     layers.push(labelLayer('peak-labels', 'peaks', t, { icon: ic('ic|peak|peakIcon|'), text: ['format', ['get', 'title'], {}, ['get', 'detail'], muted(t, 0.85)], sort: 1, layout: { visibility: chipOn('labels') } }));
@@ -1313,19 +1328,71 @@ function renderEraCounts(dams) {
 }
 for (const button of document.querySelectorAll('[data-era]')) button.addEventListener('click', () => setEra(button.dataset.era));
 
+// ---------- years slider: dams, links and canals by the year they were done ----------
+const linkYear = (p) => p.done || p.water || p.began || p.planned || null;
+const canalYear = (p) => CANAL_YEAR[p.era] || null;
+let yearData = { dams: [], links: [], canals: [] };   // sorted years of the dated features, from the loaded data
+let yearTimer = null;
+function yearReadout() {
+  if (!yearActive) return 'All years';
+  const upTo = (years) => years.filter((y) => y <= yearValue).length;
+  const canals = yearData.canals.length === 0 ? 'canal years unavailable'
+    : yearValue < CANAL_YEAR.before ? 'all canals hidden'
+    : yearValue < CANAL_YEAR.after ? 'canals after 2014 hidden' : 'all dated canals shown';
+  return `By ${yearValue}: ${upTo(yearData.dams)} dams · ${upTo(yearData.links)} links · ${canals}`;
+}
+function setYear(value, active = true) {
+  yearActive = active;
+  yearValue = Math.min(YEAR_MAX, Math.max(Number($('year').min), value));
+  $('year').value = String(yearValue);
+  $('year-out').textContent = yearActive ? String(yearValue) : 'all';
+  $('year-readout').textContent = yearReadout();
+  if (!active) stopYearPlay();
+  applyWorkFilters();
+  damPopup.remove(); linkPopup.remove(); canalPopup.remove();
+}
+function stopYearPlay() {
+  clearInterval(yearTimer); yearTimer = null;
+  $('year-play').textContent = 'Play'; $('year-play').setAttribute('aria-pressed', 'false');
+}
+function toggleYearPlay() {
+  if (yearTimer) { stopYearPlay(); return; }
+  $('year-play').textContent = 'Pause'; $('year-play').setAttribute('aria-pressed', 'true');
+  if (!yearActive || yearValue >= YEAR_MAX) setYear(Number($('year').min));
+  yearTimer = setInterval(() => {
+    if (yearValue >= YEAR_MAX) { stopYearPlay(); return; }
+    setYear(yearValue + 1);
+  }, 600);
+}
+function setupYears(dams, links, canals) {
+  const years = (list, fn) => list.map(fn).filter((y) => y !== null).sort((a, b) => a - b);
+  yearData = { dams: years(dams, damYear), links: years(links.features, (f) => f.properties.year),
+               canals: canals ? years(canals.features, (f) => f.properties.year) : [] };
+  const all = [...yearData.dams, ...yearData.links, ...yearData.canals];
+  $('year').min = String(Math.min(...all));
+  $('year').max = String(YEAR_MAX);
+  setYear(YEAR_MAX, false);
+}
+$('year').addEventListener('input', (event) => setYear(Number(event.target.value)));
+$('year-play').addEventListener('click', toggleYearPlay);
+$('year-reset').addEventListener('click', () => setYear(YEAR_MAX, false));
+
 // ---------- status filter: operating vs still to build ----------
+function applyWorkFilters() {
+  for (const id of ['dam-labels', 'dam-walls']) if (map.getLayer(id)) map.setFilter(id, damFilter());
+  if (map.getLayer('pump-labels')) map.setFilter('pump-labels', withDeclutter(linkStatusFilter()));
+  if (map.getLayer('wip-labels')) map.setFilter('wip-labels', linkFilter());
+  for (const id of ['links-casing', 'links-line', 'links-hit']) if (map.getLayer(id)) map.setFilter(id, linkFilter());
+  if (map.getLayer('links-pulse')) map.setFilter('links-pulse', ['all', ['==', ['get', 'status'], 'operational'], linkFilter()]);
+  if (map.getLayer('links-arrows')) map.setFilter('links-arrows', ['all', ['!=', ['get', 'status'], 'operational'], linkFilter()]);
+  applyCanalFilters();
+}
 function setStatusMode(mode) {
   statusMode = mode;
   for (const button of document.querySelectorAll('[data-status]')) button.setAttribute('aria-pressed', String(button.dataset.status === mode));
-  for (const id of ['dam-labels', 'dam-walls']) if (map.getLayer(id)) map.setFilter(id, damFilter());
-  if (map.getLayer('pump-labels')) map.setFilter('pump-labels', withDeclutter(linkStatusFilter()));
-  if (map.getLayer('wip-labels')) map.setFilter('wip-labels', linkStatusFilter());
-  for (const id of ['links-casing', 'links-line', 'links-hit']) if (map.getLayer(id)) map.setFilter(id, linkStatusFilter());
-  if (map.getLayer('links-pulse')) map.setFilter('links-pulse', ['all', ['==', ['get', 'status'], 'operational'], linkStatusFilter()]);
-  if (map.getLayer('links-arrows')) map.setFilter('links-arrows', ['all', ['!=', ['get', 'status'], 'operational'], linkStatusFilter()]);
+  applyWorkFilters();
   applyTankVisibility();
   applyGwMode();
-  applyCanalFilters();
   if (mode !== 'all') { damPopup.remove(); linkPopup.remove(); canalPopup.remove(); }
 }
 function renderStatusCounts(dams, links) {
@@ -1378,11 +1445,35 @@ let cropData = null;
 function setCropMode(mode) {
   cropMode = mode;
   for (const button of document.querySelectorAll('[data-crop]')) button.setAttribute('aria-pressed', String(button.dataset.crop === mode));
-  for (const m of ['before', 'after', 'change']) if (map.getLayer(`crop-${m}`)) map.setLayoutProperty(`crop-${m}`, 'visibility', m === mode ? 'visible' : 'none');
-  $('crop-mode-label').textContent = CROP_MODE_LABEL[mode];
+  if (mode === 'before') cropBlend = 0;
+  if (mode === 'after') cropBlend = 100;
+  syncCrop();
   document.body.classList.toggle('crop-off', mode === 'off');   // the Cropland card shows only with a layer
+}
+/** Pushes cropMode and cropBlend to the rasters, the Blend control, the label and the legend. */
+function syncCrop() {
+  const theme = MAP_THEMES[currentTheme()];
+  for (const m of ['before', 'after', 'change']) {
+    if (!map.getLayer(`crop-${m}`)) continue;
+    map.setLayoutProperty(`crop-${m}`, 'visibility', cropVisible(m) ? 'visible' : 'none');
+    map.setPaintProperty(`crop-${m}`, 'raster-opacity', cropOpacityFor(m, theme));
+  }
+  const blending = cropMode === 'before' || cropMode === 'after';
+  $('crop-blend-row').hidden = !blending;
+  $('crop-blend').value = String(cropBlend);
+  $('crop-blend-out').textContent = `${100 - cropBlend} / ${cropBlend}`;
+  $('crop-mode-label').textContent = blending && cropBlend > 0 && cropBlend < 100
+    ? `blend ${100 - cropBlend} % 2008–2011 · ${cropBlend} % 2016–2019` : CROP_MODE_LABEL[cropMode];
   renderCropLegend();
 }
+$('crop-blend').addEventListener('input', (event) => {
+  cropBlend = Number(event.target.value);
+  if (cropMode === 'before' || cropMode === 'after') {
+    cropMode = cropBlend >= 50 ? 'after' : 'before';
+    for (const button of document.querySelectorAll('[data-crop]')) button.setAttribute('aria-pressed', String(button.dataset.crop === cropMode));
+  }
+  syncCrop();
+});
 for (const button of document.querySelectorAll('[data-crop]')) button.addEventListener('click', () => setCropMode(button.dataset.crop));
 $('crop-close').addEventListener('click', () => setCropMode('off'));
 document.body.classList.add('crop-off');
@@ -1401,6 +1492,13 @@ function renderCropLegend() {
   } else {
     bar.style.background = `linear-gradient(90deg, ${cropData.legend.ramp.map(([v, c]) => `rgba(${c.join(',')},${0.25 + 0.65 * v / 100}) ${v}%`).join(', ')})`;
     for (const text of ['0 %', '25', '50', '75', '100 % of cell under crops']) ticks.appendChild(textEl('span', '', text));
+    legend.append(bar, ticks);
+    const mix = document.createElement('div'); mix.className = 'blend-bar';
+    const knob = document.createElement('i'); knob.style.left = `${cropBlend}%`; mix.appendChild(knob);
+    const blendTicks = document.createElement('div'); blendTicks.className = 'ticks';
+    for (const text of ['2008–11', `blend ${100 - cropBlend} / ${cropBlend}`, '2016–19']) blendTicks.appendChild(textEl('span', '', text));
+    legend.append(mix, blendTicks);
+    return;
   }
   legend.append(bar, ticks);
 }
@@ -2022,7 +2120,7 @@ function buildWorkInProgressLabels(links) {
     if (p.status === 'operational' || seen.has(linkKey(p))) continue;
     seen.add(linkKey(p));
     const coords = feature.geometry.coordinates, mid = coords[Math.floor(coords.length / 2)];
-    labelData.wip.features.push(pointFeature(mid[0], mid[1], { name: `${p.link} · ${STATUS_LABEL[p.status] || p.status}`, status: p.status, title: `${p.link}: ${p.from} → ${p.to} · ${p.note}` }));
+    labelData.wip.features.push(pointFeature(mid[0], mid[1], { name: `${p.link} · ${STATUS_LABEL[p.status] || p.status}`, status: p.status, year: p.year, title: `${p.link}: ${p.from} → ${p.to} · ${p.note}` }));
   }
 }
 
@@ -2423,6 +2521,9 @@ map.on('load', async () => {
       loadJson('data/flow_summary.json'), loadJson('data/flow.geojson'), loadJson('data/dams.json'),
       loadJson('data/links.geojson'), loadJson('data/pumphouses.json'), loadJson('data/cropland.json'),
       loadJson('data/pending.json').catch(() => [])]);
+    for (const feature of links.features) feature.properties.year = linkYear(feature.properties);
+    linksData = links;
+    map.getSource('links').setData(links);
     cropBounds = cropland.bounds;
     for (const [id, source] of Object.entries(cropSources())) map.addSource(id, source);
     addLayers(cropLayers(MAP_THEMES[currentTheme()]), 'mask');
@@ -2432,6 +2533,7 @@ map.on('load', async () => {
     const canalSummary = await loadJson('data/canals_summary.json').catch(() => null);
     if (canals || (tilesetFor('canals') && canalSummary)) {
       canalsLoaded = true;
+      if (canals) { for (const feature of canals.features) feature.properties.year = canalYear(feature.properties); canalsData = canals; }
       map.addSource('canals', canals ? { type: 'geojson', data: canals } : staticSource('canals', 'canals.geojson'));
       addLayers(canalLayers(MAP_THEMES[currentTheme()]), 'links-highlight');
       debug.notes.canals = canals ? canals.features.length : canalSummary.osm_ways;
@@ -2451,6 +2553,7 @@ map.on('load', async () => {
     if (flowParticlesUrl) $('flow-motion').textContent = 'particles ride the rivers, faster with flow.';
     buildDamLabels(dams);
     renderEraCounts(dams);
+    setupYears(dams, links, canals);
     buildPumpLabels(pumphouses);
     renderLinkList(links);
     buildWorkInProgressLabels(links);
