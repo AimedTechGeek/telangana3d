@@ -168,6 +168,24 @@ uv run python serve.py      # http://127.0.0.1:8765/ opens in your browser
 - Mouse: left-drag pans (switch "Left-drag" to *Rotates* for a full 360° orbit
   with tilt), right-drag or Ctrl-drag always rotates and tilts, scroll zooms
 
+### Fonts
+
+Panels use Inter (Google Fonts); map labels use Mapbox's DIN Pro. To set the
+labels in Inter too, create a secret token with the `fonts:write` scope at
+account.mapbox.com, put it in `MAPBOX_SECRET_TOKEN` and run
+`python upload_font.py`. It downloads Inter Regular, Medium and Bold from the
+official rsms/inter release, uploads them to your Mapbox account through the
+Fonts API and writes `web/data/fonts.json`; with that file present the map asks
+for `Inter Medium` (label font constant `LABEL_FONT` in `web/app.js`), without
+it DIN Pro stays. Without the file the browser logs one harmless 404 for it.
+
+### Camera
+
+During a river flight the field of view narrows to 28 degrees (the `fov` camera
+option, experimental in Mapbox GL JS 3.28 and later) and returns to the
+previous value when the flight stops. The opening flight starts at zoom 5.2,
+looking straight down from above the state, and settles at the home view.
+
 Everything in `web/` is served as static files. The browser fetches Mapbox GL
 JS, the Standard basemap, the Terrain-DEM tiles and the label fonts from Mapbox
 (one map load per visit, free up to 50,000 a month) and the panel fonts from

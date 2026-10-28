@@ -8,7 +8,9 @@ let roadLabelsShown = false;       // the basemap's road shields and names, only
 let lightMode = 'theme';           // theme | dawn | day | dusk | night: the basemap's light preset
 const lightPresetFor = (theme) => (lightMode === 'theme' ? MAP_THEMES[theme].lightPreset : lightMode);
 const labelData = {};              // label source id -> GeoJSON, built from the data at boot; the style picks them up (generateId gives feature ids)
-const FONT = ['DIN Pro Medium', 'Arial Unicode MS Regular'];   // Mapbox-hosted fonts for every label
+const INTER_FONT = ['Inter Medium', 'Arial Unicode MS Regular'];   // exists only after upload_font.py has put Inter into the Mapbox account
+let LABEL_FONT = ['DIN Pro Medium', 'Arial Unicode MS Regular'];  // Mapbox-hosted default for every label; Inter when data/fonts.json says it is uploaded
+const fontsInfo = fetch('data/fonts.json').then((r) => (r.ok ? r.json() : null)).catch(() => null);
 let scrubPoint = { type: 'FeatureCollection', features: [] };   // the river profile position on the map
 const TILE_PX = 256;               // Web Mercator tile width the metres-per-pixel formula is written for
 const HOME = { center: [79.35, 17.75], zoom: 7.3, pitch: 66, bearing: -18 };
@@ -472,7 +474,7 @@ function buildStyle(theme) {
           'line-color': t.contour, 'line-opacity': 0.55,
           'line-width': ['case', ['==', ['%', ['get', 'elev'], 500], 0], 1.4, 0.6] } },
       { id: 'contour-labels', type: 'symbol', source: 'contours', minzoom: 8.6, filter: ['==', ['%', ['get', 'elev'], 200], 0],
-        layout: { visibility: chipOn('contours'), 'symbol-placement': 'line', 'symbol-spacing': 260, 'text-field': ['concat', ['get', 'elev'], ' m'], 'text-font': FONT,
+        layout: { visibility: chipOn('contours'), 'symbol-placement': 'line', 'symbol-spacing': 260, 'text-field': ['concat', ['get', 'elev'], ' m'], 'text-font': LABEL_FONT,
                   'text-size': 10.5, 'text-rotation-alignment': 'map', 'text-pitch-alignment': 'map', 'text-max-angle': 45, 'text-allow-overlap': false, 'text-padding': 6 },
         paint: { 'text-color': t.contour, 'text-halo-color': t.labelHalo, 'text-halo-width': 1.2, 'text-opacity': 0.9 } },
       ...tankLayers(t),                      // tanks and the Mission Kakatiya shading sit under the district lines
@@ -551,14 +553,15 @@ if (!window.MAPBOX_TOKEN) {
   throw new Error('MAPBOX_TOKEN missing');
 }
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
-const INTRO = { zoom: HOME.zoom - 0.9, pitch: 0, bearing: 0 };          // where the opening flight starts, on flat terrain
+const INTRO = { zoom: 5.2, pitch: 0, bearing: 0 };                      // where the opening flight starts: high above the state, on flat terrain
+const MIN_ZOOM = 5.6;                                                    // the intro lowers it to 4 so it can start higher, then it is restored
 const playIntro = !location.hash && !reducedMotion && !DEBUG;
 if (playIntro) terrainRise = 0.05;
 const map = new mapboxgl.Map({
   container: 'map', accessToken: window.MAPBOX_TOKEN,
   style: buildStyle(currentTheme()),
   center: HOME.center, ...(playIntro ? INTRO : { zoom: HOME.zoom, pitch: HOME.pitch, bearing: HOME.bearing }),
-  minZoom: 5.6, maxZoom: 13.5, maxPitch: 80,
+  minZoom: playIntro ? 4 : MIN_ZOOM, maxZoom: 13.5, maxPitch: 80,
   maxBounds: [[72.5, 11.5], [86.5, 23.5]],   // generous: Mapbox keeps the whole tilted view inside the bounds by zooming in, so a tight box would push the state view past zoom 7
   attributionControl: false, logoPosition: 'bottom-left', hash: true, antialias: true,   // the URL carries the view, so views can be shared
 });
@@ -1073,7 +1076,7 @@ const districtText = (t) => (tankMode === 'kakatiya'
 function labelLayer(id, source, t, { icon, text, sort, minzoom, filter, size = [11, 13], layout = {} }) {
   const appearance = (name, iconSize) => ({ name, condition: ['boolean', ['feature-state', name], false], properties: { 'text-color': t.labelActive, 'icon-size': iconSize } });
   return { id, type: 'symbol', source, ...(minzoom ? { minzoom } : {}), ...(filter ? { filter } : {}),
-    layout: { 'icon-image': icon, 'icon-size': 1, 'icon-allow-overlap': true, 'text-field': text, 'text-font': FONT,
+    layout: { 'icon-image': icon, 'icon-size': 1, 'icon-allow-overlap': true, 'text-field': text, 'text-font': LABEL_FONT,
               'text-size': ['interpolate', ['linear'], ['zoom'], 6, size[0], 10, size[1]], 'text-variable-anchor': ['left', 'right'], 'text-radial-offset': 0.95,
               'text-justify': 'auto', 'text-max-width': 14, 'text-optional': true, 'symbol-sort-key': sort || 0, ...layout },
     paint: { 'text-color': t.label, 'text-halo-color': t.labelHalo, 'text-halo-width': 1.3, 'text-halo-blur': 0.4 },
@@ -1090,7 +1093,7 @@ function labelLayers(theme) {
   }
   if (labelData['district-points']) {
     layers.push({ id: 'district-labels', type: 'symbol', source: 'district-points', minzoom: tankMode === 'kakatiya' ? 0 : LABEL_ZOOM, filter: districtFilter(),
-      layout: { 'text-field': districtText(t), 'text-font': FONT, 'text-size': 11, 'text-letter-spacing': 0.12, 'text-max-width': 10, 'symbol-sort-key': 10, visibility: chipOn('labels') },
+      layout: { 'text-field': districtText(t), 'text-font': LABEL_FONT, 'text-size': 11, 'text-letter-spacing': 0.12, 'text-max-width': 10, 'symbol-sort-key': 10, visibility: chipOn('labels') },
       paint: { 'text-color': t.labelMuted, 'text-halo-color': t.labelHalo, 'text-halo-width': 1.2 } });
   }
   if (labelData.dams) {
@@ -2203,7 +2206,8 @@ function spanText(text) { const el = document.createElement('span'); el.textCont
 
 // ---------- flight along a river: a free camera follows the river bed downstream, the chart and readout follow the camera ----------
 const FLIGHT = { kmPerSecond: 9, aboveGroundM: 2600, behindKm: 5, aheadKm: 7, pitch: 62 };
-let flight = null;                          // { points, total, d, last }
+let flight = null;                          // { points, total, d, last, fov }
+const FLIGHT_FOV = 28;                      // degrees: a longer lens flattens the perspective while flying low (camera `fov` option, experimental since v3.28)
 function pointAtKm(points, d) {
   let lo = 0, hi = points.length - 1;
   while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (points[mid].d <= d) lo = mid; else hi = mid; }
@@ -2213,7 +2217,8 @@ function pointAtKm(points, d) {
 function startFlight() {
   stopOrbit();
   const points = profileState.profiles[profileState.river].points;
-  flight = { points, total: points[points.length - 1].d, d: Math.max(0, points[profileState.index].d), last: 0 };
+  flight = { points, total: points[points.length - 1].d, d: Math.max(0, points[profileState.index].d), last: 0, fov: map.transform.fov };
+  map.easeTo({ fov: FLIGHT_FOV, duration: 600, essential: true });
   $('fly').textContent = 'Stop';
   $('fly').setAttribute('aria-pressed', 'true');
   document.body.classList.add('flying');
@@ -2221,6 +2226,7 @@ function startFlight() {
 }
 function stopFlight() {
   if (!flight) return;
+  map.easeTo({ fov: flight.fov, duration: 600, essential: true });
   flight = null;
   $('fly').textContent = 'Fly the river';
   $('fly').setAttribute('aria-pressed', 'false');
@@ -2266,6 +2272,12 @@ async function loadJson(url) { const response = await fetch(url); if (!response.
 
 map.on('load', async () => {
   debug.phase = 'style-loaded'; writeDebug();
+  const fonts = await fontsInfo;           // before any label layer is added (addLabelSources runs after the data)
+  if (fonts && fonts.inter) {
+    LABEL_FONT = INTER_FONT;
+    map.setLayoutProperty('contour-labels', 'text-font', LABEL_FONT);   // the one label layer buildStyle already added
+  }
+  debug.notes.labelFont = LABEL_FONT[0];
   try {
     const [cities, profiles, districtPoints, flowSummary, flowReaches, dams, links, pumphouses, cropland, pendingNotes] = await Promise.all([
       loadJson('data/cities.json'), loadJson('data/rivers.json'), loadJson('data/district_points.geojson'),
@@ -2363,7 +2375,11 @@ map.on('load', async () => {
   const settle = () => {
     if (!map.loaded()) { map.once('render', settle); return; }
     $('toast').classList.add('gone');
-    if (playIntro) { map.easeTo({ ...HOME, duration: 3600, easing: (x) => 1 - (1 - x) ** 3, essential: true }); riseTerrain(3600); }   // the terrain rises into view
+    if (playIntro) {
+      // Globe projection for the intro was tried and dropped: it logged WebGL texSubImage2D warnings, so the flight stays mercator.
+      map.once('moveend', () => map.setMinZoom(MIN_ZOOM));
+      map.easeTo({ ...HOME, duration: 5000, easing: (x) => 1 - (1 - x) ** 3, essential: true }); riseTerrain(5000);   // the terrain rises into view
+    }
     if (flowAnimating) requestAnimationFrame(animateFlow);
     debug.phase = 'ready';
     if (DEBUG) {
