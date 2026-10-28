@@ -72,6 +72,10 @@
           </div>
         </div>
         <p class="summary" id="river-summary">Loading…</p>
+        <div class="chips">
+          <button class="chip" type="button" id="fly" aria-pressed="false">Fly the river</button>
+          <span class="hint">A camera flight downstream from the chart position: the readout shows the river bed's height and flow as you go. Drag, scroll or Esc to stop.</span>
+        </div>
         <div class="chart-wrap">
           <svg id="profile" viewBox="0 0 328 150" role="img" aria-labelledby="profile-title"><title id="profile-title">River bed elevation along the river through Telangana</title></svg>
           <div class="tip" id="profile-tip" hidden></div>
@@ -244,6 +248,17 @@
         </div>
         <p class="hint">Mapbox Standard (roads, towns, water, buildings in 3D when zoomed in; lit for day or night with the theme) or Mapbox Standard Satellite imagery. Switching to Satellite turns the relief colours off so the imagery shows.</p>
       </div>
+      <div class="fgroup">
+        <p class="eyebrow">Light</p>
+        <div class="tabs" role="group" aria-label="Light">
+          <button type="button" data-light="theme" aria-pressed="true">Theme</button>
+          <button type="button" data-light="dawn" aria-pressed="false">Dawn</button>
+          <button type="button" data-light="day" aria-pressed="false">Day</button>
+          <button type="button" data-light="dusk" aria-pressed="false">Dusk</button>
+          <button type="button" data-light="night" aria-pressed="false">Night</button>
+        </div>
+        <p class="hint">Sun and sky for a time of day (Mapbox Standard light presets): the terrain, basemap and buildings are lit, the atlas's own colours stay as they are. “Theme” follows the light/dark theme.</p>
+      </div>
       <label class="slider">
       <span>Vertical exaggeration</span>
       <input type="range" id="exag" min="1" max="6" step="0.5" value="3">
@@ -254,6 +269,7 @@
       <button class="chip" type="button" data-toggle="hillshade" aria-pressed="true">Hillshade</button>
       <button class="chip" type="button" data-toggle="contours" aria-pressed="false">Contours 100 m</button>
     </div>
+    <p class="hint">Contours carry their height every 200 m once zoomed in. Relief colours are strongest at state level and give way to the basemap's detail up close.</p>
     </div>
   </details>
 
@@ -353,6 +369,8 @@
       </div>
     </div>
     <div class="chips">
+      <button class="chip" type="button" id="view-2d">Top-down</button>
+      <button class="chip" type="button" id="view-3d">3D</button>
       <button class="chip" type="button" data-toggle="orbit" aria-pressed="false">Orbit</button>
       <button class="chip" type="button" id="reset">Reset view</button>
     </div>

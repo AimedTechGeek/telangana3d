@@ -5,7 +5,10 @@ const DEM_TILESET = 'mapbox://mapbox.mapbox-terrain-dem-v1';   // 3D surface, hi
 const BASEMAPS = { standard: 'mapbox://styles/mapbox/standard', satellite: 'mapbox://styles/mapbox/standard-satellite' };
 let basemap = 'standard';          // standard | satellite
 let roadLabelsShown = false;       // the basemap's road shields and names, only once zoomed in (see updateLabelDensity)
+let lightMode = 'theme';           // theme | dawn | day | dusk | night: the basemap's light preset
+const lightPresetFor = (theme) => (lightMode === 'theme' ? MAP_THEMES[theme].lightPreset : lightMode);
 const labelData = {};              // label source id -> GeoJSON, built from the data at boot; the style picks them up (generateId gives feature ids)
+const FONT = ['DIN Pro Medium', 'Arial Unicode MS Regular'];   // Mapbox-hosted fonts for every label
 let scrubPoint = { type: 'FeatureCollection', features: [] };   // the river profile position on the map
 const TILE_PX = 256;               // Web Mercator tile width the metres-per-pixel formula is written for
 const HOME = { center: [79.35, 17.75], zoom: 7.05, pitch: 56, bearing: -18 };
@@ -40,6 +43,7 @@ const MAP_THEMES = {
     shadow: '#2b2016', highlight: '#fff4e2', accent: '#4e3d2e',
     label: '#1f1d1a', labelMuted: '#6b6560', labelHalo: 'rgba(255,255,255,0.92)', labelActive: '#c2410c', iconBg: '#ffffff', damIcon: '#b4532a', barrageIcon: '#0f7f78', peakIcon: '#1a3aa6',
     lightPreset: 'day', reliefOpacity: 0.62, heat: ['#9fd0f0', '#3b95dc', '#1b5a93'],
+    fog: { range: [0.6, 9], color: '#e3e9ee', 'high-color': '#b7d0ea', 'space-color': '#e9f0f6', 'horizon-blend': 0.08, 'star-intensity': 0 },
   },
   dark: {
     background: '#0e0f12', mask: '#0e0f12', maskOpacity: 0.58,
@@ -54,6 +58,7 @@ const MAP_THEMES = {
     shadow: '#000000', highlight: '#b9a68c', accent: '#000000',
     label: '#f1efe9', labelMuted: '#b5b0a8', labelHalo: 'rgba(14,15,18,0.9)', labelActive: '#fb923c', iconBg: '#1b1e26', damIcon: '#f2996b', barrageIcon: '#4fd1c5', peakIcon: '#a9bdff',
     lightPreset: 'night', reliefOpacity: 0.55, heat: ['#1f3b55', '#3f8fd0', '#bfe3ff'],
+    fog: { range: [0.6, 9], color: '#0f1520', 'high-color': '#1a2a45', 'space-color': '#04060c', 'horizon-blend': 0.06, 'star-intensity': 0.4 },
   },
 };
 
@@ -398,7 +403,7 @@ function slotFor(layer) {
 }
 function basemapConfig(theme) {
   const labels = { showPlaceLabels: false, showPointOfInterestLabels: false, showTransitLabels: false, showRoadLabels: roadLabelsShown };
-  return basemap === 'satellite' ? labels : { ...labels, lightPreset: MAP_THEMES[theme].lightPreset, theme: 'faded', show3dObjects: true };
+  return basemap === 'satellite' ? labels : { ...labels, lightPreset: lightPresetFor(theme), theme: 'faded', show3dObjects: true };
 }
 function buildStyle(theme) {
   const t = MAP_THEMES[theme];
@@ -427,15 +432,20 @@ function buildStyle(theme) {
     layers: [
       { id: 'relief', type: 'raster', source: 'relief-dem', layout: { visibility: chipOn('relief') }, paint: {
           'raster-color': reliefExpression(theme), 'raster-color-mix': DEM_COLOR_MIX, 'raster-color-range': [0, RELIEF_RANGE_M],
-          'raster-opacity': t.reliefOpacity, 'raster-resampling': 'linear', 'raster-fade-duration': 0 } },
+          'raster-opacity': ['interpolate', ['linear'], ['zoom'], 6, Math.min(0.95, t.reliefOpacity + 0.25), 9, t.reliefOpacity, 12.5, t.reliefOpacity * 0.45],
+          'raster-resampling': 'linear', 'raster-fade-duration': 0 } },
       { id: 'hillshade', type: 'hillshade', source: 'mapbox-dem', layout: { visibility: chipOn('hillshade') }, paint: {
-          'hillshade-illumination-direction': 315, 'hillshade-exaggeration': 0.75,
+          'hillshade-illumination-direction': 315, 'hillshade-exaggeration': ['interpolate', ['linear'], ['zoom'], 6, 0.9, 10, 0.6],
           'hillshade-shadow-color': t.shadow, 'hillshade-highlight-color': t.highlight, 'hillshade-accent-color': t.accent } },
       ...cropLayers(t),                      // under the mask so land outside the state stays dimmed
       { id: 'mask', type: 'fill', source: 'mask', paint: { 'fill-color': t.mask, 'fill-opacity': t.maskOpacity } },
       { id: 'contours', type: 'line', source: 'contours', layout: { visibility: chipOn('contours'), 'line-join': 'round' }, paint: {
           'line-color': t.contour, 'line-opacity': 0.55,
           'line-width': ['case', ['==', ['%', ['get', 'elev'], 500], 0], 1.4, 0.6] } },
+      { id: 'contour-labels', type: 'symbol', source: 'contours', minzoom: 8.6, filter: ['==', ['%', ['get', 'elev'], 200], 0],
+        layout: { visibility: chipOn('contours'), 'symbol-placement': 'line', 'symbol-spacing': 260, 'text-field': ['concat', ['get', 'elev'], ' m'], 'text-font': FONT,
+                  'text-size': 10.5, 'text-rotation-alignment': 'map', 'text-pitch-alignment': 'map', 'text-max-angle': 45, 'text-allow-overlap': false, 'text-padding': 6 },
+        paint: { 'text-color': t.contour, 'text-halo-color': t.labelHalo, 'text-halo-width': 1.2, 'text-opacity': 0.9 } },
       ...tankLayers(t),                      // tanks and the Mission Kakatiya shading sit under the district lines
       ...gwLayers(t),                        // groundwater wells and district shading, same slot
       ...proposalLayers(t),                  // proposed reservoirs, routes and commands
@@ -484,14 +494,24 @@ function buildStyle(theme) {
       ...labelLayers(theme),
     ],
     terrain: { source: 'mapbox-dem', exaggeration: Number($('exag').value) },
+    fog: t.fog,
   };
-  for (const layer of style.layers) layer.slot = slotFor(layer);
+  for (const layer of style.layers) decorate(layer);
   return style;
+}
+// Slot in the Standard stack, and full emissive strength for data layers so the day/night lighting shades the
+// terrain and basemap but never the atlas's own colours (the relief tint and hillshade stay lit, as scenery).
+const EMISSIVE = { line: 'line-emissive-strength', fill: 'fill-emissive-strength', circle: 'circle-emissive-strength', raster: 'raster-emissive-strength' };
+function decorate(layer) {
+  layer.slot = slotFor(layer);
+  const property = EMISSIVE[layer.type];
+  if (property && layer.id !== 'relief') { layer.paint = layer.paint || {}; if (!(property in layer.paint)) layer.paint[property] = 1; }
+  return layer;
 }
 /** addLayer with a `before` only when both layers share a slot (Mapbox refuses to order across slots). */
 function addLayers(layers, beforeId) {
   for (const layer of layers) {
-    layer.slot = slotFor(layer);
+    decorate(layer);
     const before = beforeId && map.getLayer(beforeId) && slotFor(map.getLayer(beforeId)) === layer.slot ? beforeId : undefined;
     map.addLayer(layer, before);
   }
@@ -501,10 +521,13 @@ if (!window.MAPBOX_TOKEN) {
   $('toast').textContent = 'Mapbox token missing: set the MAPBOX_TOKEN environment variable and restart serve.py (see the README).';
   throw new Error('MAPBOX_TOKEN missing');
 }
+const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const INTRO = { zoom: HOME.zoom - 0.9, pitch: 0, bearing: 0 };          // where the opening flight starts
+const playIntro = !location.hash && !reducedMotion && !DEBUG;
 const map = new mapboxgl.Map({
   container: 'map', accessToken: window.MAPBOX_TOKEN,
   style: buildStyle(currentTheme()),
-  center: HOME.center, zoom: HOME.zoom, pitch: HOME.pitch, bearing: HOME.bearing,
+  center: HOME.center, ...(playIntro ? INTRO : { zoom: HOME.zoom, pitch: HOME.pitch, bearing: HOME.bearing }),
   minZoom: 5.6, maxZoom: 13.5, maxPitch: 75,
   maxBounds: [[76.4, 14.5], [82.6, 20.6]],
   attributionControl: false, logoPosition: 'bottom-left', hash: true, antialias: true,   // the URL carries the view, so views can be shared
@@ -601,8 +624,15 @@ function applyMapTheme() {
     for (const [key, value] of Object.entries(layer.paint || {})) map.setPaintProperty(layer.id, key, value);
     for (const [key, value] of Object.entries(layer.layout || {})) map.setLayoutProperty(layer.id, key, value);
   }
-  if (basemap === 'standard') map.setConfigProperty('basemap', 'lightPreset', MAP_THEMES[currentTheme()].lightPreset);
+  if (basemap === 'standard') map.setConfigProperty('basemap', 'lightPreset', lightPresetFor(currentTheme()));
+  map.setFog(MAP_THEMES[currentTheme()].fog);
 }
+function setLightMode(mode) {
+  lightMode = mode;
+  for (const button of document.querySelectorAll('[data-light]')) button.setAttribute('aria-pressed', String(button.dataset.light === mode));
+  if (basemap === 'standard') map.setConfigProperty('basemap', 'lightPreset', lightPresetFor(currentTheme()));
+}
+for (const button of document.querySelectorAll('[data-light]')) button.addEventListener('click', () => setLightMode(button.dataset.light));
 function setBasemap(mode) {
   basemap = mode;
   for (const button of document.querySelectorAll('[data-base]')) button.setAttribute('aria-pressed', String(button.dataset.base === mode));
@@ -663,14 +693,14 @@ function showComparison(elevation) {
 }
 let cursorFrame = 0;
 map.on('mousemove', (event) => {
-  if (cursorFrame) return;
+  if (cursorFrame || flight) return;
   cursorFrame = requestAnimationFrame(() => { cursorFrame = 0; showCursor(event.lngLat); });
 });
 function clearCursor() {
   cursorElev.textContent = '—'; cursorPos.textContent = 'Move the pointer over the terrain';
   $('cursor-compare').hidden = true;
 }
-map.on('mouseout', clearCursor);
+map.on('mouseout', () => { if (!flight) clearCursor(); });
 
 // ---------- legend ----------
 (function buildLegend() {
@@ -702,7 +732,7 @@ function orbitStep() {
 const toggles = {
   relief: (on) => map.setLayoutProperty('relief', 'visibility', on ? 'visible' : 'none'),
   hillshade: (on) => map.setLayoutProperty('hillshade', 'visibility', on ? 'visible' : 'none'),
-  contours: (on) => map.setLayoutProperty('contours', 'visibility', on ? 'visible' : 'none'),
+  contours: (on) => setVisible(['contours', 'contour-labels'], on),
   districts: (on) => { map.setLayoutProperty('districts', 'visibility', on ? 'visible' : 'none'); document.body.classList.toggle('districts-off', !on); },
   labels: (on) => setVisible(LABEL_LAYERS.labels, on),
   dams: (on) => setVisible(['dam-labels'], on),
@@ -796,7 +826,7 @@ function resizeBubbleCanvas() {
 function clearBubbles() { bubbleCtx.clearRect(0, 0, bubbleCanvas.width, bubbleCanvas.height); }
 function drawBubbles(dt) {
   clearBubbles();
-  if (!bubbleReaches.length) return;
+  if (!bubbleReaches.length || flight) return;        // the flight keeps the view clear
   const bounds = map.getBounds(), west = bounds.getWest(), south = bounds.getSouth(), east = bounds.getEast(), north = bounds.getNorth();
   const metresPerPixel = EARTH_M_PER_DEG * 360 * Math.cos(map.getCenter().lat * Math.PI / 180) / (TILE_PX * 2 ** map.getZoom());
   const width = map.getCanvas().clientWidth, height = map.getCanvas().clientHeight;
@@ -945,6 +975,8 @@ window.addEventListener('mousemove', (event) => {
 });
 window.addEventListener('mouseup', () => { rotateDrag = null; $('map').classList.remove('rotating'); });
 $('reset').addEventListener('click', () => map.flyTo({ ...HOME, duration: 1800, essential: true }));
+$('view-2d').addEventListener('click', () => { stopFlight(); map.easeTo({ pitch: 0, bearing: 0, duration: 1200, essential: true }); });
+$('view-3d').addEventListener('click', () => { stopFlight(); map.easeTo({ pitch: HOME.pitch, bearing: HOME.bearing, duration: 1200, essential: true }); });
 $('theme').addEventListener('click', () => setTheme(currentTheme() === 'dark' ? 'light' : 'dark'));
 $('collapse').addEventListener('click', () => { $('panel').classList.add('hidden'); $('expand').hidden = false; });
 $('expand').addEventListener('click', () => { $('panel').classList.remove('hidden'); $('expand').hidden = true; });
@@ -965,7 +997,6 @@ updateLabelDensity();
 const cityIndex = new Map();                // city name -> feature id, for the active state
 const districtFeatures = new Map();         // district -> its label feature (carries the Mission Kakatiya count)
 const labelActions = { 'prop-labels': [] }; // per-feature click handlers for the proposal labels
-const FONT = ['DIN Pro Medium', 'Arial Unicode MS Regular'];
 const LABEL_LAYERS = {
   labels: ['city-labels', 'town-labels', 'district-labels', 'peak-labels', 'prop-labels-far', 'prop-labels-near'],   // the Place labels chip
   links: ['pump-labels', 'wip-labels'],                                                                                // the Water links chip
@@ -2111,10 +2142,61 @@ function highlightProfile(index, showTip) {
   if (map.getSource('scrub')) map.getSource('scrub').setData(scrubPoint);
 }
 function spanText(text) { const el = document.createElement('span'); el.textContent = text; return el; }
+
+// ---------- flight along a river: a free camera follows the river bed downstream, the chart and readout follow the camera ----------
+const FLIGHT = { kmPerSecond: 9, aboveGroundM: 2600, behindKm: 5, aheadKm: 7, pitch: 62 };
+let flight = null;                          // { points, total, d, last }
+function pointAtKm(points, d) {
+  let lo = 0, hi = points.length - 1;
+  while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (points[mid].d <= d) lo = mid; else hi = mid; }
+  const a = points[lo], b = points[hi], f = (d - a.d) / ((b.d - a.d) || 1);
+  return { lon: a.lon + (b.lon - a.lon) * f, lat: a.lat + (b.lat - a.lat) * f, elev: a.elev + (b.elev - a.elev) * f, q: a.q + (b.q - a.q) * f };
+}
+function startFlight() {
+  stopOrbit();
+  const points = profileState.profiles[profileState.river].points;
+  flight = { points, total: points[points.length - 1].d, d: Math.max(0, points[profileState.index].d), last: 0 };
+  $('fly').textContent = 'Stop';
+  $('fly').setAttribute('aria-pressed', 'true');
+  document.body.classList.add('flying');
+  requestAnimationFrame(flightStep);
+}
+function stopFlight() {
+  if (!flight) return;
+  flight = null;
+  $('fly').textContent = 'Fly the river';
+  $('fly').setAttribute('aria-pressed', 'false');
+  document.body.classList.remove('flying');
+  clearCursor();
+}
+function flightStep(now) {
+  if (!flight) return;
+  if (flight.last) flight.d += FLIGHT.kmPerSecond * Math.min((now - flight.last) / 1000, 0.1);
+  flight.last = now;
+  if (flight.d >= flight.total) { stopFlight(); return; }
+  const here = pointAtKm(flight.points, flight.d);
+  const behind = pointAtKm(flight.points, Math.max(0, flight.d - FLIGHT.behindKm));
+  const ahead = pointAtKm(flight.points, Math.min(flight.total, flight.d + FLIGHT.aheadKm));
+  const ground = map.queryTerrainElevation([behind.lon, behind.lat], { exaggerated: true });
+  const camera = map.getFreeCameraOptions();
+  camera.position = mapboxgl.MercatorCoordinate.fromLngLat([behind.lon, behind.lat], (ground === null ? here.elev * Number($('exag').value) : ground) + FLIGHT.aboveGroundM);
+  const dx = (ahead.lon - behind.lon) * Math.cos((behind.lat * Math.PI) / 180), dy = ahead.lat - behind.lat;
+  camera.setPitchBearing(FLIGHT.pitch, (Math.atan2(dx, dy) * 180) / Math.PI);   // a fixed tilt, heading downstream
+  map.setFreeCameraOptions(camera);
+  highlightProfile(nearestIndex(flight.points, flight.d), false);
+  cursorElev.textContent = Math.round(here.elev).toLocaleString('en-IN');
+  cursorPos.textContent = `${profileState.river} · river bed · ${Math.round(here.q).toLocaleString('en-IN')} m³/s · ${Math.round(flight.d)} km`;
+  showComparison(here.elev);
+  requestAnimationFrame(flightStep);
+}
+$('fly').addEventListener('click', () => (flight ? stopFlight() : startFlight()));
+for (const event of ['mousedown', 'wheel', 'touchstart']) map.getCanvasContainer().addEventListener(event, stopFlight, { passive: true });
+window.addEventListener('keydown', (event) => { if (event.key === 'Escape') stopFlight(); });
 $('scrub').addEventListener('input', (event) => highlightProfile(Number(event.target.value), true));
 for (const tab of document.querySelectorAll('[role="tab"]')) {
   tab.addEventListener('click', () => {
     for (const other of document.querySelectorAll('[role="tab"]')) other.setAttribute('aria-selected', String(other === tab));
+    stopFlight();
     profileState.river = tab.dataset.river;
     profileState.index = 0;
     renderProfile();
@@ -2223,6 +2305,7 @@ map.on('load', async () => {
   const settle = () => {
     if (!map.loaded()) { map.once('render', settle); return; }
     $('toast').classList.add('gone');
+    if (playIntro) map.easeTo({ ...HOME, duration: 3600, easing: (x) => 1 - (1 - x) ** 3, essential: true });   // the terrain rises into view
     if (flowAnimating) requestAnimationFrame(animateFlow);
     debug.phase = 'ready';
     if (DEBUG) {
