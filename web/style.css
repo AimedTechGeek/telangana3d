@@ -556,7 +556,7 @@ details.table td { padding: 2px 0; border-bottom: 1px solid var(--hair); }
   .panel { left: 0; right: auto; }
   .right-stack { right: 0; left: auto; }
   .panel.sheet-open, .right-stack.sheet-open {
-    left: 0; right: 0; width: auto; height: 60dvh; max-height: none; overflow-y: auto; overscroll-behavior: contain; z-index: 9;
+    left: 0; right: 0; bottom: 48px; width: auto; height: 60dvh; max-height: none; overflow-y: auto; overscroll-behavior: contain; z-index: 9;
   }
   .panel > .card, .right-stack .crop-card { margin: 0 8px; flex: none; }
   .right-stack .crop-card { min-height: 0; margin-bottom: 8px; }
@@ -568,7 +568,7 @@ details.table td { padding: 2px 0; border-bottom: 1px solid var(--hair); }
   .readout { flex-direction: row; align-items: baseline; gap: 10px; min-width: 0; }
   .hero #cursor-elev { font-size: 22px; min-width: 0; }
   .readout .coords { flex: 1; min-width: 0; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .readout .compare { display: none; }
+  .panel-head h1 { display: none; }   /* the sheet handle already says "Relief Atlas" */
   /* map controls stay above the collapsed handles */
   .mapboxgl-ctrl-bottom-right, .mapboxgl-ctrl-bottom-left { margin-bottom: 56px; }
   /* touch targets of at least 40 px */
@@ -588,4 +588,4 @@ details.table td { padding: 2px 0; border-bottom: 1px solid var(--hair); }
   .mk-city .lbl .e, .mk-district, body.tank-mk .mk-district .cnt, .dam-popup .kind, .dam-popup .fine, .dam-popup a,
   .mapboxgl-ctrl-scale, .mapboxgl-ctrl-attrib.mapboxgl-compact { font-size: 12px !important; }
 }
-@media (prefers-reduced-motion: reduce) { .panel, .toast { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .panel, .right-stack, .sheet-handle .chev, .toast { transition: none; } }

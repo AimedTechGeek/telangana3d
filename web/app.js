@@ -29,6 +29,7 @@ function riseTerrain(ms = 1800) {
     terrainRise = Math.min(1, (now - start) / ms);
     terrainRise = 1 - (1 - terrainRise) ** 3;
     map.setTerrain({ source: 'mapbox-dem', exaggeration: terrainExaggeration() });
+    setWallHeights();
     if (terrainRise < 1) requestAnimationFrame(step); else terrainRise = 1;
   };
   terrainRise = 0.05;
@@ -63,7 +64,7 @@ const MAP_THEMES = {
     prop: '#0f766e', propPool: '#4f46e5', propPump: '#b45309', propTrunk: '#7c3aed', propPulse: '#ffffff', propCmdExisting: 'rgba(34,197,94,0.22)', propCmdNew: 'rgba(20,184,166,0.32)',
     flow: ['#86d9e3', '#36aee6', '#2566d8', '#1a3aa6', '#5f2aa8'],   // FLOW_CLASSES: cyan -> blue -> navy -> purple
     shadow: '#2b2016', highlight: '#fff4e2', accent: '#4e3d2e',
-    label: '#1f1d1a', labelMuted: '#6b6560', labelHalo: 'rgba(255,255,255,0.92)', labelActive: '#c2410c', iconBg: '#ffffff', damIcon: '#b4532a', barrageIcon: '#0f7f78', peakIcon: '#1a3aa6',
+    label: '#1f1d1a', labelMuted: '#6b6560', labelHalo: 'rgba(255,255,255,0.92)', labelActive: '#c2410c', iconBg: '#ffffff', damIcon: '#b4532a', damIconUnknown: '#dfb39d', barrageIcon: '#0f7f78', peakIcon: '#1a3aa6',
     // Standard basemap kept behind the atlas: water pale and desaturated under the tank/river blues, greenspace muted so it does not fight the relief tint
     basemapColours: { colorWater: '#b9cfdf', colorGreenspace: '#d5ddc9', colorLand: '#e9e6df', colorRoads: '#f7f4ee', colorMotorways: '#e6cfae', colorTrunks: '#ede2cf', colorPlaceLabels: '#6b6560', colorRoadLabels: '#6b6560' },
     lightPreset: 'day', reliefOpacity: 0.62, heat: ['#9fd0f0', '#3b95dc', '#1b5a93'],
@@ -80,7 +81,7 @@ const MAP_THEMES = {
     prop: '#2dd4bf', propPool: '#818cf8', propPump: '#fbbf24', propTrunk: '#c4b5fd', propPulse: '#ffffff', propCmdExisting: 'rgba(74,222,128,0.20)', propCmdNew: 'rgba(45,212,191,0.30)',
     flow: ['#2f96a8', '#3cbbea', '#6a9cff', '#a9bdff', '#dcaaff'],   // FLOW_CLASSES: teal -> sky -> blue -> lilac on the dark surface
     shadow: '#000000', highlight: '#b9a68c', accent: '#000000',
-    label: '#f1efe9', labelMuted: '#b5b0a8', labelHalo: 'rgba(14,15,18,0.9)', labelActive: '#fb923c', iconBg: '#1b1e26', damIcon: '#f2996b', barrageIcon: '#4fd1c5', peakIcon: '#a9bdff',
+    label: '#f1efe9', labelMuted: '#b5b0a8', labelHalo: 'rgba(14,15,18,0.9)', labelActive: '#fb923c', iconBg: '#1b1e26', damIcon: '#f2996b', damIconUnknown: '#9c6650', barrageIcon: '#4fd1c5', peakIcon: '#a9bdff',
     basemapColours: { colorWater: '#1b2836', colorGreenspace: '#1a2320', colorLand: '#14161a', colorRoads: '#2b2e35', colorMotorways: '#4b4438', colorTrunks: '#3b3933', colorPlaceLabels: '#b5b0a8', colorRoadLabels: '#b5b0a8' },
     lightPreset: 'night', reliefOpacity: 0.55, heat: ['#1f3b55', '#3f8fd0', '#bfe3ff'],
     fog: { range: [0.6, 9], color: '#0f1520', 'high-color': '#1a2a45', 'space-color': '#04060c', 'horizon-blend': 0.06, 'star-intensity': 0.4 },
@@ -416,19 +417,26 @@ function proposalLayers(t) {
 }
 // Dams as 3D walls: the OSM dam line drawn as a fill-extrusion of fixed width (fill-extrusion-line-width) as high as the dam.
 let damLinesLoaded = false;
+const damsWithAssumedWall = new Set();   // dam indexes whose wall is a 15 m stand-in (height_known false)
 // Mapbox does not scale extrusions with the terrain exaggeration (tested: the same wall at 1x and 6x), so a true-height wall would sink
 // into the exaggerated hills. The height is therefore multiplied by the same zoom-dependent factor as the terrain (EXAGGERATION_BY_ZOOM x slider).
 // The width is 60 m at close range and grows towards the state view so the wall stays a visible line.
 const WALL_WIDTH_M = ['interpolate', ['linear'], ['zoom'], 8, 240, 10, 120, 12.5, 60];
-const wallHeight = (property) => ['interpolate', ['linear'], ['zoom'], ...EXAGGERATION_BY_ZOOM.flatMap(([z, f]) => [z, ['*', ['get', property], Math.max(0.01, Number($('exag').value) * f)]])];
-const wallPaint = (colour, property) => ({
+const wallHeight = (property) => ['interpolate', ['linear'], ['zoom'], ...EXAGGERATION_BY_ZOOM.flatMap(([z, f]) => [z, ['*', ['get', property], Math.max(0.01, Number($('exag').value) * f * terrainRise)]])];
+/** Walls follow the terrain: same slider, zoom and rise factors as terrainExaggeration(), so they never stand full height on flat ground. */
+function setWallHeights() {
+  for (const id of ['dam-walls', 'prop-dam-walls']) if (map.getLayer(id)) map.setPaintProperty(id, 'fill-extrusion-height', wallHeight(id === 'dam-walls' ? 'height' : 'crest_m'));
+}
+const wallPaint = (colour, property, extra = {}) => ({
   'fill-extrusion-color': colour, 'fill-extrusion-height': wallHeight(property), 'fill-extrusion-base': 0, 'fill-extrusion-line-width': WALL_WIDTH_M,
-  'fill-extrusion-opacity': 1, 'fill-extrusion-emissive-strength': 0.6, 'fill-extrusion-vertical-gradient': true,
+  'fill-extrusion-opacity': 1, 'fill-extrusion-vertical-gradient': true,
+  // Deliberately below 1 (the value decorate() would apply): the walls keep some day/night shading so they read as solid structures.
+  'fill-extrusion-emissive-strength': 0.6, ...extra,
 });
 function damWallLayers(t) {
   if (!damLinesLoaded) return [];
   return [{ id: 'dam-walls', type: 'fill-extrusion', source: 'dam-lines', filter: damFilter(), layout: { visibility: chipOn('dams') },
-            paint: wallPaint(t.damIcon, 'height') }];
+            paint: wallPaint(t.damIcon, 'height', { 'fill-extrusion-color': ['case', ['==', ['get', 'height_known'], false], t.damIconUnknown, t.damIcon] }) }];
 }
 function setProposalMode(mode) {
   proposalMode = mode;
@@ -593,7 +601,8 @@ function buildStyle(theme) {
 }
 // Slot in the Standard stack, and full emissive strength for data layers so the day/night lighting shades the
 // terrain and basemap but never the atlas's own colours (the relief tint and hillshade stay lit, as scenery).
-const EMISSIVE = { line: 'line-emissive-strength', fill: 'fill-emissive-strength', circle: 'circle-emissive-strength', raster: 'raster-emissive-strength' };
+const EMISSIVE = { line: 'line-emissive-strength', fill: 'fill-emissive-strength', circle: 'circle-emissive-strength', raster: 'raster-emissive-strength', 'fill-extrusion': 'fill-extrusion-emissive-strength' };
+// raster-particle has no emissive-strength property in the Mapbox style spec (not checked against a live style), so it is left out on purpose.
 function decorate(layer) {
   layer.slot = slotFor(layer);
   const tileset = layer.source && tilesetFor(layer.source);
@@ -830,7 +839,7 @@ $('exag').addEventListener('input', (event) => {
   const value = Number(event.target.value);
   $('exag-out').value = `${value}×`;
   map.setTerrain({ source: 'mapbox-dem', exaggeration: terrainExaggeration() });
-  for (const id of ['dam-walls', 'prop-dam-walls']) if (map.getLayer(id)) map.setPaintProperty(id, 'fill-extrusion-height', wallHeight(id === 'dam-walls' ? 'height' : 'crest_m'));
+  setWallHeights();
   map.triggerRepaint();
 });
 
@@ -2067,7 +2076,7 @@ function openDamPopup(dam) {
   const rows = [
     ['Status', pending ? `${STATUS_LABEL[dam.status]}${dam.target ? `, target ${dam.target}` : ''}` : null],
     ['Scheme', dam.scheme],
-    ['Height', dam.height ? `${dam.height} m` : null],
+    ['Height', dam.height ? `${dam.height} m` : (damsWithAssumedWall.has(damsData.indexOf(dam)) ? 'height unknown, drawn 15 m' : null)],
     ['Terrain', dam.elev_m ? `${dam.elev_m} m above sea level` : null],
     [pending ? 'Years' : 'Built', pending ? pendingYears(dam) : damYears(dam)],
     ['Average inflow', dam.inflow_q ? `${dam.inflow_q.toLocaleString('en-IN')} m³/s${dam.inflow_name ? ` · ${dam.inflow_name}` : ''}` : null],
@@ -2422,6 +2431,7 @@ map.on('load', async () => {
     const damLines = await loadJson('data/dam_lines.geojson').catch(() => null);   // absent until build_web_data.py has written it
     if (damLines) {
       damLinesLoaded = true;
+      for (const f of damLines.features) if (f.properties.height_known === false) damsWithAssumedWall.add(f.properties.i);
       map.addSource('dam-lines', { type: 'geojson', data: damLines });
       addLayers(damWallLayers(MAP_THEMES[currentTheme()]));
     }
@@ -2461,7 +2471,7 @@ map.on('load', async () => {
     if (!map.loaded()) { map.once('render', settle); return; }
     $('toast').classList.add('gone');
     if (playIntro) {
-      // Globe projection for the intro was tried and dropped: it logged WebGL texSubImage2D warnings, so the flight stays mercator.
+      // The intro stays on mercator; a globe projection was tried earlier and dropped.
       map.once('moveend', () => map.setMinZoom(MIN_ZOOM));
       map.easeTo({ ...HOME, duration: 5000, easing: (x) => 1 - (1 - x) ** 3, essential: true }); riseTerrain(5000);   // the terrain rises into view
     }
