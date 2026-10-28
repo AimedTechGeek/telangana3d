@@ -182,6 +182,8 @@ function cropSources() {
 // Canals (OpenStreetMap): thin dashed cyan lines, dashes sliding in the flow direction.
 let canalMode = 'after';                   // off | after | all
 let canalsLoaded = false;
+// Optional Mapbox tilesets, listed in data/tilesets.json by publish_flow_raster.py. Without the key the canvas bubbles stay.
+let flowParticlesUrl = null;
 const CANAL_DASH = [3, 2.2];               // in line widths, longer than the river dashes
 // Status filter (all | built | pending) shared by dams, pump houses, links and canals.
 let statusMode = 'all';
@@ -424,7 +426,27 @@ function chipOn(name) {
 /** Which Mapbox Standard slot an atlas layer renders in: polygons and rasters under the basemap's roads, lines above them, labels on top. */
 function slotFor(layer) {
   if (layer.type === 'symbol') return 'top';
-  return ['line', 'circle'].includes(layer.type) ? 'middle' : 'bottom';
+  return ['line', 'circle', 'raster-particle'].includes(layer.type) ? 'middle' : 'bottom';
+}
+
+// River particles (Mapbox raster-particle on the velocity raster from build_flow_raster.py).
+// Raster speed units are 1 + 2 log10(m³/s), so 10 covers the biggest rivers; colours follow the flow classes.
+const PARTICLE_MAX_SPEED = 10;
+const PARTICLE_COLOUR_SPEEDS = [1, 3, 5, 7, 7.6];   // speeds at the FLOW_CLASSES bounds 1 (floor), 10, 100, 1,000 and 2,000 m³/s
+function flowParticleSources() {
+  return flowParticlesUrl ? { 'flow-particles': { type: 'raster-array', url: flowParticlesUrl, tileSize: 512 } } : {};
+}
+function flowParticleLayers(t) {
+  if (!flowParticlesUrl) return [];
+  return [{
+    id: 'flow-particles', type: 'raster-particle', source: 'flow-particles', 'source-layer': 'flow',
+    layout: { visibility: chipOn('flow') },
+    paint: {
+      'raster-particle-speed-factor': 0.4, 'raster-particle-fade-opacity-factor': 0.9, 'raster-particle-reset-rate-factor': 0.4,
+      'raster-particle-count': 4000, 'raster-particle-max-speed': PARTICLE_MAX_SPEED,
+      'raster-particle-color': ['interpolate', ['linear'], ['raster-particle-speed'],
+        ...PARTICLE_COLOUR_SPEEDS.flatMap((speed, i) => [speed, t.flow[i]])],
+    } }];
 }
 function basemapConfig(theme) {
   const labels = { showPlaceLabels: false, showPointOfInterestLabels: false, showTransitLabels: false, showRoadLabels: roadLabelsShown };
@@ -444,6 +466,7 @@ function buildStyle(theme) {
       state: { type: 'geojson', data: 'data/state.geojson' },
       districts: { type: 'geojson', data: 'data/districts.geojson' },
       flow: { type: 'geojson', data: 'data/flow.geojson' },
+      ...flowParticleSources(),
       contours: { type: 'geojson', data: 'data/contours.geojson' },
       links: { type: 'geojson', data: 'data/links.geojson', lineMetrics: true },
       ...cropSources(),
@@ -486,6 +509,7 @@ function buildStyle(theme) {
           'line-color': t.flowGlow, 'line-width': flowWidthExpr(2.2), 'line-opacity': 0.55, 'line-blur': 3 } },
       { id: 'flow-lines', type: 'line', source: 'flow', layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: {
           'line-color': flowColorExpr(theme), 'line-width': flowWidthExpr(1), 'line-opacity': 0.95 } },
+      ...flowParticleLayers(t),
       ...Array.from({ length: FLOW_DASH_STEPS }, (_, k) => ({
         id: `flow-dash-${k}`, type: 'line', source: 'flow', filter: ['>=', ['get', 'q'], FLOW_DASH_MIN_CMS],
         layout: { 'line-join': 'round', 'line-cap': 'butt', visibility: chipOn('flow') },
@@ -777,6 +801,7 @@ const toggles = {
   flow: (on) => {
     flowAnimating = on;
     for (let k = 0; k < FLOW_DASH_STEPS; k++) map.setLayoutProperty(`flow-dash-${k}`, 'visibility', on ? 'visible' : 'none');
+    if (map.getLayer('flow-particles')) map.setLayoutProperty('flow-particles', 'visibility', on ? 'visible' : 'none');
     if (on) { flowLast = 0; requestAnimationFrame(animateFlow); }
   },
 };
@@ -2267,7 +2292,16 @@ map.on('load', async () => {
       document.querySelector('[data-canal]').closest('.fgroup').hidden = true;
     }
     debug.notes.cropDistricts = cropland.districts.length;
-    prepareBubbles(flowReaches);
+    const tilesets = await loadJson('data/tilesets.json').catch(() => ({}));   // absent until publish_flow_raster.py has run
+    if (tilesets.flow_particles) {
+      flowParticlesUrl = tilesets.flow_particles;
+      map.addSource('flow-particles', flowParticleSources()['flow-particles']);
+      addLayers(flowParticleLayers(MAP_THEMES[currentTheme()]), 'flow-hit');
+      debug.notes.flowParticles = flowParticlesUrl;
+    } else {
+      prepareBubbles(flowReaches);
+    }
+    if (flowParticlesUrl) $('flow-motion').textContent = 'particles ride the rivers, faster with flow.';
     buildDamLabels(dams);
     renderEraCounts(dams);
     buildPumpLabels(pumphouses);

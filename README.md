@@ -192,6 +192,9 @@ uv run python fetch_data.py       # downloads into data/raw (~250 MB); the small
 uv run python prepare_data.py     # mosaic, reproject, clip -> data/
 uv run python make_overlay.py     # map colours and lines -> data/overlay.png (forge3d)
 uv run python build_web_data.py   # profiles, contours, layers -> web/data (and Terrarium tiles -> web/tiles, no longer used by the map)
+uv run python build_flow_raster.py   # optional: river velocity GeoTIFF -> data/flow_velocity.tif
+uv run python publish_flow_raster.py # optional: publish it as a Mapbox raster-array tileset (needs MAPBOX_SECRET_TOKEN and `pip install mapbox-tilesets`);
+                                     # the map then draws river particles instead of the canvas bubbles (see DATA_SOURCES.md 5b)
 uv run python propose_water.py    # the Proposal view: reservoir sites, routes, pump houses -> web/data/proposal.*
 uv run python web_smoke_test.py   # headless Edge check of the web map -> out/web_home.png
 ```
