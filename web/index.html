@@ -10,8 +10,10 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap">
 <link rel="stylesheet" href="https://api.mapbox.com/mapbox-gl-js/v3.33.0/mapbox-gl.css">
+<link rel="stylesheet" href="https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-draw/v1.5.1/mapbox-gl-draw.css">
 <link rel="stylesheet" href="style.css">
 <script src="https://api.mapbox.com/mapbox-gl-js/v3.33.0/mapbox-gl.js"></script>
+<script src="https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-draw/v1.5.1/mapbox-gl-draw.js"></script>
 </head>
 <body>
 <div id="map" role="application" aria-label="3D terrain map of Telangana"></div>
@@ -49,6 +51,25 @@
       <div class="ticks" id="ramp-ticks"></div>
     </section>
   </div>
+
+  <details class="card" open id="sketch-card">
+    <summary class="card-head"><span class="card-title">Sketch</span><span class="legend-inline" id="sketch-count"></span><svg class="chev" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></summary>
+    <div class="card-body">
+      <section class="sketch">
+        <div id="sketch-tools"></div>
+        <p class="summary" id="sketch-summary">Click the map to place the canal's vertices, double-click to finish. Drag a vertex to edit; the bin deletes the selected line.</p>
+        <div class="chart-wrap">
+          <svg id="sketch-profile" viewBox="0 0 328 150" role="img" aria-labelledby="sketch-profile-title" hidden><title id="sketch-profile-title">Ground elevation along the sketched canal</title></svg>
+        </div>
+        <table class="official" id="sketch-facts" hidden><tbody></tbody></table>
+        <p class="summary" id="sketch-verdict" hidden></p>
+        <ul class="hint prop-norms" id="sketch-stretches"></ul>
+        <p class="summary" id="sketch-crossings" hidden></p>
+        <p class="hint">Ground is read from the map's Terrain-DEM every 500 m, so a narrow ridge between samples can be missed. The verdict uses the proposal model's norms (canal fall, stage loss, tunnel and cut cover from <code>proposal.json</code>); it is a screening check, not a survey.</p>
+        <div class="chips"><button class="chip" type="button" id="sketch-clear">Clear</button></div>
+      </section>
+    </div>
+  </details>
 
   <details class="card" open>
     <summary class="card-head"><span class="card-title">Rivers</span><span class="legend-inline"><i class="key river"></i>Godavari &amp; Krishna</span><svg class="chev" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></summary>
@@ -390,6 +411,7 @@
       <button class="chip" type="button" id="view-2d">Top-down</button>
       <button class="chip" type="button" id="view-3d">3D</button>
       <button class="chip" type="button" data-toggle="orbit" aria-pressed="false">Orbit</button>
+      <button class="chip" type="button" data-toggle="sketch" aria-pressed="false" title="Draw a canal line and read its length, elevation profile and gravity verdict">Sketch</button>
       <button class="chip" type="button" id="reset">Reset view</button>
     </div>
     <p class="hint">Right-drag or Ctrl-drag always rotates and tilts · scroll zooms · two fingers rotate on touch</p>
