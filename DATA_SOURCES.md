@@ -64,6 +64,26 @@ public and were downloaded by `fetch_data.py` into `data/raw/` (not committed);
   labels off, theme *faded*, light preset *day* or *night* with the theme;
   road labels only when zoomed in; Satellite as a switch). Labels are set in
   Mapbox's DIN Pro fonts.
+- **Basemap configuration (Standard only):** `basemapConfig()` passes
+  `showLandmarkIcons`, `show3dFacades`, `show3dTrees` (all true) and the
+  `colorWater`, `colorGreenspace`, `colorLand`, `colorRoads`,
+  `colorMotorways`, `colorTrunks`, `colorPlaceLabels`, `colorRoadLabels`
+  config properties from `MAP_THEMES[theme].basemapColours`;
+  `applyMapTheme()` re-sets them with `setConfigProperty` on a theme change.
+  They are never sent to Standard Satellite. Light: water `#b9cfdf` (pale,
+  desaturated, so the atlas tank blue `#3b95dc` and river blues stand in
+  front), greenspace `#d5ddc9` (muted so it does not fight the hypsometric
+  relief tint), land `#e9e6df` (the atlas background), roads `#f7f4ee`,
+  motorways `#e6cfae`, trunks `#ede2cf`, labels `#6b6560`. Dark: water
+  `#1b2836`, greenspace `#1a2320`, land `#14161a`, roads `#2b2e35`,
+  motorways `#4b4438`, trunks `#3b3933`, labels `#b5b0a8`. The colours are
+  design choices checked by eye in screenshots, not derived from data. Place
+  and road label colours only show where those labels are on. Landmark icons
+  were not clearly visible in the zoom-12 Hyderabad view; unverified.
+- **Label states:** hovered and active labels use Mapbox style appearances
+  (`appearances` on each symbol layer, conditions on `feature-state`), updated
+  on a theme change with `map.setLayerProperty(id, 'appearances', ...)`
+  (supported in v3.30.0).
 - **Caveat:** Terrain-DEM and Copernicus differ by a few metres (Hyderabad
   reads 504 m against the 508 m Copernicus median listed in the Cities card);
   every figure in the panels, the profiles and the proposal model still comes

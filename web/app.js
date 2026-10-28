@@ -62,6 +62,8 @@ const MAP_THEMES = {
     flow: ['#86d9e3', '#36aee6', '#2566d8', '#1a3aa6', '#5f2aa8'],   // FLOW_CLASSES: cyan -> blue -> navy -> purple
     shadow: '#2b2016', highlight: '#fff4e2', accent: '#4e3d2e',
     label: '#1f1d1a', labelMuted: '#6b6560', labelHalo: 'rgba(255,255,255,0.92)', labelActive: '#c2410c', iconBg: '#ffffff', damIcon: '#b4532a', barrageIcon: '#0f7f78', peakIcon: '#1a3aa6',
+    // Standard basemap kept behind the atlas: water pale and desaturated under the tank/river blues, greenspace muted so it does not fight the relief tint
+    basemapColours: { colorWater: '#b9cfdf', colorGreenspace: '#d5ddc9', colorLand: '#e9e6df', colorRoads: '#f7f4ee', colorMotorways: '#e6cfae', colorTrunks: '#ede2cf', colorPlaceLabels: '#6b6560', colorRoadLabels: '#6b6560' },
     lightPreset: 'day', reliefOpacity: 0.62, heat: ['#9fd0f0', '#3b95dc', '#1b5a93'],
     fog: { range: [0.6, 9], color: '#e3e9ee', 'high-color': '#b7d0ea', 'space-color': '#e9f0f6', 'horizon-blend': 0.08, 'star-intensity': 0 },
   },
@@ -77,6 +79,7 @@ const MAP_THEMES = {
     flow: ['#2f96a8', '#3cbbea', '#6a9cff', '#a9bdff', '#dcaaff'],   // FLOW_CLASSES: teal -> sky -> blue -> lilac on the dark surface
     shadow: '#000000', highlight: '#b9a68c', accent: '#000000',
     label: '#f1efe9', labelMuted: '#b5b0a8', labelHalo: 'rgba(14,15,18,0.9)', labelActive: '#fb923c', iconBg: '#1b1e26', damIcon: '#f2996b', barrageIcon: '#4fd1c5', peakIcon: '#a9bdff',
+    basemapColours: { colorWater: '#1b2836', colorGreenspace: '#1a2320', colorLand: '#14161a', colorRoads: '#2b2e35', colorMotorways: '#4b4438', colorTrunks: '#3b3933', colorPlaceLabels: '#b5b0a8', colorRoadLabels: '#b5b0a8' },
     lightPreset: 'night', reliefOpacity: 0.55, heat: ['#1f3b55', '#3f8fd0', '#bfe3ff'],
     fog: { range: [0.6, 9], color: '#0f1520', 'high-color': '#1a2a45', 'space-color': '#04060c', 'horizon-blend': 0.06, 'star-intensity': 0.4 },
   },
@@ -428,7 +431,8 @@ function slotFor(layer) {
 }
 function basemapConfig(theme) {
   const labels = { showPlaceLabels: false, showPointOfInterestLabels: false, showTransitLabels: false, showRoadLabels: roadLabelsShown };
-  return basemap === 'satellite' ? labels : { ...labels, lightPreset: lightPresetFor(theme), theme: 'faded', show3dObjects: true };
+  return basemap === 'satellite' ? labels : { ...labels, lightPreset: lightPresetFor(theme), theme: 'faded', show3dObjects: true,
+    showLandmarkIcons: true, show3dFacades: true, show3dTrees: true, ...MAP_THEMES[theme].basemapColours };
 }
 function buildStyle(theme) {
   const t = MAP_THEMES[theme];
@@ -649,8 +653,12 @@ function applyMapTheme() {
     if (!map.getLayer(layer.id)) continue;
     for (const [key, value] of Object.entries(layer.paint || {})) map.setPaintProperty(layer.id, key, value);
     for (const [key, value] of Object.entries(layer.layout || {})) map.setLayoutProperty(layer.id, key, value);
+    if (layer.appearances) map.setLayerProperty(layer.id, 'appearances', layer.appearances);
   }
-  if (basemap === 'standard') map.setConfigProperty('basemap', 'lightPreset', lightPresetFor(currentTheme()));
+  if (basemap === 'standard') {
+    map.setConfigProperty('basemap', 'lightPreset', lightPresetFor(currentTheme()));
+    for (const [key, value] of Object.entries(MAP_THEMES[currentTheme()].basemapColours)) map.setConfigProperty('basemap', key, value);
+  }
   map.setFog(MAP_THEMES[currentTheme()].fog);
 }
 function setLightMode(mode) {
@@ -1063,12 +1071,13 @@ const districtText = (t) => (tankMode === 'kakatiya'
 
 /** A point symbol layer: icon on the point, text beside it on whichever side is free, text dropped before the icon when space is short. */
 function labelLayer(id, source, t, { icon, text, sort, minzoom, filter, size = [11, 13], layout = {} }) {
-  const stateColour = ['case', ['any', ['boolean', ['feature-state', 'hover'], false], ['boolean', ['feature-state', 'active'], false]], t.labelActive, t.label];
+  const appearance = (name, iconSize) => ({ name, condition: ['boolean', ['feature-state', name], false], properties: { 'text-color': t.labelActive, 'icon-size': iconSize } });
   return { id, type: 'symbol', source, ...(minzoom ? { minzoom } : {}), ...(filter ? { filter } : {}),
     layout: { 'icon-image': icon, 'icon-size': 1, 'icon-allow-overlap': true, 'text-field': text, 'text-font': FONT,
               'text-size': ['interpolate', ['linear'], ['zoom'], 6, size[0], 10, size[1]], 'text-variable-anchor': ['left', 'right'], 'text-radial-offset': 0.95,
               'text-justify': 'auto', 'text-max-width': 14, 'text-optional': true, 'symbol-sort-key': sort || 0, ...layout },
-    paint: { 'text-color': stateColour, 'text-halo-color': t.labelHalo, 'text-halo-width': 1.3, 'text-halo-blur': 0.4 } };
+    paint: { 'text-color': t.label, 'text-halo-color': t.labelHalo, 'text-halo-width': 1.3, 'text-halo-blur': 0.4 },
+    appearances: [appearance('hover', 1.15), appearance('active', 1.2)] };
 }
 function labelLayers(theme) {
   const t = MAP_THEMES[theme];
