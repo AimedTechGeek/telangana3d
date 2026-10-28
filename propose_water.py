@@ -650,7 +650,15 @@ def pool_for(grids: Grids, site: dict, crest_m: float, towns_rc: np.ndarray) -> 
     return {"crest_m": crest_m, "frl_m": round(float(crest), 1), "bed_m": round(float(base), 1), "storage_tmc": round(volume_tmc, 2),
             "area_km2": round(area_km2, 1), "cropland_km2": round(crop_km2, 1), "tree_km2": round(tree_km2, 1),
             "dam_km": round(dam_len_km, 1), "cost_cr": round(cost), "cost_per_tmc": round(cost / volume_tmc),
-            "pool_rows": pool_rows, "pool_cols": pool_cols}
+            "dam_xy": dam_line_xy(grids, dam_rows, dam_cols, px, py), "pool_rows": pool_rows, "pool_cols": pool_cols}
+
+
+def dam_line_xy(grids: Grids, rows: np.ndarray, cols: np.ndarray, px: float, py: float) -> list[tuple[float, float]]:
+    """Dam crest as a straight line between the two outermost dam cells (DEM CRS), ordered across the valley."""
+    xs, ys = grids.dem_ds.transform * (cols + 0.5, rows + 0.5)
+    across = np.asarray(xs) * px + np.asarray(ys) * py
+    lo, hi = int(np.argmin(across)), int(np.argmax(across))
+    return [(float(xs[lo]), float(ys[lo])), (float(xs[hi]), float(ys[hi]))]
 
 
 def pool_polygon(grids: Grids, pool_rows: np.ndarray, pool_cols: np.ndarray):
@@ -1028,6 +1036,9 @@ def main() -> None:
             st.pop("_hg", None)
     for r in works:
         if r["kind"] == "reservoir":
+            dlon, dlat = grids.to_wgs.transform(*zip(*r["dam_xy"]))
+            features.append({"type": "Feature", "geometry": LineString(zip(dlon, dlat)).__geo_interface__,
+                             "properties": {"kind": "dam", "id": r["id"], "name": r["name"], "crest_m": r["crest_m"], "dam_km": r["dam_km"]}})
             features.append({"type": "Feature", "geometry": pool_polygon(grids, r["pool_rows"], r["pool_cols"]).__geo_interface__,
                              "properties": {"kind": "pool", "id": r["id"], "name": r["name"], "storage_tmc": r["storage_tmc"], "frl_m": r["frl_m"]}})
         else:

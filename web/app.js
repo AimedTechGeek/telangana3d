@@ -392,6 +392,7 @@ function proposalLayers(t) {
     { id: 'prop-command-new', type: 'fill', source: 'proposal', filter: kind('command_new'), layout: { visibility: vis }, paint: { 'fill-color': t.propCmdNew } },
     { id: 'prop-pool', type: 'fill', source: 'proposal', filter: kind('pool'), layout: { visibility: vis }, paint: { 'fill-color': t.propPool, 'fill-opacity': 0.6 } },
     { id: 'prop-pool-line', type: 'line', source: 'proposal', filter: kind('pool'), layout: { visibility: vis }, paint: { 'line-color': t.propPool, 'line-width': 1.5 } },
+    { id: 'prop-dam-walls', type: 'fill-extrusion', source: 'proposal', filter: kind('dam'), layout: { visibility: vis }, paint: wallPaint(t.propPool, 'crest_m') },
     // Routes ride the terrain as ribbons: lifted off the ground by the water's height above it (aqueducts, rising mains), on it elsewhere.
     { id: 'prop-canal', type: 'line', source: 'proposal', filter: ['in', ['get', 'kind'], ['literal', ['canal', 'cut', 'aqueduct', 'pressure main']]],
       layout: { visibility: vis, 'line-cap': 'round', 'line-join': 'round', ...RIBBON },
@@ -411,6 +412,22 @@ function proposalLayers(t) {
                'line-trim-offset': pulseWindow(0), 'line-trim-color': t.propPulse, 'line-trim-fade-range': [0.45, 0.45] } },
   ];
 }
+// Dams as 3D walls: the OSM dam line drawn as a fill-extrusion of fixed width (fill-extrusion-line-width) as high as the dam.
+let damLinesLoaded = false;
+// Mapbox does not scale extrusions with the terrain exaggeration (tested: the same wall at 1x and 6x), so a true-height wall would sink
+// into the exaggerated hills. The height is therefore multiplied by the same zoom-dependent factor as the terrain (EXAGGERATION_BY_ZOOM x slider).
+// The width is 60 m at close range and grows towards the state view so the wall stays a visible line.
+const WALL_WIDTH_M = ['interpolate', ['linear'], ['zoom'], 8, 240, 10, 120, 12.5, 60];
+const wallHeight = (property) => ['interpolate', ['linear'], ['zoom'], ...EXAGGERATION_BY_ZOOM.flatMap(([z, f]) => [z, ['*', ['get', property], Math.max(0.01, Number($('exag').value) * f)]])];
+const wallPaint = (colour, property) => ({
+  'fill-extrusion-color': colour, 'fill-extrusion-height': wallHeight(property), 'fill-extrusion-base': 0, 'fill-extrusion-line-width': WALL_WIDTH_M,
+  'fill-extrusion-opacity': 1, 'fill-extrusion-emissive-strength': 0.6, 'fill-extrusion-vertical-gradient': true,
+});
+function damWallLayers(t) {
+  if (!damLinesLoaded) return [];
+  return [{ id: 'dam-walls', type: 'fill-extrusion', source: 'dam-lines', filter: damFilter(), layout: { visibility: chipOn('dams') },
+            paint: wallPaint(t.damIcon, 'height') }];
+}
 function setProposalMode(mode) {
   proposalMode = mode;
   for (const button of document.querySelectorAll('[data-proposal]')) button.setAttribute('aria-pressed', String(button.dataset.proposal === mode));
@@ -429,7 +446,7 @@ function chipOn(name) {
 /** Which Mapbox Standard slot an atlas layer renders in: polygons and rasters under the basemap's roads, lines above them, labels on top. */
 function slotFor(layer) {
   if (layer.type === 'symbol') return 'top';
-  return ['line', 'circle'].includes(layer.type) ? 'middle' : 'bottom';
+  return ['line', 'circle', 'fill-extrusion'].includes(layer.type) ? 'middle' : 'bottom';
 }
 function basemapConfig(theme) {
   const labels = { showPlaceLabels: false, showPointOfInterestLabels: false, showTransitLabels: false, showRoadLabels: roadLabelsShown };
@@ -457,6 +474,7 @@ function buildStyle(theme) {
       ...(tanksLoaded ? { tanks: { type: 'geojson', data: 'data/tanks.geojson' }, 'tank-points': { type: 'geojson', data: 'data/tank_points.geojson' } } : {}),
       ...(gwLoaded ? { groundwater: { type: 'geojson', data: 'data/groundwater.geojson' } } : {}),
       ...(proposalLoaded ? { proposal: { type: 'geojson', data: proposalGeo, lineMetrics: true } } : {}),
+      ...(damLinesLoaded ? { 'dam-lines': { type: 'geojson', data: 'data/dam_lines.geojson' } } : {}),
       ...Object.fromEntries(Object.entries(labelData).map(([id, data]) => [id, { type: 'geojson', data, generateId: true }])),
       scrub: { type: 'geojson', data: scrubPoint },
     },
@@ -521,6 +539,7 @@ function buildStyle(theme) {
       { id: 'links-hit', type: 'line', source: 'links', filter: linkStatusFilter(), layout: { visibility: chipOn('links') },
         paint: { 'line-color': '#000000', 'line-opacity': 0, 'line-width': 16 } },
       { id: 'scrub', type: 'circle', source: 'scrub', paint: { 'circle-radius': 6, 'circle-color': t.labelActive, 'circle-stroke-color': t.iconBg, 'circle-stroke-width': 2 } },
+      ...damWallLayers(t),
       ...labelLayers(theme),
     ],
     terrain: { source: 'mapbox-dem', exaggeration: terrainExaggeration() },
@@ -761,6 +780,7 @@ $('exag').addEventListener('input', (event) => {
   const value = Number(event.target.value);
   $('exag-out').value = `${value}×`;
   map.setTerrain({ source: 'mapbox-dem', exaggeration: terrainExaggeration() });
+  for (const id of ['dam-walls', 'prop-dam-walls']) if (map.getLayer(id)) map.setPaintProperty(id, 'fill-extrusion-height', wallHeight(id === 'dam-walls' ? 'height' : 'crest_m'));
   map.triggerRepaint();
 });
 
@@ -778,7 +798,7 @@ const toggles = {
   contours: (on) => setVisible(['contours', 'contour-labels'], on),
   districts: (on) => { map.setLayoutProperty('districts', 'visibility', on ? 'visible' : 'none'); document.body.classList.toggle('districts-off', !on); },
   labels: (on) => setVisible(LABEL_LAYERS.labels, on),
-  dams: (on) => setVisible(['dam-labels'], on),
+  dams: (on) => setVisible(['dam-labels', 'dam-walls'], on),
   links: (on) => {
     setVisible(['links-highlight', 'links-casing', 'links-line', 'links-pulse', 'links-arrows', 'links-hit', ...LABEL_LAYERS.links], on);
     if (!on) linkPopup.remove();
@@ -1163,7 +1183,7 @@ function damInEra(dam, era) {
 function setEra(era) {
   eraMode = era;
   for (const button of document.querySelectorAll('[data-era]')) button.setAttribute('aria-pressed', String(button.dataset.era === era));
-  if (map.getLayer('dam-labels')) map.setFilter('dam-labels', damFilter());
+  for (const id of ['dam-labels', 'dam-walls']) if (map.getLayer(id)) map.setFilter(id, damFilter());
 }
 function renderEraCounts(dams) {
   for (const button of document.querySelectorAll('[data-era]')) {
@@ -1178,7 +1198,7 @@ for (const button of document.querySelectorAll('[data-era]')) button.addEventLis
 function setStatusMode(mode) {
   statusMode = mode;
   for (const button of document.querySelectorAll('[data-status]')) button.setAttribute('aria-pressed', String(button.dataset.status === mode));
-  if (map.getLayer('dam-labels')) map.setFilter('dam-labels', damFilter());
+  for (const id of ['dam-labels', 'dam-walls']) if (map.getLayer(id)) map.setFilter(id, damFilter());
   for (const id of ['pump-labels', 'wip-labels']) if (map.getLayer(id)) map.setFilter(id, linkStatusFilter());
   for (const id of ['links-casing', 'links-line', 'links-hit']) if (map.getLayer(id)) map.setFilter(id, linkStatusFilter());
   if (map.getLayer('links-pulse')) map.setFilter('links-pulse', ['all', ['==', ['get', 'status'], 'operational'], linkStatusFilter()]);
@@ -1659,6 +1679,12 @@ function openProposalPopup(p, lngLat) {
 }
 for (const id of ['prop-pool', 'prop-canal', 'prop-tunnel', 'prop-delivery', 'prop-pump', 'prop-trunk-new', 'prop-trunk-existing']) {
   map.on('click', id, (event) => { event.originalEvent.stopPropagation(); openProposalPopup(event.features[0].properties, event.lngLat); });
+  map.on('mouseenter', id, () => { map.getCanvas().style.cursor = 'pointer'; });
+  map.on('mouseleave', id, () => { map.getCanvas().style.cursor = ''; });
+}
+map.on('click', 'prop-dam-walls', (event) => { event.originalEvent.stopPropagation(); openProposalPopup({ kind: 'pool', id: event.features[0].properties.id }, event.lngLat); });
+map.on('click', 'dam-walls', (event) => { event.originalEvent.stopPropagation(); const dam = damsData[event.features[0].properties.i]; if (dam) openDamPopup(dam); });
+for (const id of ['prop-dam-walls', 'dam-walls']) {
   map.on('mouseenter', id, () => { map.getCanvas().style.cursor = 'pointer'; });
   map.on('mouseleave', id, () => { map.getCanvas().style.cursor = ''; });
 }
@@ -2332,6 +2358,12 @@ map.on('load', async () => {
     } else {
       document.querySelector('[data-gw]').closest('.fgroup').hidden = true;
       $('gw-card').hidden = true;
+    }
+    const damLines = await loadJson('data/dam_lines.geojson').catch(() => null);   // absent until build_web_data.py has written it
+    if (damLines) {
+      damLinesLoaded = true;
+      map.addSource('dam-lines', { type: 'geojson', data: damLines });
+      addLayers(damWallLayers(MAP_THEMES[currentTheme()]));
     }
     const proposal = await loadJson('data/proposal.json').catch(() => null);   // absent until propose_water.py has run
     if (proposal) {

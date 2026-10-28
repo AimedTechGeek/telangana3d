@@ -65,6 +65,8 @@ OVERPASS_RESERVOIRS_QUERY = (
     'nwr["water"="reservoir"]["name"~"Mallanna Sagar|Konda Pochamma Sagar|Ranganayaka Sagar",i](area.a););'
     'out center tags;'
 )
+# Dam crest lines (ways with geometry) for the 3D walls; build_web_data.py joins them to the dams by name.
+OVERPASS_DAM_LINES_QUERY = '[out:json][timeout:90];way["waterway"="dam"](15.6,77.0,19.95,81.6);out geom tags;'
 OVERPASS_CANALS_QUERY = (
     '[out:json][timeout:300];'
     'area["name"="Telangana"]["admin_level"="4"]->.a;'
@@ -160,6 +162,7 @@ def fetch_osm_reservoirs() -> None:
     download(OVERPASS_URL, RAW / "osm_reservoirs.json", params={"data": OVERPASS_RESERVOIRS_QUERY}, headers=OVERPASS_HEADERS)
     download(OVERPASS_URL, RAW / "osm_pumphouses.json", params={"data": OVERPASS_PUMPHOUSES_QUERY}, headers=OVERPASS_HEADERS)
     download(OVERPASS_URL, RAW / "osm_construction.json", params={"data": OVERPASS_CONSTRUCTION_QUERY}, headers=OVERPASS_HEADERS)
+    download(OVERPASS_URL, RAW / "osm_dam_lines.json", params={"data": OVERPASS_DAM_LINES_QUERY}, headers=OVERPASS_HEADERS)
     # ~1,600 ways with geometry; the public Overpass servers are often busy, so retry on failure.
     download(OVERPASS_URL, RAW / "osm_canals.json", params={"data": OVERPASS_CANALS_QUERY}, headers=OVERPASS_HEADERS)
     download(OVERPASS_URL, RAW / "osm_waterpipes.json", params={"data": OVERPASS_WATERPIPES_QUERY}, headers=OVERPASS_HEADERS)
