@@ -69,6 +69,32 @@ public and were downloaded by `fetch_data.py` into `data/raw/` (not committed);
   every figure in the panels, the profiles and the proposal model still comes
   from Copernicus (section 1).
 
+## 1c. Mapbox Tiling Service (optional hosted vector tiles of the atlas layers)
+
+- **What:** Mapbox's hosted tiling pipeline. `publish_tilesets.py` uploads the
+  atlas's own GeoJSON (sections 2, 5, 6f, 6i, 6j and the contours of 1) as
+  tileset sources through the `mapbox-tilesets` CLI, builds tilesets
+  `<username>.tg-<layer>` from a recipe (zoom 5 to 12, simplification) and
+  records them in `web/data/tilesets.json`. No new data: the tiles carry the
+  same features and properties as the GeoJSON.
+- **Pages:** https://docs.mapbox.com/mapbox-tiling-service/guides/ ·
+  https://docs.mapbox.com/help/tutorials/get-started-mts-and-tilesets-cli/ ·
+  https://www.mapbox.com/pricing
+- **Terms:** Mapbox Terms of Service (https://www.mapbox.com/legal/tos). Needs
+  a secret token with tilesets:read, tilesets:write and tilesets:list; it is
+  read from `MAPBOX_SECRET_TOKEN`, never stored in the repo. Free tier as
+  listed on the pricing page: 10,000 MB of tileset processing and 750
+  tileset-days of hosting a month (a tileset-day is one tileset hosted for one
+  day, so nine tilesets cost about 270 per month); tile requests from the map
+  are covered by the map-load pricing in section 1b.
+- **Used for:** replacing the GeoJSON fetches at boot. Optional: without
+  `tilesets.json` the map reads the GeoJSON files.
+- **Unverified:** publishing was not run, so the recipe (`features.simplification`
+  expression), the tileset sizes and the processing cost against the free tier
+  are not checked; the figures above are quoted from the pricing page, not
+  measured. Tiles are simplified, so geometry at zoom 5 to 11 is slightly
+  coarser than the GeoJSON; layer ids and properties are unchanged.
+
 ## 2. geoBoundaries gbOpen, India ADM1 and ADM2 (state and districts)
 
 - **What:** open administrative boundaries; ADM1 = states, ADM2 = districts.

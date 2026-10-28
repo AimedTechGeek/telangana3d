@@ -421,6 +421,25 @@ function chipOn(name) {
   return chip.getAttribute('aria-pressed') === 'true' ? 'visible' : 'none';
 }
 
+// Hosted tiles: web/data/tilesets.json (written by publish_tilesets.py) maps a static layer to {url, sourceLayer}.
+// Absent -> every layer loads from its GeoJSON file as before. links and proposal always stay GeoJSON (lineMetrics).
+// Read synchronously because the style is built the moment the map is constructed.
+const TILESETS = (() => {
+  try {
+    const request = new XMLHttpRequest();
+    request.open('GET', 'data/tilesets.json', false);
+    request.send();
+    return request.status === 200 ? JSON.parse(request.responseText) : {};
+  } catch (error) { return {}; }
+})();
+const TILESET_KEY = { 'tank-points': 'tank_points' };            // source id -> tileset key where they differ
+const tilesetFor = (sourceId) => TILESETS[TILESET_KEY[sourceId] || sourceId];
+/** A static source: a hosted vector tileset when one is published, otherwise the GeoJSON file. */
+function staticSource(sourceId, file) {
+  const tileset = tilesetFor(sourceId);
+  return tileset ? { type: 'vector', url: tileset.url } : { type: 'geojson', data: `data/${file}` };
+}
+
 /** Which Mapbox Standard slot an atlas layer renders in: polygons and rasters under the basemap's roads, lines above them, labels on top. */
 function slotFor(layer) {
   if (layer.type === 'symbol') return 'top';
@@ -440,16 +459,16 @@ function buildStyle(theme) {
     sources: {
       'mapbox-dem': { type: 'raster-dem', url: DEM_TILESET, tileSize: 512, maxzoom: 14 },
       'relief-dem': { type: 'raster', url: DEM_TILESET, tileSize: 512, maxzoom: 14 },   // the same tiles read as colours for the relief tint
-      mask: { type: 'geojson', data: 'data/mask.geojson' },
-      state: { type: 'geojson', data: 'data/state.geojson' },
-      districts: { type: 'geojson', data: 'data/districts.geojson' },
-      flow: { type: 'geojson', data: 'data/flow.geojson' },
-      contours: { type: 'geojson', data: 'data/contours.geojson' },
+      mask: staticSource('mask', 'mask.geojson'),
+      state: staticSource('state', 'state.geojson'),
+      districts: staticSource('districts', 'districts.geojson'),
+      flow: staticSource('flow', 'flow.geojson'),
+      contours: staticSource('contours', 'contours.geojson'),
       links: { type: 'geojson', data: 'data/links.geojson', lineMetrics: true },
       ...cropSources(),
-      ...(canalsLoaded ? { canals: { type: 'geojson', data: 'data/canals.geojson' } } : {}),
-      ...(tanksLoaded ? { tanks: { type: 'geojson', data: 'data/tanks.geojson' }, 'tank-points': { type: 'geojson', data: 'data/tank_points.geojson' } } : {}),
-      ...(gwLoaded ? { groundwater: { type: 'geojson', data: 'data/groundwater.geojson' } } : {}),
+      ...(canalsLoaded ? { canals: staticSource('canals', 'canals.geojson') } : {}),
+      ...(tanksLoaded ? { tanks: staticSource('tanks', 'tanks.geojson'), 'tank-points': staticSource('tank-points', 'tank_points.geojson') } : {}),
+      ...(gwLoaded ? { groundwater: staticSource('groundwater', 'groundwater.geojson') } : {}),
       ...(proposalLoaded ? { proposal: { type: 'geojson', data: proposalGeo, lineMetrics: true } } : {}),
       ...Object.fromEntries(Object.entries(labelData).map(([id, data]) => [id, { type: 'geojson', data, generateId: true }])),
       scrub: { type: 'geojson', data: scrubPoint },
@@ -529,6 +548,8 @@ function buildStyle(theme) {
 const EMISSIVE = { line: 'line-emissive-strength', fill: 'fill-emissive-strength', circle: 'circle-emissive-strength', raster: 'raster-emissive-strength' };
 function decorate(layer) {
   layer.slot = slotFor(layer);
+  const tileset = layer.source && tilesetFor(layer.source);
+  if (tileset && !layer['source-layer']) layer['source-layer'] = tileset.sourceLayer;   // vector sources need it, GeoJSON ones must not have it
   const property = EMISSIVE[layer.type];
   if (property && layer.id !== 'relief') { layer.paint = layer.paint || {}; if (!(property in layer.paint)) layer.paint[property] = 1; }
   return layer;
@@ -2255,13 +2276,14 @@ map.on('load', async () => {
     for (const [id, source] of Object.entries(cropSources())) map.addSource(id, source);
     addLayers(cropLayers(MAP_THEMES[currentTheme()]), 'mask');
     renderCropland(cropland);
-    const canals = await loadJson('data/canals.geojson').catch(() => null);   // absent until fetch_data.py gets OSM canals
-    if (canals) {
+    // Absent until fetch_data.py gets OSM canals. With hosted tiles the GeoJSON is not fetched: the summary says they exist.
+    const canals = tilesetFor('canals') ? null : await loadJson('data/canals.geojson').catch(() => null);
+    const canalSummary = await loadJson('data/canals_summary.json').catch(() => null);
+    if (canals || (tilesetFor('canals') && canalSummary)) {
       canalsLoaded = true;
-      map.addSource('canals', { type: 'geojson', data: canals });
+      map.addSource('canals', canals ? { type: 'geojson', data: canals } : staticSource('canals', 'canals.geojson'));
       addLayers(canalLayers(MAP_THEMES[currentTheme()]), 'links-highlight');
-      debug.notes.canals = canals.features.length;
-      const canalSummary = await loadJson('data/canals_summary.json').catch(() => null);
+      debug.notes.canals = canals ? canals.features.length : canalSummary.osm_ways;
       if (canalSummary) renderCanalNetwork(canalSummary);
     } else {
       document.querySelector('[data-canal]').closest('.fgroup').hidden = true;
@@ -2286,8 +2308,8 @@ map.on('load', async () => {
     if (tanks) {
       tanksLoaded = true;
       tankSummary = tanks;
-      map.addSource('tanks', { type: 'geojson', data: 'data/tanks.geojson' });
-      map.addSource('tank-points', { type: 'geojson', data: 'data/tank_points.geojson' });
+      map.addSource('tanks', staticSource('tanks', 'tanks.geojson'));
+      map.addSource('tank-points', staticSource('tank-points', 'tank_points.geojson'));
       addLayers(tankLayers(MAP_THEMES[currentTheme()]), 'districts');
       renderTanks(tanks);
       debug.notes.tanks = tanks.osm_tanks;
@@ -2299,7 +2321,7 @@ map.on('load', async () => {
     if (groundwater) {
       gwLoaded = true;
       gwData = groundwater;
-      map.addSource('groundwater', { type: 'geojson', data: 'data/groundwater.geojson' });
+      map.addSource('groundwater', staticSource('groundwater', 'groundwater.geojson'));
       addLayers(gwLayers(MAP_THEMES[currentTheme()]), 'districts');
       renderGroundwater(groundwater);
       debug.notes.groundwater = groundwater.state.wells;
