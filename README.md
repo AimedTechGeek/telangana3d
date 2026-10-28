@@ -111,7 +111,23 @@ uv run python serve.py      # http://127.0.0.1:8765/ opens in your browser
   2014"), 2016–2019 ("After 2014") or the change between them, and opens a
   Cropland card on the right with the state and per-district cultivated area
   before and after (lakh acres, change in acres, CSV download) and the
-  official irrigated-area statistics. The data show the change, not its cause
+  official irrigated-area statistics. The data show the change, not its cause.
+  With a "Before 2014" or "After 2014" layer on, the Cropland card has a
+  **Blend** slider (0 = 2008–11, 100 = 2016–19) that cross-fades the two
+  rasters (both are drawn, with complementary `raster-opacity`); the legend
+  and the card's subtitle show the blend position. The tabs set it to 0 or 100
+  and the change map is not affected
+- **Years** (Filters card): a slider from the earliest year in the data to 2026
+  with a Play button (one year every 600 ms) and "All years". While it is
+  active, dams and their 3D walls, water links (line, pulse, arrows, hit area,
+  under-construction labels) and canals show only features with a year at or
+  before the slider value; features with no year hide. A year is: dams, opened
+  else began; links, done, else water, began or planned; canals, era "after"
+  counts as 2015 and "before" as 1970 (OSM has no dig date). Years are
+  precomputed on the loaded GeoJSON, one shared `yearFilter()` composes with the
+  status and opening-year filters, and the readout ("By 1990: 12 dams · 3
+  links · canals after 2014 hidden") counts from the loaded data, not from the
+  rendered tiles. Pump houses are not filtered by year (they carry none)
 - Godavari and Krishna river-bed and flow profiles through the state; hover or
   drag the slider to follow the river on the map, click to fly there
 - Dams (arch icon) and barrages (gated-deck icon), including the Kaleshwaram
@@ -270,6 +286,11 @@ zoom), publishes each as `<username>.tg-<layer>`, waits for the job and writes
 `web/data/tilesets.json` (layer to `mapbox://` url and source layer). The user
 name is read from the public token (`MAPBOX_TOKEN`, JWT field `u`) or given
 with `--username`. Without the secret token the script exits with code 2.
+The converter adds a numeric `year` property to the `canals` features (era
+"after" = 2015, "before" = 1970) that the Years slider filters on: **tilesets
+published before this change lack it, so republish `canals`
+(`publish_tilesets.py canals`) or the Years slider hides every canal on the
+hosted-tiles path.** The links are always GeoJSON, so they get theirs at load.
 
 The map reads `data/tilesets.json` at boot: present, the mapped layers become
 `vector` sources; absent, everything loads from GeoJSON exactly as before, so
