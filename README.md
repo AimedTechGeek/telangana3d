@@ -66,6 +66,8 @@ real outlines of the tanks.
 
 ## Web map (Mapbox GL JS)
 
+On phones and tablets (viewport 900 px wide or less) the left panel and the right stack become bottom sheets: each is a 48 px handle that expands to 60 % of the screen on tap, one at a time, and the map keeps the whole viewport.
+
 The map runs on Mapbox GL JS v3 with the Mapbox Standard basemap (or Standard
 Satellite) under the atlas layers and Mapbox Terrain-DEM as the 3D surface, so
 it needs a Mapbox public token. Create one at account.mapbox.com with the
