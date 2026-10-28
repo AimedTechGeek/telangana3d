@@ -1018,6 +1018,18 @@ $('theme').addEventListener('click', () => setTheme(currentTheme() === 'dark' ? 
 $('collapse').addEventListener('click', () => { $('panel').classList.add('hidden'); $('expand').hidden = false; });
 $('expand').addEventListener('click', () => { $('panel').classList.remove('hidden'); $('expand').hidden = true; });
 $('filters-collapse').addEventListener('click', () => { $('filters').classList.add('hidden'); $('filters-expand').hidden = false; });
+
+// Phones and tablets (<= 900 px): the side panels are bottom sheets; opening one closes the other. CSS does the rest.
+document.querySelectorAll('.sheet-handle').forEach((handle) => handle.addEventListener('click', () => {
+  const sheet = handle.parentElement;
+  const open = !sheet.classList.contains('sheet-open');
+  document.querySelectorAll('.sheet-open').forEach((s) => {
+    s.classList.remove('sheet-open');
+    s.querySelector('.sheet-handle').setAttribute('aria-expanded', 'false');
+  });
+  sheet.classList.toggle('sheet-open', open);
+  handle.setAttribute('aria-expanded', String(open));
+}));
 $('filters-expand').addEventListener('click', () => { $('filters').classList.remove('hidden'); $('filters-expand').hidden = true; });
 const updateLabelDensity = () => {
   const near = map.getZoom() >= LABEL_ZOOM;
