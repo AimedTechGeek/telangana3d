@@ -55,6 +55,7 @@ const ORBIT_DEG_PER_FRAME = 0.035;
 const MAP_THEMES = {
   light: {
     background: '#e9e6df', mask: '#efece5', maskOpacity: 0.5,
+    districtHover: '#1d4ed8', flowHover: '#00a6ff',
     district: '#3b3a36', districtOpacity: 0.55, state: '#161616', stateCasing: '#ffffff',
     contour: '#5a4634', flowGlow: '#ffffff', flowDash: '#eef7ff', link: '#c2410c', linkDash: '#fff4e8', cropOpacity: 0.82,
     canal: '#c2187f', canalOld: '#8a6f84', canalDash: '#fff0fa', canalCasing: '#ffffff',
@@ -72,6 +73,7 @@ const MAP_THEMES = {
   },
   dark: {
     background: '#0e0f12', mask: '#0e0f12', maskOpacity: 0.58,
+    districtHover: '#ffffff', flowHover: '#9fe8ff',
     district: '#d8d4cc', districtOpacity: 0.38, state: '#f0efec', stateCasing: '#000000',
     contour: '#d8d4cc', flowGlow: '#0b1a33', flowDash: '#ffffff', link: '#fb923c', linkDash: '#fff7ed', cropOpacity: 0.9,
     canal: '#ff6fd0', canalOld: '#d2b4c8', canalDash: '#fff0fa', canalCasing: '#2a0d20',
@@ -147,13 +149,22 @@ let flowStep = 0;
 let flowAnimating = true;
 let styleReady = true;                               // false only while a basemap switch reloads the style
 
-function flowWidthExpr(scale) {
-  const px = (zoomScale) => ['interpolate', ['linear'], FLOW_LOG_Q, ...FLOW_WIDTH_STOPS.flatMap(([l, w]) => [l, w * scale * zoomScale])];
+/** Beyond a distance from the view centre, hide the busiest labels when the map is tilted steeply (the far side of a 3D view is where they pile up). Symbol layers only: Mapbox rejects both expressions in a circle layer's filter, so tanks-dots is not covered. The distance allowed shrinks as the pitch grows. */
+const DECLUTTER_PITCH = 55;
+const declutterFilter = () => ['any', ['<=', ['pitch'], DECLUTTER_PITCH],
+  ['<', ['distance-from-center'], ['interpolate', ['linear'], ['pitch'], DECLUTTER_PITCH, 0.5, 60, 0.4, 70, 0.22]]];
+const withDeclutter = (filter) => (filter ? ['all', filter, declutterFilter()] : declutterFilter());
+function flowWidthExpr(scale, hoverBoost) {
+  const px = (zoomScale) => {
+    const width = ['interpolate', ['linear'], FLOW_LOG_Q, ...FLOW_WIDTH_STOPS.flatMap(([l, w]) => [l, w * scale * zoomScale])];
+    return hoverBoost ? ['*', width, ['case', ['boolean', ['feature-state', 'hover'], false], hoverBoost, 1]] : width;
+  };
   return ['interpolate', ['linear'], ['zoom'], 6, px(0.7), 9, px(1.3), 12, px(2.2)];
 }
 function flowColorExpr(theme) {
   const colours = MAP_THEMES[theme].flow;
-  return ['step', ['get', 'q'], colours[0], ...FLOW_CLASSES.slice(1).flatMap((cls, i) => [cls.from, colours[i + 1]])];
+  const byClass = ['step', ['get', 'q'], colours[0], ...FLOW_CLASSES.slice(1).flatMap((cls, i) => [cls.from, colours[i + 1]])];
+  return ['case', ['boolean', ['feature-state', 'hover'], false], MAP_THEMES[theme].flowHover, byClass];
 }
 /** The dash pattern shifted by `step` tenths of a period, so successive steps slide the dashes downstream. */
 function dashPatternAt(step) {
@@ -467,9 +478,10 @@ const TILESETS = (() => {
 const TILESET_KEY = { 'tank-points': 'tank_points' };            // source id -> tileset key where they differ
 const tilesetFor = (sourceId) => TILESETS[TILESET_KEY[sourceId] || sourceId];
 /** A static source: a hosted vector tileset when one is published, otherwise the GeoJSON file. */
-function staticSource(sourceId, file) {
+function staticSource(sourceId, file, { promoteId, generateId } = {}) {
   const tileset = tilesetFor(sourceId);
-  return tileset ? { type: 'vector', url: tileset.url } : { type: 'geojson', data: `data/${file}` };
+  if (tileset) return { type: 'vector', url: tileset.url, ...(promoteId ? { promoteId } : {}) };
+  return { type: 'geojson', data: `data/${file}`, ...(promoteId ? { promoteId } : {}), ...(generateId ? { generateId } : {}) };
 }
 
 /** Which Mapbox Standard slot an atlas layer renders in: polygons and rasters under the basemap's roads, lines above them, labels on top. */
@@ -514,8 +526,8 @@ function buildStyle(theme) {
       'relief-dem': { type: 'raster', url: DEM_TILESET, tileSize: 512, maxzoom: 14 },   // the same tiles read as colours for the relief tint
       mask: staticSource('mask', 'mask.geojson'),
       state: staticSource('state', 'state.geojson'),
-      districts: staticSource('districts', 'districts.geojson'),
-      flow: staticSource('flow', 'flow.geojson'),
+      districts: staticSource('districts', 'districts.geojson', { promoteId: 'shapeName' }),   // a stable id for the hover state
+      flow: staticSource('flow', 'flow.geojson', { generateId: true }),   // flow.geojson has no id property; vector tiles carry none either, so reach hover works on the GeoJSON path only
       ...flowParticleSources(),
       contours: staticSource('contours', 'contours.geojson'),
       links: { type: 'geojson', data: 'data/links.geojson', lineMetrics: true },
@@ -548,6 +560,11 @@ function buildStyle(theme) {
       ...tankLayers(t),                      // tanks and the Mission Kakatiya shading sit under the district lines
       ...gwLayers(t),                        // groundwater wells and district shading, same slot
       ...proposalLayers(t),                  // proposed reservoirs, routes and commands
+      { id: 'district-hover', type: 'fill', source: 'districts', paint: {
+          'fill-color': t.districtHover, 'fill-opacity': ['case', ['boolean', ['feature-state', 'hover'], false], 0.18, 0] } },
+      { id: 'district-hover-line', type: 'line', source: 'districts', layout: { 'line-join': 'round' }, paint: {
+          'line-color': t.districtHover, 'line-opacity': ['case', ['boolean', ['feature-state', 'hover'], false], 0.9, 0],
+          'line-width': ['interpolate', ['linear'], ['zoom'], 6, 2.2, 10, 3.4] } },
       { id: 'districts', type: 'line', source: 'districts', layout: { visibility: chipOn('districts'), 'line-join': 'round' }, paint: {
           'line-color': t.district, 'line-opacity': t.districtOpacity,
           'line-width': ['interpolate', ['linear'], ['zoom'], 6, 0.5, 10, 1.2] } },
@@ -559,7 +576,7 @@ function buildStyle(theme) {
         layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: {
           'line-color': t.flowGlow, 'line-width': flowWidthExpr(2.2), 'line-opacity': 0.55, 'line-blur': 3 } },
       { id: 'flow-lines', type: 'line', source: 'flow', layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: {
-          'line-color': flowColorExpr(theme), 'line-width': flowWidthExpr(1), 'line-opacity': 0.95 } },
+          'line-color': flowColorExpr(theme), 'line-width': flowWidthExpr(1, 1.8), 'line-opacity': 0.95 } },
       ...flowParticleLayers(t),
       { id: 'flow-dash', type: 'line', source: 'flow', filter: ['>=', ['get', 'q'], FLOW_DASH_MIN_CMS],
         layout: { 'line-join': 'round', 'line-cap': 'butt', visibility: chipOn('flow') },
@@ -980,7 +997,17 @@ map.on('resize', resizeBubbleCanvas);
 
 // Hovering a stream shows its average flow.
 const flowPopup = new mapboxgl.Popup({ closeButton: false, closeOnClick: false, offset: 14, className: 'flow-popup' });
+/** A feature-state target: vector sources also need their source layer. */
+const stateTarget = (source, id) => (tilesetFor(source) ? { source, sourceLayer: tilesetFor(source).sourceLayer, id } : { source, id });
+let hoveredReach = null;   // feature id on the flow source (generated ids: GeoJSON path only)
+function setReachHover(id) {
+  if (hoveredReach === id) return;
+  if (hoveredReach !== null) map.setFeatureState(stateTarget('flow', hoveredReach), { hover: false });
+  hoveredReach = id;
+  if (id !== null) map.setFeatureState(stateTarget('flow', id), { hover: true });
+}
 map.on('mousemove', 'flow-hit', (event) => {
+  setReachHover(event.features[0].id === undefined ? null : event.features[0].id);
   const reach = event.features[0].properties;
   const node = document.createElement('div');
   node.append(bold(`${Math.round(reach.q).toLocaleString('en-IN')} m³/s`), ' ',
@@ -988,7 +1015,39 @@ map.on('mousemove', 'flow-hit', (event) => {
   flowPopup.setLngLat(event.lngLat).setDOMContent(node).addTo(map);
   map.getCanvas().style.cursor = 'pointer';
 });
-map.on('mouseleave', 'flow-hit', () => { flowPopup.remove(); map.getCanvas().style.cursor = ''; });
+map.on('mouseleave', 'flow-hit', () => { setReachHover(null); flowPopup.remove(); map.getCanvas().style.cursor = ''; });
+
+// Hovering a district highlights it and names it with its mean river flow and mapped tanks, unless something more specific is under the pointer.
+let flowSummaryData = null;
+let hoveredDistrict = null;
+const districtPopup = new mapboxgl.Popup({ closeButton: false, closeOnClick: false, offset: 14, className: 'flow-popup' });
+// Layers whose own hover or popup wins; the dense tank dots are left out on purpose, they would suppress the district popup almost everywhere.
+const HOVER_BLOCKERS = ['gw-wells', 'tanks-fill', 'flow-hit', 'links-hit', 'dam-walls', 'prop-dam-walls', 'dam-labels'];
+const clickPopups = () => [tankPopup, gwPopup, damPopup, linkPopup, canalPopup, proposalPopup, notePopup];
+function setDistrictHover(name) {
+  if (hoveredDistrict === name) return;
+  if (hoveredDistrict !== null) map.setFeatureState(stateTarget('districts', hoveredDistrict), { hover: false });
+  hoveredDistrict = name;
+  if (name !== null) map.setFeatureState(stateTarget('districts', name), { hover: true });
+}
+function districtHoverContent(name) {
+  const node = document.createElement('div');
+  node.append(bold(name));
+  const flow = flowSummaryData && flowSummaryData.districts.filter((row) => row.district === name);
+  const tanks = tankSummary && tankSummary.districts.find((row) => row.district === name);
+  if (flow && flow.length) node.append(' ', spanText(`${flow.map((row) => `${Math.round(row.mean_q).toLocaleString('en-IN')} m³/s mean on the ${row.river}`).join(' · ')}`));
+  if (tanks) node.append(' ', spanText(`${flow && flow.length ? '· ' : ''}${tanks.osm_tanks.toLocaleString('en-IN')} mapped tanks`));
+  return node;
+}
+map.on('mousemove', 'district-hover', (event) => {
+  const feature = event.features[0];
+  if (!feature || feature.id === undefined) return;
+  setDistrictHover(feature.id);
+  const blocked = clickPopups().some((popup) => popup.isOpen()) || map.queryRenderedFeatures(event.point, { layers: HOVER_BLOCKERS.filter((id) => map.getLayer(id)) }).length;
+  if (blocked) { districtPopup.remove(); return; }
+  districtPopup.setLngLat(event.lngLat).setDOMContent(districtHoverContent(feature.id)).addTo(map);
+});
+map.on('mouseleave', 'district-hover', () => { setDistrictHover(null); districtPopup.remove(); });
 
 // ---------- river flow panel ----------
 function flowWidth(q) {   // mirrors FLOW_WIDTH_STOPS at zoom scale 1
@@ -1162,7 +1221,7 @@ function labelLayers(theme) {
   if (labelData.cities) {
     const text = ['format', ['get', 'name'], {}, ['get', 'elev'], muted(t, 0.85)];
     layers.push(labelLayer('city-labels', 'cities', t, { icon: ic('ic|dot|label|'), text, sort: ['get', 'sort'], filter: ['==', ['get', 'place'], 'city'], size: [12, 14], layout: { visibility: chipOn('labels') } }));
-    layers.push(labelLayer('town-labels', 'cities', t, { icon: ic('ic|dot|label|s'), text, sort: ['get', 'sort'], filter: ['!=', ['get', 'place'], 'city'], minzoom: LABEL_ZOOM, layout: { visibility: chipOn('labels') } }));
+    layers.push(labelLayer('town-labels', 'cities', t, { icon: ic('ic|dot|label|s'), text, sort: ['get', 'sort'], filter: withDeclutter(['!=', ['get', 'place'], 'city']), minzoom: LABEL_ZOOM, layout: { visibility: chipOn('labels') } }));
   }
   if (labelData['district-points']) {
     layers.push({ id: 'district-labels', type: 'symbol', source: 'district-points', minzoom: tankMode === 'kakatiya' ? 0 : LABEL_ZOOM, filter: districtFilter(),
@@ -1175,7 +1234,7 @@ function labelLayers(theme) {
   }
   if (labelData.pumphouses) {
     const text = ['step', ['zoom'], '', LABEL_ZOOM, ['format', ['get', 'name'], {}, ['get', 'st'], muted(t, 0.8)]];   // icons only until zoomed in
-    layers.push(labelLayer('pump-labels', 'pumphouses', t, { icon: ic(['get', 'icon']), text, sort: 5, filter: linkStatusFilter(), layout: { visibility: chipOn('links') } }));
+    layers.push(labelLayer('pump-labels', 'pumphouses', t, { icon: ic(['get', 'icon']), text, sort: 5, filter: withDeclutter(linkStatusFilter()), layout: { visibility: chipOn('links') } }));
   }
   if (labelData.wip) {
     layers.push(labelLayer('wip-labels', 'wip', t, { icon: ic('ic|wip|link|'), text: ['get', 'name'], sort: 6, filter: linkStatusFilter(), size: [10.5, 12], layout: { visibility: chipOn('links') } }));
@@ -1187,7 +1246,7 @@ function labelLayers(theme) {
     const text = ['format', ['get', 'title'], {}, ['get', 'detail'], muted(t, 0.85), ' new', { 'font-scale': 0.8, 'text-color': t.prop }];
     const far = ['in', ['get', 'kind'], ['literal', ['reservoir', 'delivery', 'trunk']]];
     layers.push(labelLayer('prop-labels-far', 'prop-labels', t, { icon: ic(['get', 'icon']), text, sort: ['get', 'sort'], filter: far, layout: { visibility: propVisibility() } }));
-    layers.push(labelLayer('prop-labels-near', 'prop-labels', t, { icon: ic(['get', 'icon']), text, sort: 8, filter: ['!', far], minzoom: LABEL_ZOOM, layout: { visibility: propVisibility() } }));
+    layers.push(labelLayer('prop-labels-near', 'prop-labels', t, { icon: ic(['get', 'icon']), text, sort: 8, filter: withDeclutter(['!', far]), minzoom: LABEL_ZOOM, layout: { visibility: propVisibility() } }));
   }
   return layers;
 }
@@ -1259,7 +1318,8 @@ function setStatusMode(mode) {
   statusMode = mode;
   for (const button of document.querySelectorAll('[data-status]')) button.setAttribute('aria-pressed', String(button.dataset.status === mode));
   for (const id of ['dam-labels', 'dam-walls']) if (map.getLayer(id)) map.setFilter(id, damFilter());
-  for (const id of ['pump-labels', 'wip-labels']) if (map.getLayer(id)) map.setFilter(id, linkStatusFilter());
+  if (map.getLayer('pump-labels')) map.setFilter('pump-labels', withDeclutter(linkStatusFilter()));
+  if (map.getLayer('wip-labels')) map.setFilter('wip-labels', linkStatusFilter());
   for (const id of ['links-casing', 'links-line', 'links-hit']) if (map.getLayer(id)) map.setFilter(id, linkStatusFilter());
   if (map.getLayer('links-pulse')) map.setFilter('links-pulse', ['all', ['==', ['get', 'status'], 'operational'], linkStatusFilter()]);
   if (map.getLayer('links-arrows')) map.setFilter('links-arrows', ['all', ['!=', ['get', 'status'], 'operational'], linkStatusFilter()]);
@@ -2452,6 +2512,7 @@ map.on('load', async () => {
     renderProfile();
     renderFlowLegend();
     renderPeaks(flowSummary);
+    flowSummaryData = flowSummary;
     renderDistrictFlow(flowSummary);
     await addLabelSources();                // every label source is built by now: cities, districts, dams, pump houses, cones, peaks, proposal
     debug.notes.flowDistricts = flowSummary.districts.length;

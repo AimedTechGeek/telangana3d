@@ -84,6 +84,18 @@ uv run python serve.py      # http://127.0.0.1:8765/ opens in your browser
 - Hover anywhere for the elevation under the cursor, shown as a stack of
   landmark silhouettes for scale (Gateway of India 26 m, Charminar 56 m,
   Qutub Minar 73 m, Statue of Unity 182 m)
+- Hover a district to tint and outline it and see its name, its mean river flow
+  (the flow summary) and its mapped tank count; the popup stays away from tank outlines,
+  wells, dams, links and streams under the pointer and from any open popup. A hovered
+  stream turns brighter and wider. Both use feature state: districts are keyed by
+  `shapeName` (`promoteId`, GeoJSON and hosted tiles alike); `flow.geojson` has no
+  id property, so streams get generated ids on the GeoJSON path, and stream hover is
+  untested and probably inactive when the flow layer is served as hosted vector tiles
+  (the published tiles have no id property to promote; not verified against a live tileset)
+- Steeply tilted views (pitch above 55) drop town, pump-house and proposal place labels
+  beyond a distance from the view centre (`['distance-from-center']`, shrinking as
+  the pitch rises), so the far side of the 3D view stays readable. The tank dots are
+  not covered: Mapbox accepts those expressions only in symbol-layer filters
 - **River flow:** every stream drawn by its long-term average discharge
   (HydroRIVERS): wider, darker and faster-moving dashes mean more water
   collected upstream. Hover a stream for its m³/s and catchment area; peak
