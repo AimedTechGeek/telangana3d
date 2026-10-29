@@ -3,10 +3,14 @@
 
 const DEM_TILESET = 'mapbox://mapbox.mapbox-terrain-dem-v1';   // 3D surface, hillshade, relief tint and the cursor readout
 const BASEMAPS = { standard: 'mapbox://styles/mapbox/standard', satellite: 'mapbox://styles/mapbox/standard-satellite' };
-let basemap = 'standard';          // standard | satellite
+let scene = 'map';                 // map | satellite | night (setScene)
+let thematic = false;              // setThematic: relief muted to grey hillshade so an overlay reads
 let roadLabelsShown = false;       // the basemap's road shields and names, only once zoomed in (see updateLabelDensity)
-let lightMode = 'theme';           // theme | dawn | day | dusk | night: the basemap's light preset
-const lightPresetFor = (theme) => (lightMode === 'theme' ? MAP_THEMES[theme].lightPreset : lightMode);
+const basemapKind = () => (scene === 'satellite' ? 'satellite' : 'standard');
+/** The colour tokens the map paints with: the night scene is dark whatever the UI theme. */
+const mapTheme = () => (scene === 'night' ? 'dark' : currentTheme());
+const scenePreset = (theme) => (scene === 'night' ? 'night' : MAP_THEMES[theme].lightPreset);   // day in the light theme, dusk in the dark one
+const reliefVisibility = () => (scene === 'satellite' || thematic ? 'none' : 'visible');   // imagery shows only without the tint
 const labelData = {};              // label source id -> GeoJSON, built from the data at boot; the style picks them up (generateId gives feature ids)
 const INTER_FONT = ['Inter Medium', 'Arial Unicode MS Regular'];   // exists only after upload_font.py has put Inter into the Mapbox account
 let LABEL_FONT = ['DIN Pro Medium', 'Arial Unicode MS Regular'];  // Mapbox-hosted default for every label; Inter when data/fonts.json says it is uploaded
@@ -17,8 +21,8 @@ let scrubPoint = { type: 'FeatureCollection', features: [] };   // the river pro
 const TILE_PX = 256;               // Web Mercator tile width the metres-per-pixel formula is written for
 const HOME = { center: [79.35, 17.75], zoom: 7.3, pitch: 66, bearing: -18 };
 // Telangana's relief is about 1 km across a 500 km state, so the exaggeration follows the zoom: the slider value applies
-// at district level, more than twice that at state level so the plateau stands out, half of it in towns where streets stay true.
-const EXAGGERATION_BY_ZOOM = [[6, 2.2], [8, 1.6], [10, 1], [12.5, 0.5]];
+// at district level, more than twice that at state level so the plateau stands out, and never less than the slider close up.
+const EXAGGERATION_BY_ZOOM = [[6, 2.2], [9, 1.6], [12, 1.2], [13.5, 1.0]];
 let terrainRise = 1;                       // 0–1 while the terrain rises into a 3D view
 function terrainExaggeration() {
   const scale = Number($('exag').value) * terrainRise;
@@ -31,8 +35,6 @@ function riseTerrain(ms = 1800) {
     terrainRise = Math.min(1, (now - start) / ms);
     terrainRise = 1 - (1 - terrainRise) ** 3;
     map.setTerrain({ source: 'mapbox-dem', exaggeration: terrainExaggeration() });
-    setWallHeights();
-    refreshLinkLift(terrainRise >= 1);
     if (terrainRise < 1) requestAnimationFrame(step); else terrainRise = 1;
   };
   terrainRise = 0.05;
@@ -60,37 +62,44 @@ const MAP_THEMES = {
     background: '#e9e6df', mask: '#efece5', maskOpacity: 0.5,
     districtHover: '#1d4ed8', flowHover: '#00a6ff',
     district: '#3b3a36', districtOpacity: 0.55, state: '#161616', stateCasing: '#ffffff',
-    contour: '#5a4634', flowGlow: '#ffffff', flowDash: '#eef7ff', link: '#c2410c', linkDash: '#fff4e8', profileCasing: 'rgba(20,28,40,0.9)', cropOpacity: 0.82,
-    canal: '#c2187f', canalOld: '#8a6f84', canalDash: '#fff0fa', canalCasing: '#ffffff',
-    tank: '#3b95dc', tankEdge: '#1b5a93', tankRamp: ['#e6eef5', '#1d5f99'],
+    contour: '#5a4634', flowDash: '#eef7ff', profileCasing: 'rgba(20,28,40,0.9)', cropOpacity: 0.82,
+    // Water grammar: blue = river water (darker and wider = more of it), orange = water moved by people, teal = proposed.
+    link: '#c2410c', linkDash: '#fff4e8',
+    canal: '#c2410c', canalMain: '#9a3412', canalTunnelCasing: '#fed7aa', canalOld: '#a8836b', canalBuilding: '#ea580c', canalDash: '#fff4e8', canalCasing: '#ffffff',
+    tank: '#5aa6e0', tankEdge: '#1f6fc4', tankRamp: ['#e6eef5', '#1d5f99'],
     gwDepth: [[0, '#0b5fa5'], [2, '#4f9bd8'], [5, '#a9d4ef'], [10, '#f2e2b8'], [20, '#d98b3c'], [40, '#7a2e0d']],   // metres below ground
     gwChange: [[-6, '#b2182b'], [-2, '#ef8a62'], [0, '#f4f1ea'], [2, '#67a9cf'], [6, '#2166ac']], gwStroke: '#ffffff',       // fell … rose
-    prop: '#0f766e', propPool: '#4f46e5', propPump: '#b45309', propTrunk: '#7c3aed', propPulse: '#ffffff', propCmdExisting: 'rgba(34,197,94,0.22)', propCmdNew: 'rgba(20,184,166,0.32)',
-    flow: ['#86d9e3', '#36aee6', '#2566d8', '#1a3aa6', '#5f2aa8'],   // FLOW_CLASSES: cyan -> blue -> navy -> purple
+    prop: '#0f766e', propPool: '#2dd4bf', propPoolOpacity: 0.5, propPoolLine: '#0f766e', propPump: '#115e59', propTrunk: '#0d9488', propTrunkExisting: '#5f9e98', propPulse: '#ffffff',
+    propCmdExisting: 'rgba(13,148,136,0.12)', propCmdNew: 'rgba(20,184,166,0.30)',
+    flow: ['#9cd3f0', '#4aa3e0', '#1f6fc4', '#0d3f8a'],   // FLOW_CLASSES: pale -> navy, one hue
     sketch: '#e8590c', sketchHalo: 'rgba(255,255,255,0.9)',   // the Sketch tool's dashed line and its outline
     shadow: '#2b2016', highlight: '#fff4e2', accent: '#4e3d2e',
-    label: '#1f1d1a', labelMuted: '#6b6560', labelHalo: 'rgba(255,255,255,0.92)', labelActive: '#c2410c', iconBg: '#ffffff', damIcon: '#b4532a', damIconUnknown: '#dfb39d', barrageIcon: '#0f7f78', peakIcon: '#1a3aa6',
-    // Standard basemap kept behind the atlas: water pale and desaturated under the tank/river blues, greenspace muted so it does not fight the relief tint
-    basemapColours: { colorWater: '#b9cfdf', colorGreenspace: '#d5ddc9', colorLand: '#e9e6df', colorRoads: '#f7f4ee', colorMotorways: '#e6cfae', colorTrunks: '#ede2cf', colorPlaceLabels: '#6b6560', colorRoadLabels: '#6b6560' },
-    lightPreset: 'day', reliefOpacity: 0.62, heat: ['#9fd0f0', '#3b95dc', '#1b5a93'],
+    thematicShadow: 'rgba(43,32,22,0.35)', thematicHighlight: '#ffffff',   // the grey hillshade under a thematic overlay
+    label: '#1f1d1a', labelMuted: '#6b6560', labelHalo: 'rgba(255,255,255,0.95)', labelActive: '#c2410c', iconBg: '#ffffff', damIcon: '#b4532a', damIconUnknown: '#dfb39d', barrageIcon: '#0f7f78', peakIcon: '#1a3aa6',
+    // Standard basemap kept behind the atlas: water as the tank blue so lakes, tanks and rivers agree, greenspace muted so it does not fight the relief tint
+    basemapColours: { colorWater: '#5aa6e0', colorGreenspace: '#d5ddc9', colorLand: '#e9e6df', colorRoads: '#f7f4ee', colorMotorways: '#e6cfae', colorTrunks: '#ede2cf', colorPlaceLabels: '#6b6560', colorRoadLabels: '#6b6560' },
+    lightPreset: 'day', reliefOpacity: [[6, 0.88], [10, 0.72], [13.5, 0.58]],
     fog: { range: [0.6, 9], color: '#e3e9ee', 'high-color': '#b7d0ea', 'space-color': '#e9f0f6', 'horizon-blend': 0.08, 'star-intensity': 0 },
   },
   dark: {
     background: '#0e0f12', mask: '#0e0f12', maskOpacity: 0.58,
     districtHover: '#ffffff', flowHover: '#9fe8ff',
     district: '#d8d4cc', districtOpacity: 0.38, state: '#f0efec', stateCasing: '#000000',
-    contour: '#d8d4cc', flowGlow: '#0b1a33', flowDash: '#ffffff', link: '#fb923c', linkDash: '#fff7ed', profileCasing: 'rgba(0,0,0,0.9)', cropOpacity: 0.9,
-    canal: '#ff6fd0', canalOld: '#d2b4c8', canalDash: '#fff0fa', canalCasing: '#2a0d20',
-    tank: '#4fb3ff', tankEdge: '#bfe3ff', tankRamp: ['#161c26', '#3f8fd0'],
+    contour: '#d8d4cc', flowDash: '#ffffff', profileCasing: 'rgba(0,0,0,0.9)', cropOpacity: 0.9,
+    link: '#fb923c', linkDash: '#fff7ed',
+    canal: '#fb923c', canalMain: '#fdba74', canalTunnelCasing: '#7c2d12', canalOld: '#a08876', canalBuilding: '#f97316', canalDash: '#fff7ed', canalCasing: '#2a1408',
+    tank: '#3f8fd0', tankEdge: '#9fd0ff', tankRamp: ['#161c26', '#3f8fd0'],
     gwDepth: [[0, '#9fd8ff'], [2, '#5eb0ea'], [5, '#2f6f9f'], [10, '#4a4238'], [20, '#b86b2a'], [40, '#ff9d5c']],
     gwChange: [[-6, '#ff6b6b'], [-2, '#c97a6a'], [0, '#2a2f38'], [2, '#5f9bd0'], [6, '#8fd0ff']], gwStroke: '#0b1a33',
-    prop: '#2dd4bf', propPool: '#818cf8', propPump: '#fbbf24', propTrunk: '#c4b5fd', propPulse: '#ffffff', propCmdExisting: 'rgba(74,222,128,0.20)', propCmdNew: 'rgba(45,212,191,0.30)',
-    flow: ['#2f96a8', '#3cbbea', '#6a9cff', '#a9bdff', '#dcaaff'],   // FLOW_CLASSES: teal -> sky -> blue -> lilac on the dark surface
+    prop: '#2dd4bf', propPool: '#2dd4bf', propPoolOpacity: 0.4, propPoolLine: '#5eead4', propPump: '#99f6e4', propTrunk: '#5eead4', propTrunkExisting: '#3c8f88', propPulse: '#ffffff',
+    propCmdExisting: 'rgba(45,212,191,0.10)', propCmdNew: 'rgba(45,212,191,0.26)',
+    flow: ['#3f7fa8', '#4aa8e8', '#7ab8ff', '#b5d8ff'],   // FLOW_CLASSES: dim steel -> pale blue on the dark surface
     sketch: '#ffd43b', sketchHalo: 'rgba(0,0,0,0.75)',
     shadow: '#000000', highlight: '#b9a68c', accent: '#000000',
-    label: '#f1efe9', labelMuted: '#b5b0a8', labelHalo: 'rgba(14,15,18,0.9)', labelActive: '#fb923c', iconBg: '#1b1e26', damIcon: '#f2996b', damIconUnknown: '#9c6650', barrageIcon: '#4fd1c5', peakIcon: '#a9bdff',
-    basemapColours: { colorWater: '#1b2836', colorGreenspace: '#1a2320', colorLand: '#14161a', colorRoads: '#2b2e35', colorMotorways: '#4b4438', colorTrunks: '#3b3933', colorPlaceLabels: '#b5b0a8', colorRoadLabels: '#b5b0a8' },
-    lightPreset: 'night', reliefOpacity: 0.55, heat: ['#1f3b55', '#3f8fd0', '#bfe3ff'],
+    thematicShadow: 'rgba(0,0,0,0.45)', thematicHighlight: '#8a8a8a',
+    label: '#f1efe9', labelMuted: '#b5b0a8', labelHalo: 'rgba(14,15,18,0.92)', labelActive: '#fb923c', iconBg: '#1b1e26', damIcon: '#f2996b', damIconUnknown: '#9c6650', barrageIcon: '#4fd1c5', peakIcon: '#7ab8ff',
+    basemapColours: { colorWater: '#1f4f7a', colorGreenspace: '#1a2320', colorLand: '#14161a', colorRoads: '#2b2e35', colorMotorways: '#4b4438', colorTrunks: '#3b3933', colorPlaceLabels: '#b5b0a8', colorRoadLabels: '#b5b0a8' },
+    lightPreset: 'dusk', reliefOpacity: [[6, 0.82], [10, 0.66], [13.5, 0.52]],
     fog: { range: [0.6, 9], color: '#0f1520', 'high-color': '#1a2a45', 'space-color': '#04060c', 'horizon-blend': 0.06, 'star-intensity': 0.4 },
   },
 };
@@ -111,7 +120,7 @@ function currentTheme() {
 function setTheme(theme) {
   document.documentElement.dataset.theme = theme;
   try { localStorage.setItem('theme', theme); } catch (_) { /* storage unavailable */ }
-  if (map && map.getLayer('relief')) ensureIcons(theme).then(() => { applyMapTheme(); renderFlowLegend(); renderGwLegend(); syncArrowImage(); sketchRestyle(); });
+  if (map && map.getLayer('relief')) ensureIcons(mapTheme()).then(() => { applyMapTheme(); renderFlowLegend(); renderGwLegend(); syncArrowImage(); sketchRestyle(); });
 }
 try { const saved = localStorage.getItem('theme'); if (saved) document.documentElement.dataset.theme = saved; } catch (_) { /* ignore */ }
 
@@ -130,14 +139,13 @@ function reliefExpression(theme) {
 }
 
 // River flow styling: width and colour follow log10 of the average discharge.
-const FLOW_WIDTH_STOPS = [[-1, 0.6], [0, 1.0], [1, 1.9], [2, 3.0], [3, 5.2], [3.6, 8]];  // log10(m³/s) -> px
+const FLOW_WIDTH_STOPS = [[-1, 0.6], [0, 1.0], [1, 1.9], [2, 3.0], [3, 5.6], [3.6, 9.5]];  // log10(m³/s) -> px, the biggest rivers widest
 // Colour classes (m³/s lower bounds): stepped so thin lines still read as different flows.
 const FLOW_CLASSES = [
-  { from: 0, label: '< 10' }, { from: 10, label: '10–100' }, { from: 100, label: '100–1K' },
-  { from: 1000, label: '1K–2K' }, { from: 2000, label: '2K+' },
+  { from: 0, label: '< 10' }, { from: 10, label: '10–100' }, { from: 100, label: '100–1K' }, { from: 1000, label: '1K+' },
 ];
 const FLOW_LOG_Q = ['log10', ['max', ['get', 'q'], 0.1]];
-// Animation: one layer per dash phase (flow-dash-<k>, canals-dash-<k>); each tick shows the next phase
+// Animation: one layer per dash phase (flow-dash-<k>, canals-dash-<k>; the canals use the same rhythm as the rivers); each tick shows the next phase
 // and hides the previous one by opacity, so no paint property that rebuilds line geometry changes per frame.
 // (A single layer with line-dasharray set every tick looked worse on real hardware, October 2026.)
 // Dashes are measured in line widths, so wider rivers get longer dashes that
@@ -150,6 +158,7 @@ const FLOW_TICK_MS = 70;
 const PULSE_MS = 2600, PULSE_LENGTH = 0.22;          // one pulse runs the length of a link or trunk stage in 2.6 s
 const pulseWindow = (p) => [p, Math.min(1, p + PULSE_LENGTH)];
 const FLOW_DASH_OPACITY = 0.9;
+const ROAD_LABEL_ZOOM = 11;                          // the basemap's road names, apart from LABEL_ZOOM (towns and district names)
 const FLOW_DASH_IDS = Array.from({ length: FLOW_DASH_STEPS }, (_, k) => `flow-dash-${k}`);
 const CANAL_DASH_IDS = Array.from({ length: FLOW_DASH_STEPS }, (_, k) => `canals-dash-${k}`);
 let flowStep = 0;
@@ -213,13 +222,10 @@ function cropSources() {
     `crop-${mode}`, { type: 'image', url: `data/cropland_${mode}.png`, coordinates: cropCoords() }]));
 }
 
-// Canals (OpenStreetMap): thin dashed cyan lines, dashes sliding in the flow direction.
+// Canals (OpenStreetMap): the orange family of water moved by people, dashes sliding in the flow direction at the rivers' rhythm.
 let canalMode = 'after';                   // off | after | all
 let canalsLoaded = false;
 let linksData = null, canalsData = null;   // GeoJSON with the precomputed 'year' property, reused when the basemap reloads the style
-// Optional Mapbox tilesets, listed in data/tilesets.json by publish_flow_raster.py. Without the key the canvas bubbles stay.
-let flowParticlesUrl = null;
-const CANAL_DASH = [3, 2.2];               // in line widths, longer than the river dashes
 // Status filter (all | built | pending) shared by dams, pump houses, links and canals.
 let statusMode = 'all';
 const isPending = (status) => status !== 'operational';
@@ -240,47 +246,43 @@ function canalLayers(t) {
   const isNew = ['==', ['get', 'era'], 'after'];
   const isTunnel = ['==', ['get', 'kind'], 'tunnel'];
   const isMain = ['==', ['get', 'kind'], 'main'];
+  const isBuilding = ['==', ['get', 'construction'], true];
   // MapLibre allows one zoom interpolation per expression, so the kind and era cases sit inside each stop.
   // `s` scales the base width per kind; older canals draw at 60 %.
   const kindWidth = (base, s) => ['case',
     isTunnel, ['case', isNew, base * s.tunnel, base * 0.6 * s.tunnel],
     isMain, ['case', isNew, base * s.main, base * 0.6 * s.main],
     ['case', isNew, base * s.canal, base * 0.6 * s.canal]];
-  const width = (s) => ['interpolate', ['linear'], ['zoom'], 6, kindWidth(1.4, s), 9, kindWidth(2.6, s), 12, kindWidth(4.2, s)];
+  const width = (s) => ['interpolate', ['linear'], ['zoom'], 6, kindWidth(1.2, s), 9, kindWidth(2, s), 12, kindWidth(4, s)];
   return [
     // Casing: canals get a thin contrast edge; tunnels a wide one so they read as a tube; mains in between.
     { id: 'canals-casing', type: 'line', source: 'canals', filter: canalFilter(), layout: { 'line-join': 'round', 'line-cap': 'round', visibility: vis },
-      paint: { 'line-color': t.canalCasing, 'line-width': width({ canal: 1.9, tunnel: 3.2, main: 2.4 }),
+      paint: { 'line-color': ['case', isTunnel, t.canalTunnelCasing, t.canalCasing], 'line-width': width({ canal: 1.6, tunnel: 2.6, main: 1.9 }),
                'line-opacity': ['case', isNew, ['case', isTunnel, 0.9, 0.75], 0.4] } },
+    // Core: solid where built, dashed [2,2] where OSM marks it under construction (as the links); a tunnel is a thin core in a wide casing.
     { id: 'canals-line', type: 'line', source: 'canals', filter: canalFilter(), layout: { 'line-join': 'round', 'line-cap': 'round', visibility: vis },
-      paint: { 'line-color': ['case', isNew, t.canal, t.canalOld], 'line-width': width({ canal: 1, tunnel: 1.6, main: 1.2 }),
-               'line-opacity': ['case', isNew, 0.95, 0.7],
-               'line-dasharray': ['case', isTunnel, ['literal', [0.6, 1.1]], isMain, ['literal', [1, 0]], ['literal', CANAL_DASH]] } },
+      paint: { 'line-color': ['case', isNew, ['case', isBuilding, t.canalBuilding, isMain, t.canalMain, t.canal], t.canalOld],
+               'line-width': width({ canal: 1, tunnel: 0.8, main: 1.3 }),
+               'line-opacity': ['case', isNew, 0.95, 0.6],
+               'line-dasharray': ['case', isBuilding, ['literal', [2, 2]], ['literal', [1, 0]]] } },
     ...Array.from({ length: FLOW_DASH_STEPS }, (_, k) => ({
-      id: `canals-dash-${k}`, type: 'line', source: 'canals', filter: ['all', canalFilter(), ['==', ['get', 'directed'], true]],
+      id: `canals-dash-${k}`, type: 'line', source: 'canals', filter: canalDashFilter(),
       layout: { 'line-join': 'round', 'line-cap': 'butt', visibility: vis },
-      paint: { 'line-color': t.canalDash, 'line-width': width({ canal: 0.45, tunnel: 0.7, main: 0.45 }),
-               'line-dasharray': ['literal', canalDashAt(k)], 'line-opacity': k === flowStep ? 0.9 : 0 } })),
+      paint: { 'line-color': t.canalDash, 'line-width': width({ canal: 0.45, tunnel: 0.35, main: 0.55 }),
+               'line-dasharray': dashPatternAt(k), 'line-opacity': k === flowStep ? 0.9 : 0 } })),
     { id: 'canals-hit', type: 'line', source: 'canals', filter: canalFilter(), layout: { visibility: vis },
       paint: { 'line-color': '#000000', 'line-opacity': 0, 'line-width': 12 } },
   ];
 }
-/** Canal dash pattern shifted by `step` tenths of a period (same mechanism as the rivers). */
-function canalDashAt(step) {
-  const round = (v) => Math.round(v * 100) / 100;
-  const [length, gap] = CANAL_DASH, period = length + gap;
-  const p = round((step % FLOW_DASH_STEPS) / FLOW_DASH_STEPS * period);
-  if (p <= gap) return [0, p, length, round(gap - p)];
-  const shift = round(p - gap);
-  return [round(length - shift), gap, shift, 0];
-}
+/** Moving dashes only on canals that carry water: not on those OSM marks under construction. */
+const canalDashFilter = () => ['all', canalFilter(), ['==', ['get', 'directed'], true], ['!=', ['get', 'construction'], true]];
 function applyCanalFilters() {
   if (!canalsLoaded) return;
   const vis = canalMode === 'off' ? 'none' : 'visible';
   const ids = ['canals-casing', 'canals-line', 'canals-hit', ...CANAL_DASH_IDS];
   for (const id of ids) {
     map.setLayoutProperty(id, 'visibility', vis);
-    map.setFilter(id, id.startsWith('canals-dash') ? ['all', canalFilter(), ['==', ['get', 'directed'], true]] : canalFilter());
+    map.setFilter(id, id.startsWith('canals-dash') ? canalDashFilter() : canalFilter());
   }
 }
 function setCanalMode(mode) {
@@ -296,7 +298,7 @@ let tankMode = 'tanks';                    // off | tanks | kakatiya
 let tanksLoaded = false;
 let tankSummary = null;
 const TANK_POLYGON_ZOOM = 9;               // real outlines from here up, centroid dots below
-const TANK_HEAT_ZOOM = 8.5;                // a heatmap of tank density below this, fading into the dots
+const TANK_DOT_ZOOM = 7;                   // centroid dots from here to the polygons
 const districtCentres = new Map();         // district -> [lon, lat]
 const tankVisibility = () => (tankMode !== 'off' && statusMode !== 'pending' ? 'visible' : 'none');   // tanks all exist today
 function tankLayers(t) {
@@ -310,16 +312,10 @@ function tankLayers(t) {
     { id: 'tanks-kakatiya', type: 'fill', source: 'districts', layout: { visibility: tankMode === 'kakatiya' ? 'visible' : 'none' },
       paint: { 'fill-color': kakatiyaFill(t), 'fill-opacity': 0.7 } },
     { id: 'tanks-fill', type: 'fill', source: 'tanks', minzoom: TANK_POLYGON_ZOOM, layout: { visibility: vis },
-      paint: { 'fill-color': t.tank, 'fill-opacity': 0.72 } },
+      paint: { 'fill-color': t.tank, 'fill-opacity': 0.85 } },
     { id: 'tanks-outline', type: 'line', source: 'tanks', minzoom: TANK_POLYGON_ZOOM, layout: { visibility: vis, 'line-join': 'round' },
       paint: { 'line-color': t.tankEdge, 'line-width': 0.8, 'line-opacity': 0.8 } },
-    { id: 'tanks-heat', type: 'heatmap', source: 'tank-points', maxzoom: TANK_HEAT_ZOOM, layout: { visibility: vis }, paint: {
-        'heatmap-weight': ['interpolate', ['linear'], ['sqrt', ['get', 'area_ha']], 0, 0.05, 30, 1],
-        'heatmap-radius': ['interpolate', ['linear'], ['zoom'], 5.6, 20, TANK_HEAT_ZOOM, 38],   // wide enough to merge into a density field
-        'heatmap-intensity': 0.45,
-        'heatmap-color': ['interpolate', ['linear'], ['heatmap-density'], 0, 'rgba(0,0,0,0)', 0.2, t.heat[0], 0.6, t.heat[1], 1, t.heat[2]],
-        'heatmap-opacity': ['interpolate', ['linear'], ['zoom'], TANK_HEAT_ZOOM - 1, 0.42, TANK_HEAT_ZOOM, 0] } },
-    { id: 'tanks-dots', type: 'circle', source: 'tank-points', minzoom: TANK_HEAT_ZOOM - 1, maxzoom: TANK_POLYGON_ZOOM, layout: { visibility: vis },
+    { id: 'tanks-dots', type: 'circle', source: 'tank-points', minzoom: TANK_DOT_ZOOM, maxzoom: TANK_POLYGON_ZOOM, layout: { visibility: vis },
       paint: { 'circle-radius': radius, 'circle-color': t.tank, 'circle-opacity': 0.85, 'circle-stroke-color': t.tankEdge, 'circle-stroke-width': 0.5 } },
   ];
 }
@@ -347,7 +343,7 @@ function mixColour(a, b, f) {
 }
 function applyTankVisibility() {
   if (!tanksLoaded) return;
-  for (const id of ['tanks-fill', 'tanks-outline', 'tanks-heat', 'tanks-dots']) map.setLayoutProperty(id, 'visibility', tankVisibility());
+  for (const id of ['tanks-fill', 'tanks-outline', 'tanks-dots']) map.setLayoutProperty(id, 'visibility', tankVisibility());
   map.setLayoutProperty('tanks-kakatiya', 'visibility', tankMode === 'kakatiya' ? 'visible' : 'none');
 }
 function setTankMode(mode) {
@@ -395,7 +391,7 @@ function gwLayers(t) {
 }
 function applyGwMode() {
   if (!gwLoaded) return;
-  const t = MAP_THEMES[currentTheme()];
+  const t = MAP_THEMES[mapTheme()];
   const field = gwField();
   map.setLayoutProperty('gw-districts', 'visibility', gwVisibility());
   map.setLayoutProperty('gw-wells', 'visibility', gwVisibility());
@@ -424,24 +420,24 @@ function proposalLayers(t) {
   if (!proposalLoaded) return [];
   const vis = propVisibility();
   const kind = (k) => ['==', ['get', 'kind'], k];
+  const near = { minzoom: 8 };   // below zoom 8 only the trunks and the pools draw: the story at state level
   return [
-    { id: 'prop-command-existing', type: 'fill', source: 'proposal', filter: kind('command_existing'), layout: { visibility: vis }, paint: { 'fill-color': t.propCmdExisting } },
-    { id: 'prop-command-new', type: 'fill', source: 'proposal', filter: kind('command_new'), layout: { visibility: vis }, paint: { 'fill-color': t.propCmdNew } },
-    { id: 'prop-pool', type: 'fill', source: 'proposal', filter: kind('pool'), layout: { visibility: vis }, paint: { 'fill-color': t.propPool, 'fill-opacity': 0.6 } },
-    { id: 'prop-pool-line', type: 'line', source: 'proposal', filter: kind('pool'), layout: { visibility: vis }, paint: { 'line-color': t.propPool, 'line-width': 1.5 } },
-    { id: 'prop-dam-walls', type: 'fill-extrusion', source: 'proposal', filter: kind('dam'), layout: { visibility: vis }, paint: wallPaint(t.propPool, 'crest_m') },
+    { id: 'prop-command-existing', type: 'fill', source: 'proposal', ...near, filter: kind('command_existing'), layout: { visibility: vis }, paint: { 'fill-color': t.propCmdExisting } },
+    { id: 'prop-command-new', type: 'fill', source: 'proposal', ...near, filter: kind('command_new'), layout: { visibility: vis }, paint: { 'fill-color': t.propCmdNew } },
+    { id: 'prop-pool', type: 'fill', source: 'proposal', filter: kind('pool'), layout: { visibility: vis }, paint: { 'fill-color': t.propPool, 'fill-opacity': t.propPoolOpacity } },
+    { id: 'prop-pool-line', type: 'line', source: 'proposal', filter: kind('pool'), layout: { visibility: vis }, paint: { 'line-color': t.propPoolLine, 'line-width': 1.5 } },
     // Routes ride the terrain as ribbons: lifted off the ground by the water's height above it (aqueducts, rising mains), on it elsewhere.
-    { id: 'prop-canal', type: 'line', source: 'proposal', filter: ['in', ['get', 'kind'], ['literal', ['canal', 'cut', 'aqueduct', 'pressure main']]],
+    { id: 'prop-canal', type: 'line', source: 'proposal', ...near, filter: ['in', ['get', 'kind'], ['literal', ['canal', 'cut', 'aqueduct', 'pressure main']]],
       layout: { visibility: vis, 'line-cap': 'round', 'line-join': 'round', ...RIBBON },
       paint: { 'line-color': ['match', ['get', 'kind'], 'pressure main', t.propPump, t.prop], 'line-width': ['interpolate', ['linear'], ['zoom'], 6, 2.2, 10, 4.2] } },
-    { id: 'prop-tunnel', type: 'line', source: 'proposal', filter: kind('tunnel'), layout: { visibility: vis },
+    { id: 'prop-tunnel', type: 'line', source: 'proposal', ...near, filter: kind('tunnel'), layout: { visibility: vis },
       paint: { 'line-color': t.prop, 'line-width': ['interpolate', ['linear'], ['zoom'], 6, 2.6, 10, 4.8], 'line-dasharray': [0.5, 1.3] } },
-    { id: 'prop-delivery', type: 'circle', source: 'proposal', filter: kind('delivery'), layout: { visibility: vis },
+    { id: 'prop-delivery', type: 'circle', source: 'proposal', ...near, filter: kind('delivery'), layout: { visibility: vis },
       paint: { 'circle-radius': 7, 'circle-color': t.prop, 'circle-stroke-color': '#ffffff', 'circle-stroke-width': 1.5 } },
-    { id: 'prop-pump', type: 'circle', source: 'proposal', filter: kind('pump'), layout: { visibility: vis },
+    { id: 'prop-pump', type: 'circle', source: 'proposal', ...near, filter: kind('pump'), layout: { visibility: vis },
       paint: { 'circle-radius': 5, 'circle-color': t.propPump, 'circle-stroke-color': '#ffffff', 'circle-stroke-width': 1.2 } },
     { id: 'prop-trunk-existing', type: 'line', source: 'proposal', filter: ['all', kind('trunk'), ['==', ['get', 'existing'], true]], layout: { visibility: vis, ...RIBBON },
-      paint: { 'line-color': t.propTrunk, 'line-width': 2, 'line-opacity': 0.7, 'line-dasharray': [2, 1.5] } },
+      paint: { 'line-color': t.propTrunkExisting, 'line-width': 2, 'line-opacity': 0.85, 'line-dasharray': [2, 1.5] } },
     { id: 'prop-trunk-new', type: 'line', source: 'proposal', filter: ['all', kind('trunk'), ['==', ['get', 'existing'], false]], layout: { visibility: vis, 'line-cap': 'round', 'line-join': 'round', ...RIBBON },
       paint: { 'line-color': t.propTrunk, 'line-width': ['interpolate', ['linear'], ['zoom'], 6, 3.2, 10, 6] } },
     { id: 'prop-trunk-pulse', type: 'line', source: 'proposal', filter: kind('trunk'), layout: { visibility: vis, 'line-cap': 'round', 'line-join': 'round', ...RIBBON },
@@ -449,23 +445,7 @@ function proposalLayers(t) {
                'line-trim-offset': pulseWindow(0), 'line-trim-color': t.propPulse, 'line-trim-fade-range': [0.45, 0.45] } },
   ];
 }
-// Dams as 3D walls: the OSM dam line drawn as a fill-extrusion of fixed width (fill-extrusion-line-width) as high as the dam.
-let damLinesLoaded = false;
-const damsWithAssumedWall = new Set();   // dam indexes whose wall is a 15 m stand-in (height_known false)
-// Mapbox does not scale extrusions with the terrain exaggeration (tested: the same wall at 1x and 6x), so a true-height wall would sink
-// into the exaggerated hills. The height is therefore multiplied by the same zoom-dependent factor as the terrain (EXAGGERATION_BY_ZOOM x slider).
-// The width is 60 m at close range and grows towards the state view so the wall stays a visible line.
-const WALL_WIDTH_M = ['interpolate', ['linear'], ['zoom'], 8, 240, 10, 120, 12.5, 60];
-const wallHeight = (property) => ['interpolate', ['linear'], ['zoom'], ...EXAGGERATION_BY_ZOOM.flatMap(([z, f]) => [z, ['*', ['get', property], Math.max(0.01, Number($('exag').value) * f * terrainRise)]])];
-/** Walls follow the terrain: same slider, zoom and rise factors as terrainExaggeration(), so they never stand full height on flat ground. */
-function setWallHeights() {
-  for (const id of ['dam-walls', 'prop-dam-walls']) if (map.getLayer(id)) map.setPaintProperty(id, 'fill-extrusion-height', wallHeight(id === 'dam-walls' ? 'height' : 'crest_m'));
-}
-// The links are schematic straight lines, so they are drawn as overhead pipes: lifted above the ground by LINK_LIFT_M at district level,
-// scaled by the same zoom-dependent exaggeration as the terrain so the gap between pipe and hills stays the same at every zoom.
-// line-z-offset cannot take a zoom expression, so the offset is a number re-set when the zoom or the slider moves it noticeably.
-const LINK_LIFT_M = 120;
-let linkZoom = HOME.zoom, linkLift = 0;
+const damsWithAssumedWall = new Set();   // dam indexes whose wall is a 15 m stand-in (height_known false): popup text and the 3D layer
 function exaggerationFactorAt(zoom) {
   const stops = EXAGGERATION_BY_ZOOM;
   if (zoom <= stops[0][0]) return stops[0][1];
@@ -473,20 +453,6 @@ function exaggerationFactorAt(zoom) {
     if (zoom <= stops[i][0]) return stops[i - 1][1] + (stops[i][1] - stops[i - 1][1]) * (zoom - stops[i - 1][0]) / (stops[i][0] - stops[i - 1][0]);
   }
   return stops[stops.length - 1][1];
-}
-const linkLiftAt = (zoom) => LINK_LIFT_M * Math.max(0.01, Number($('exag').value) * exaggerationFactorAt(zoom) * terrainRise);   // terrainRise as in wallHeight(): the pipes rise with the terrain
-const linkLayout = () => ({ 'line-elevation-reference': 'ground', 'line-z-offset': (linkLift = linkLiftAt(linkZoom)) });
-const LINK_LIFTED = ['links-highlight', 'links-casing', 'links-line', 'links-pulse', 'links-hit'];
-const wallPaint = (colour, property, extra = {}) => ({
-  'fill-extrusion-color': colour, 'fill-extrusion-height': wallHeight(property), 'fill-extrusion-base': 0, 'fill-extrusion-line-width': WALL_WIDTH_M,
-  'fill-extrusion-opacity': 1, 'fill-extrusion-vertical-gradient': true,
-  // Deliberately below 1 (the value decorate() would apply): the walls keep some day/night shading so they read as solid structures.
-  'fill-extrusion-emissive-strength': 0.6, ...extra,
-});
-function damWallLayers(t) {
-  if (!damLinesLoaded) return [];
-  return [{ id: 'dam-walls', type: 'fill-extrusion', source: 'dam-lines', filter: damFilter(), layout: { visibility: chipOn('dams') },
-            paint: wallPaint(t.damIcon, 'height', { 'fill-extrusion-color': ['case', ['==', ['get', 'height_known'], false], t.damIconUnknown, t.damIcon] }) }];
 }
 function setProposalMode(mode) {
   proposalMode = mode;
@@ -528,49 +494,37 @@ function staticSource(sourceId, file, { promoteId, generateId } = {}) {
 
 /** Which Mapbox Standard slot an atlas layer renders in: polygons and rasters under the basemap's roads, lines above them, labels on top. */
 function slotFor(layer) {
+  if (layer.slot) return layer.slot;           // the contours ask for 'bottom' so they can sit under the mask
   if (layer.type === 'symbol') return 'top';
-  return ['line', 'circle', 'fill-extrusion', 'raster-particle'].includes(layer.type) ? 'middle' : 'bottom';
+  return ['line', 'circle'].includes(layer.type) ? 'middle' : 'bottom';
 }
 
-// River particles (Mapbox raster-particle on the velocity raster from build_flow_raster.py).
-// Raster speed units are 1 + 2 log10(m³/s), so 10 covers the biggest rivers; colours follow the flow classes.
-const PARTICLE_MAX_SPEED = 10;
-const PARTICLE_COLOUR_SPEEDS = [1, 3, 5, 7, 7.6];   // speeds at the FLOW_CLASSES bounds 1 (floor), 10, 100, 1,000 and 2,000 m³/s
-function flowParticleSources() {
-  return flowParticlesUrl ? { 'flow-particles': { type: 'raster-array', url: flowParticlesUrl, tileSize: 512 } } : {};
-}
-function flowParticleLayers(t) {
-  if (!flowParticlesUrl) return [];
-  return [{
-    id: 'flow-particles', type: 'raster-particle', source: 'flow-particles', 'source-layer': 'flow',
-    layout: { visibility: chipOn('particles') },
-    paint: {
-      'raster-particle-speed-factor': 0.4, 'raster-particle-fade-opacity-factor': 0.9, 'raster-particle-reset-rate-factor': 0.4,
-      'raster-particle-count': 4000, 'raster-particle-max-speed': PARTICLE_MAX_SPEED,
-      'raster-particle-color': ['interpolate', ['linear'], ['raster-particle-speed'],
-        ...PARTICLE_COLOUR_SPEEDS.flatMap((speed, i) => [speed, t.flow[i]])],
-    } }];
-}
 function basemapConfig(theme) {
   const labels = { showPlaceLabels: false, showPointOfInterestLabels: false, showTransitLabels: false, showRoadLabels: roadLabelsShown };
-  return basemap === 'satellite' ? labels : { ...labels, lightPreset: lightPresetFor(theme), theme: 'faded', show3dObjects: true,
+  return basemapKind() === 'satellite' ? labels : { ...labels, lightPreset: scenePreset(theme), theme: 'faded', show3dObjects: true,
     show3dFacades: true, show3dTrees: true, ...MAP_THEMES[theme].basemapColours };
 }
+const fogFor = (theme) => (scene === 'night' ? { ...MAP_THEMES.dark.fog, 'star-intensity': 0.6 } : MAP_THEMES[theme].fog);
+const maskOpacityFor = (t) => t.maskOpacity + (thematic ? 0.1 : 0);
+/** Thematic mode greys the hillshade so an overlay reads against it; otherwise the theme's warm light. */
+const hillshadeColours = (t) => (thematic
+  ? { 'hillshade-shadow-color': t.thematicShadow, 'hillshade-highlight-color': t.thematicHighlight, 'hillshade-accent-color': t.thematicShadow }
+  : { 'hillshade-shadow-color': t.shadow, 'hillshade-highlight-color': t.highlight, 'hillshade-accent-color': t.accent });
 function buildStyle(theme) {
   const t = MAP_THEMES[theme];
   const style = {
     version: 8,
-    imports: [{ id: 'basemap', url: BASEMAPS[basemap], config: basemapConfig(theme) }],
+    imports: [{ id: 'basemap', url: BASEMAPS[basemapKind()], config: basemapConfig(theme) }],
     glyphs: 'mapbox://fonts/mapbox/{fontstack}/{range}.pbf',
     projection: { name: 'mercator' },
     sources: {
       'mapbox-dem': { type: 'raster-dem', url: DEM_TILESET, tileSize: 512, maxzoom: 14 },
+      'hillshade-dem': { type: 'raster-dem', url: DEM_TILESET, tileSize: 512, maxzoom: 14 },   // its own source so the hillshade neither shares tiles nor loses them to the terrain's
       'relief-dem': { type: 'raster', url: DEM_TILESET, tileSize: 512, maxzoom: 14 },   // the same tiles read as colours for the relief tint
       mask: staticSource('mask', 'mask.geojson'),
       state: staticSource('state', 'state.geojson'),
       districts: staticSource('districts', 'districts.geojson', { promoteId: 'shapeName' }),   // a stable id for the hover state
       flow: staticSource('flow', 'flow.geojson', { generateId: true }),   // flow.geojson has no id property; vector tiles carry none either, so reach hover works on the GeoJSON path only
-      ...flowParticleSources(),
       contours: staticSource('contours', 'contours.geojson'),
       links: { type: 'geojson', data: linksData || 'data/links.geojson', lineMetrics: true },
       ...cropSources(),
@@ -578,25 +532,25 @@ function buildStyle(theme) {
       ...(tanksLoaded ? { tanks: staticSource('tanks', 'tanks.geojson'), 'tank-points': staticSource('tank-points', 'tank_points.geojson') } : {}),
       ...(gwLoaded ? { groundwater: staticSource('groundwater', 'groundwater.geojson') } : {}),
       ...(proposalLoaded ? { proposal: { type: 'geojson', data: proposalGeo, lineMetrics: true } } : {}),
-      ...(damLinesLoaded ? { 'dam-lines': { type: 'geojson', data: 'data/dam_lines.geojson' } } : {}),
       ...Object.fromEntries(Object.entries(labelData).map(([id, data]) => [id, { type: 'geojson', data, generateId: true }])),
       scrub: { type: 'geojson', data: scrubPoint },
       profile: { type: 'geojson', data: profileLine, lineMetrics: true },
     },
     layers: [
-      { id: 'relief', type: 'raster', source: 'relief-dem', layout: { visibility: chipOn('relief') }, paint: {
+      { id: 'relief', type: 'raster', source: 'relief-dem', layout: { visibility: reliefVisibility() }, paint: {
           'raster-color': reliefExpression(theme), 'raster-color-mix': DEM_COLOR_MIX, 'raster-color-range': [0, RELIEF_RANGE_M],
-          'raster-opacity': ['interpolate', ['linear'], ['zoom'], 6, Math.min(0.95, t.reliefOpacity + 0.25), 9, t.reliefOpacity, 12.5, t.reliefOpacity * 0.45],
+          'raster-opacity': ['interpolate', ['linear'], ['zoom'], ...t.reliefOpacity.flat()],   // stops: strong at state level, never faded out close up
           'raster-resampling': 'linear', 'raster-fade-duration': 0 } },
-      { id: 'hillshade', type: 'hillshade', source: 'mapbox-dem', layout: { visibility: chipOn('hillshade') }, paint: {
-          'hillshade-illumination-direction': 315, 'hillshade-exaggeration': ['interpolate', ['linear'], ['zoom'], 6, 0.9, 10, 0.6],
-          'hillshade-shadow-color': t.shadow, 'hillshade-highlight-color': t.highlight, 'hillshade-accent-color': t.accent } },
+      { id: 'hillshade', type: 'hillshade', source: 'hillshade-dem', layout: { visibility: 'visible' }, paint: {
+          'hillshade-illumination-direction': 315, 'hillshade-exaggeration': ['interpolate', ['linear'], ['zoom'], 6, 0.8, 10, 0.6],
+          ...hillshadeColours(t) } },
       ...cropLayers(t),                      // under the mask so land outside the state stays dimmed
-      { id: 'mask', type: 'fill', source: 'mask', paint: { 'fill-color': t.mask, 'fill-opacity': t.maskOpacity } },
-      { id: 'contours', type: 'line', source: 'contours', layout: { visibility: chipOn('contours'), 'line-join': 'round' }, paint: {
+      // Under the mask too: outside the state they are dimmed with the rest (clipping them needs a re-published tileset).
+      { id: 'contours', type: 'line', source: 'contours', slot: 'bottom', minzoom: 9.5, layout: { visibility: chipOn('contours'), 'line-join': 'round' }, paint: {
           'line-color': t.contour, 'line-opacity': 0.55,
           'line-width': ['case', ['==', ['%', ['get', 'elev'], 500], 0], 1.4, 0.6] } },
-      { id: 'contour-labels', type: 'symbol', source: 'contours', minzoom: 8.6, filter: ['==', ['%', ['get', 'elev'], 200], 0],
+      { id: 'mask', type: 'fill', source: 'mask', paint: { 'fill-color': t.mask, 'fill-opacity': maskOpacityFor(t) } },
+      { id: 'contour-labels', type: 'symbol', source: 'contours', minzoom: 10.5, filter: ['==', ['%', ['get', 'elev'], 200], 0],
         layout: { visibility: chipOn('contours'), 'symbol-placement': 'line', 'symbol-spacing': 260, 'text-field': ['concat', ['get', 'elev'], ' m'], 'text-font': LABEL_FONT,
                   'text-size': 10.5, 'text-rotation-alignment': 'map', 'text-pitch-alignment': 'map', 'text-max-angle': 45, 'text-allow-overlap': false, 'text-padding': 6 },
         paint: { 'text-color': t.contour, 'text-halo-color': t.labelHalo, 'text-halo-width': 1.2, 'text-opacity': 0.9 } },
@@ -615,12 +569,8 @@ function buildStyle(theme) {
           'line-color': t.stateCasing, 'line-width': ['interpolate', ['linear'], ['zoom'], 6, 3, 10, 6], 'line-opacity': 0.6 } },
       { id: 'state', type: 'line', source: 'state', layout: { 'line-join': 'round' }, paint: {
           'line-color': t.state, 'line-width': ['interpolate', ['linear'], ['zoom'], 6, 1.4, 10, 2.6] } },
-      { id: 'flow-glow', type: 'line', source: 'flow', filter: ['>=', ['get', 'q'], 300],
-        layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: {
-          'line-color': t.flowGlow, 'line-width': flowWidthExpr(2.2), 'line-opacity': 0.55, 'line-blur': 3 } },
       { id: 'flow-lines', type: 'line', source: 'flow', layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: {
-          'line-color': flowColorExpr(theme), 'line-width': flowWidthExpr(1, 1.8), 'line-opacity': 0.95 } },
-      ...flowParticleLayers(t),
+          'line-color': flowColorExpr(theme), 'line-width': flowWidthExpr(1, 1.8), 'line-opacity': thematic ? 0.5 : 0.95 } },
       ...Array.from({ length: FLOW_DASH_STEPS }, (_, k) => ({
         id: `flow-dash-${k}`, type: 'line', source: 'flow', filter: ['>=', ['get', 'q'], FLOW_DASH_MIN_CMS],
         layout: { 'line-join': 'round', 'line-cap': 'butt', visibility: chipOn('flow') },
@@ -630,17 +580,18 @@ function buildStyle(theme) {
       ...canalLayers(t),
       // Kaleshwaram links: solid where water flows today, dashed where the link is still being built.
       { id: 'links-highlight', type: 'line', source: 'links', filter: ['==', ['get', 'link'], ''],
-        layout: { 'line-join': 'round', 'line-cap': 'round', visibility: chipOn('links'), ...linkLayout() },
+        layout: { 'line-join': 'round', 'line-cap': 'round', visibility: chipOn('links') },
         paint: { 'line-color': t.link, 'line-width': 12, 'line-opacity': 0.25, 'line-blur': 2 } },
-      { id: 'links-casing', type: 'line', source: 'links', filter: linkFilter(), layout: { 'line-join': 'round', 'line-cap': 'round', visibility: chipOn('links'), ...linkLayout() },
-        paint: { 'line-color': t.linkDash, 'line-width': ['interpolate', ['linear'], ['zoom'], 6, 5, 10, 7.5], 'line-opacity': 0.8 } },
-      { id: 'links-line', type: 'line', source: 'links', filter: linkFilter(), layout: { 'line-join': 'round', 'line-cap': 'round', visibility: chipOn('links'), ...linkLayout() },
-        paint: { 'line-color': t.link, 'line-width': ['interpolate', ['linear'], ['zoom'], 6, 2.6, 10, 4.2],
+      // Zoomed out the links are bold schematic lines; from zoom 9 they thin to a dashed guide so the real canals and tunnels show through.
+      { id: 'links-line', type: 'line', source: 'links', maxzoom: 9.5, filter: linkFilter(), layout: { 'line-join': 'round', 'line-cap': 'round', visibility: chipOn('links') },
+        paint: { 'line-color': t.link, 'line-width': ['interpolate', ['linear'], ['zoom'], 6, 2.6, 9, 3.4],
                  'line-opacity': ['case', ['==', ['get', 'status'], 'operational'], 0.9, 0.6],
                  'line-dasharray': ['case', ['==', ['get', 'status'], 'operational'], ['literal', [1, 0]], ['==', ['get', 'status'], 'planned'], ['literal', [0.6, 2.4]], ['literal', [2, 2]]] } },
+      { id: 'links-guide', type: 'line', source: 'links', minzoom: 9, filter: linkFilter(), layout: { 'line-join': 'round', 'line-cap': 'round', visibility: chipOn('links') },
+        paint: { 'line-color': t.link, 'line-width': 1.5, 'line-opacity': 0.4, 'line-dasharray': [3, 3] } },
       // Operating links carry a pulse of light travelling in the direction of pumping: a line-trim window moved every frame.
-      { id: 'links-pulse', type: 'line', source: 'links', filter: ['all', ['==', ['get', 'status'], 'operational'], linkFilter()],
-        layout: { 'line-join': 'round', 'line-cap': 'round', visibility: chipOn('links'), ...linkLayout() },
+      { id: 'links-pulse', type: 'line', source: 'links', maxzoom: 9.5, filter: ['all', ['==', ['get', 'status'], 'operational'], linkFilter()],
+        layout: { 'line-join': 'round', 'line-cap': 'round', visibility: chipOn('links') },
         paint: { 'line-color': 'rgba(0,0,0,0)', 'line-width': ['interpolate', ['linear'], ['zoom'], 6, 3.4, 10, 5.6],
                  'line-trim-offset': pulseWindow(0), 'line-trim-color': t.linkDash, 'line-trim-fade-range': [0.45, 0.45] } },
       // Static arrows give direction on links still being built.
@@ -648,7 +599,7 @@ function buildStyle(theme) {
         layout: { 'symbol-placement': 'line', 'symbol-spacing': 70, 'icon-image': 'arrow', 'icon-size': ['interpolate', ['linear'], ['zoom'], 6, 0.4, 10, 0.6],
                   'icon-rotation-alignment': 'map', 'icon-allow-overlap': true, 'icon-ignore-placement': true, visibility: chipOn('links') },
         paint: { 'icon-opacity': 0.7 } },
-      { id: 'links-hit', type: 'line', source: 'links', filter: linkFilter(), layout: { visibility: chipOn('links'), ...linkLayout() },
+      { id: 'links-hit', type: 'line', source: 'links', filter: linkFilter(), layout: { visibility: chipOn('links') },
         paint: { 'line-color': '#000000', 'line-opacity': 0, 'line-width': 16 } },
       // The active river's bed, coloured along its length by the relief tint of its elevation (updated when the Rivers tab changes).
       { id: 'profile-casing', type: 'line', source: 'profile', layout: { 'line-join': 'round', 'line-cap': 'round', visibility: chipOn('bed') },
@@ -656,25 +607,23 @@ function buildStyle(theme) {
       { id: 'profile-line', type: 'line', source: 'profile', layout: { 'line-join': 'round', 'line-cap': 'round', visibility: chipOn('bed') },
         paint: { 'line-color': '#888888', 'line-width': 5, 'line-gradient': profileGradient } },
       { id: 'scrub', type: 'circle', source: 'scrub', paint: { 'circle-radius': 6, 'circle-color': t.labelActive, 'circle-stroke-color': t.iconBg, 'circle-stroke-width': 2 } },
-      ...damWallLayers(t),
       ...labelLayers(theme),
     ],
     terrain: { source: 'mapbox-dem', exaggeration: terrainExaggeration() },
-    fog: t.fog,
+    fog: fogFor(theme),
   };
   for (const layer of style.layers) decorate(layer);
   return style;
 }
 // Slot in the Standard stack, and full emissive strength for data layers so the day/night lighting shades the
-// terrain and basemap but never the atlas's own colours (the relief tint and hillshade stay lit, as scenery).
-const EMISSIVE = { line: 'line-emissive-strength', fill: 'fill-emissive-strength', circle: 'circle-emissive-strength', raster: 'raster-emissive-strength', 'fill-extrusion': 'fill-extrusion-emissive-strength' };
-// raster-particle has no emissive-strength property in the Mapbox style spec (not checked against a live style), so it is left out on purpose.
+// terrain and basemap but never the atlas's own colours (the relief tint and hillshade stay lit too: the relief is the hero).
+const EMISSIVE = { line: 'line-emissive-strength', fill: 'fill-emissive-strength', circle: 'circle-emissive-strength', raster: 'raster-emissive-strength', hillshade: 'hillshade-emissive-strength' };
 function decorate(layer) {
   layer.slot = slotFor(layer);
   const tileset = layer.source && tilesetFor(layer.source);
   if (tileset && !layer['source-layer']) layer['source-layer'] = tileset.sourceLayer;   // vector sources need it, GeoJSON ones must not have it
   const property = EMISSIVE[layer.type];
-  if (property && layer.id !== 'relief') { layer.paint = layer.paint || {}; if (!(property in layer.paint)) layer.paint[property] = 1; }
+  if (property) { layer.paint = layer.paint || {}; if (!(property in layer.paint)) layer.paint[property] = 1; }
   return layer;
 }
 /** addLayer with a `before` only when both layers share a slot (Mapbox refuses to order across slots). */
@@ -698,7 +647,7 @@ const playIntro = !location.hash && !reducedMotion && !DEBUG;
 if (playIntro) terrainRise = 0.05;
 const map = new mapboxgl.Map({
   container: 'map', accessToken: window.MAPBOX_TOKEN,
-  style: buildStyle(currentTheme()),
+  style: buildStyle(mapTheme()),
   center: HOME.center, ...(playIntro ? INTRO : { zoom: HOME.zoom, pitch: HOME.pitch, bearing: HOME.bearing }),
   minZoom: playIntro ? 4 : MIN_ZOOM, maxZoom: MAX_ZOOM, maxPitch: 80,
   maxBounds: [[72.5, 11.5], [86.5, 23.5]],   // generous: Mapbox keeps the whole tilted view inside the bounds by zooming in, so a tight box would push the state view past zoom 7
@@ -790,40 +739,55 @@ map.on('styleimagemissing', async (event) => {
 function applyMapTheme() {
   // buildStyle stays the single source of truth for colours, but its result is applied property by property:
   // a diffed setStyle cannot cope with the Standard import and reloads the whole style, dropping our icons.
-  const style = buildStyle(currentTheme());
+  const theme = mapTheme();
+  const style = buildStyle(theme);
   for (const layer of style.layers) {
     if (!map.getLayer(layer.id)) continue;
     for (const [key, value] of Object.entries(layer.paint || {})) map.setPaintProperty(layer.id, key, value);
     for (const [key, value] of Object.entries(layer.layout || {})) map.setLayoutProperty(layer.id, key, value);
     if (layer.appearances) map.setLayerProperty(layer.id, 'appearances', layer.appearances);
   }
-  if (basemap === 'standard') {
-    map.setConfigProperty('basemap', 'lightPreset', lightPresetFor(currentTheme()));
-    for (const [key, value] of Object.entries(MAP_THEMES[currentTheme()].basemapColours)) map.setConfigProperty('basemap', key, value);
+  if (basemapKind() === 'standard') {
+    map.setConfigProperty('basemap', 'lightPreset', scenePreset(theme));
+    for (const [key, value] of Object.entries(MAP_THEMES[theme].basemapColours)) map.setConfigProperty('basemap', key, value);
   }
-  map.setFog(MAP_THEMES[currentTheme()].fog);
+  map.setFog(fogFor(theme));
 }
-function setLightMode(mode) {
-  lightMode = mode;
-  for (const button of document.querySelectorAll('[data-light]')) button.setAttribute('aria-pressed', String(button.dataset.light === mode));
-  if (basemap === 'standard') map.setConfigProperty('basemap', 'lightPreset', lightPresetFor(currentTheme()));
-}
-for (const button of document.querySelectorAll('[data-light]')) button.addEventListener('click', () => setLightMode(button.dataset.light));
-function setBasemap(mode) {
-  basemap = mode;
-  for (const button of document.querySelectorAll('[data-base]')) button.setAttribute('aria-pressed', String(button.dataset.base === mode));
-  document.querySelector('.chip[data-toggle="relief"]').setAttribute('aria-pressed', String(mode === 'standard'));   // imagery shows only without the tint
+let builtBasemap = 'standard';                                      // the basemap import the current style was built with
+const sceneButtons = () => document.querySelectorAll('[data-scene]');   // the top bar and the phone settings each carry a copy
+function syncSceneButtons() { for (const button of sceneButtons()) button.setAttribute('aria-pressed', String(button.dataset.scene === scene)); }
+/** Map (day, or dusk in the dark theme), Satellite (imagery, relief off) or Night (dark tokens, stars, relief still lit). */
+function setScene(id) {
+  if (!['map', 'satellite', 'night'].includes(id)) return;
+  scene = id;
+  syncSceneButtons();
+  if (!map.getLayer('relief')) { map.once('load', () => setScene(id)); return; }   // the style is not built yet: the state is kept and applied at load
+  const reload = builtBasemap !== basemapKind();
+  if (!reload) {                                                    // Standard to Standard: the same style, new tokens and light preset
+    map.setConfigProperty('basemap', 'lightPreset', scenePreset(mapTheme()));
+    ensureIcons(mapTheme()).then(() => { applyMapTheme(); renderFlowLegend(); renderGwLegend(); syncArrowImage(); sketchRestyle(); });
+    return;
+  }
+  builtBasemap = basemapKind();
   styleReady = false;                                               // the flow animation leaves the style alone while it loads
-  const style = buildStyle(currentTheme());
-  // Mapbox GL JS 3.33 throws inside its render loop (placement, raster pass) when a style that already holds fill-extrusion layers
-  // replaces the current one; the 3D walls are therefore added once the new style has loaded.
-  const walls = style.layers.filter((layer) => layer.type === 'fill-extrusion');
-  style.layers = style.layers.filter((layer) => layer.type !== 'fill-extrusion');
   const sketchKept = sketchSuspend();                               // Draw's layers do not survive a style reload
-  map.once('style.load', () => { addLayers(walls); styleReady = true; ensureIcons(currentTheme()); sketchResume(sketchKept); });   // a new style starts without our images
-  map.setStyle(style, { diff: false });                             // the Standard import cannot be diffed
+  map.once('style.load', () => { styleReady = true; ensureIcons(mapTheme()); sketchResume(sketchKept); });   // a new style starts without our images
+  map.setStyle(buildStyle(mapTheme()), { diff: false });            // the Standard import cannot be diffed
 }
-for (const button of document.querySelectorAll('[data-base]')) button.addEventListener('click', () => setBasemap(button.dataset.base));
+for (const button of sceneButtons()) button.addEventListener('click', () => setScene(button.dataset.scene));
+syncSceneButtons();
+/** Thematic mode: the relief colours step back to a grey hillshade so a data overlay (groundwater, crops, Kakatiya) reads. */
+function applyThematic() {
+  const t = MAP_THEMES[mapTheme()];
+  map.setLayoutProperty('relief', 'visibility', reliefVisibility());
+  for (const [key, value] of Object.entries(hillshadeColours(t))) map.setPaintProperty('hillshade', key, value);
+  map.setPaintProperty('flow-lines', 'line-opacity', thematic ? 0.5 : 0.95);
+  map.setPaintProperty('mask', 'fill-opacity', maskOpacityFor(t));
+}
+function setThematic(on) {
+  thematic = Boolean(on);
+  if (map.getLayer('relief')) applyThematic(); else map.once('load', applyThematic);
+}
 
 // ---------- elevation under the cursor (the terrain the map is drawing, so the number always matches the surface) ----------
 /** Elevation in metres above sea level from the loaded terrain tiles; null where none is loaded yet. */
@@ -903,21 +867,10 @@ function renderLegend() {
 })();
 
 // ---------- controls ----------
-const LINK_LIFT_STEP_M = 8;                // re-set the overhead links' height only when it changed by this much (each change re-tiles the lines)
-function refreshLinkLift(force) {
-  linkZoom = map.getZoom();
-  const lift = linkLiftAt(linkZoom);
-  if (!force && Math.abs(lift - linkLift) < LINK_LIFT_STEP_M) return;
-  linkLift = lift;
-  for (const id of LINK_LIFTED) if (map.getLayer(id)) map.setLayoutProperty(id, 'line-z-offset', lift);
-}
-map.on('zoom', () => refreshLinkLift(false));
 $('exag').addEventListener('input', (event) => {
   const value = Number(event.target.value);
   $('exag-out').value = `${value}×`;
   map.setTerrain({ source: 'mapbox-dem', exaggeration: terrainExaggeration() });
-  setWallHeights();
-  refreshLinkLift(true);
   map.triggerRepaint();
 });
 
@@ -1094,7 +1047,7 @@ let flowSummaryData = null;
 let hoveredDistrict = null;
 const districtPopup = new mapboxgl.Popup({ closeButton: false, closeOnClick: false, offset: 14, className: 'flow-popup' });
 // Layers whose own hover or popup wins; the dense tank dots are left out on purpose, they would suppress the district popup almost everywhere.
-const HOVER_BLOCKERS = ['gw-wells', 'tanks-fill', 'flow-hit', 'links-hit', 'dam-walls', 'prop-dam-walls', 'dam-labels'];
+const HOVER_BLOCKERS = ['gw-wells', 'tanks-fill', 'flow-hit', 'links-hit', 'dam-labels'];
 const clickPopups = () => [tankPopup, gwPopup, damPopup, linkPopup, canalPopup, proposalPopup, notePopup];
 function setDistrictHover(name) {
   if (hoveredDistrict === name) return;
@@ -1247,7 +1200,7 @@ document.querySelectorAll('.sheet-handle').forEach((handle) => handle.addEventLi
 }));
 $('filters-expand').addEventListener('click', () => { $('filters').classList.remove('hidden'); $('filters-expand').hidden = true; });
 const updateLabelDensity = () => {
-  const near = map.getZoom() >= LABEL_ZOOM;
+  const near = map.getZoom() >= ROAD_LABEL_ZOOM;
   if (near === roadLabelsShown || !styleReady) return;
   roadLabelsShown = near;
   map.setConfigProperty('basemap', 'showRoadLabels', near);
@@ -1276,49 +1229,57 @@ const districtText = (t) => (tankMode === 'kakatiya'
   ? ['format', ['upcase', ['get', 'name']], {}, '\n', {}, ['get', 'mk'], { 'font-scale': 1.05, 'text-color': t.label }]
   : ['upcase', ['get', 'name']]);
 
-/** A point symbol layer: icon on the point, text beside it on whichever side is free, text dropped before the icon when space is short. */
-function labelLayer(id, source, t, { icon, text, sort, minzoom, filter, size = [11, 13], layout = {} }) {
+/** A point symbol layer: icon on the point, text beside it on whichever side is free, text dropped before the icon when space is short.
+ *  Tiers (spec 8.3): size and halo are fixed per tier, so the hierarchy is the same at every zoom. */
+function labelLayer(id, source, t, { icon, text, sort, minzoom, filter, size = 12, halo = 1.5, color, layout = {} }) {
   const appearance = (name, iconSize) => ({ name, condition: ['boolean', ['feature-state', name], false], properties: { 'text-color': t.labelActive, 'icon-size': iconSize } });
   return { id, type: 'symbol', source, ...(minzoom ? { minzoom } : {}), ...(filter ? { filter } : {}),
     layout: { 'icon-image': icon, 'icon-size': 1, 'icon-allow-overlap': true, 'text-field': text, 'text-font': LABEL_FONT,
-              'text-size': ['interpolate', ['linear'], ['zoom'], 6, size[0], 10, size[1]], 'text-variable-anchor': ['left', 'right'], 'text-radial-offset': 0.95,
+              'text-size': size, 'text-variable-anchor': ['left', 'right'], 'text-radial-offset': 0.95,
               'text-justify': 'auto', 'text-max-width': 14, 'text-optional': true, 'symbol-sort-key': sort || 0, ...layout },
-    paint: { 'text-color': t.label, 'text-halo-color': t.labelHalo, 'text-halo-width': 1.3, 'text-halo-blur': 0.4 },
+    paint: { 'text-color': color || t.label, 'text-halo-color': t.labelHalo, 'text-halo-width': halo, 'text-halo-blur': 0.4 },
     appearances: [appearance('hover', 1.15), appearance('active', 1.2)] };
 }
+const DAM_TEXT_MIN_TMCFT = 15;              // below zoom 8 only the big reservoirs carry their name
+const DISTRICT_MAX_ZOOM = 10;               // district names give way to towns and works above this (Kakatiya mode keeps them)
 function labelLayers(theme) {
   const t = MAP_THEMES[theme];
   const ic = (base) => ['concat', base, '|', theme];        // image id with the theme appended
   const layers = [];
   if (labelData.cities) {
-    const text = ['format', ['get', 'name'], {}, ['get', 'elev'], muted(t, 0.85)];
-    layers.push(labelLayer('city-labels', 'cities', t, { icon: ic('ic|dot|label|'), text, sort: ['get', 'sort'], filter: ['==', ['get', 'place'], 'city'], size: [12, 14], layout: { visibility: chipOn('labels') } }));
-    layers.push(labelLayer('town-labels', 'cities', t, { icon: ic('ic|dot|label|s'), text, sort: ['get', 'sort'], filter: withDeclutter(['!=', ['get', 'place'], 'city']), minzoom: LABEL_ZOOM, layout: { visibility: chipOn('labels') } }));
+    // T2: places. T4: the value part (height) is smaller and muted.
+    const text = ['format', ['get', 'name'], {}, ['get', 'elev'], muted(t, 0.9)];
+    layers.push(labelLayer('city-labels', 'cities', t, { icon: ic('ic|dot|label|'), text, sort: ['get', 'sort'], filter: ['==', ['get', 'place'], 'city'], size: 14, halo: 2, layout: { visibility: chipOn('labels') } }));
+    layers.push(labelLayer('town-labels', 'cities', t, { icon: ic('ic|dot|label|s'), text, sort: ['get', 'sort'], filter: withDeclutter(['!=', ['get', 'place'], 'city']), minzoom: 8, size: 13, halo: 2, layout: { visibility: chipOn('labels') } }));
   }
   if (labelData['district-points']) {
-    layers.push({ id: 'district-labels', type: 'symbol', source: 'district-points', minzoom: tankMode === 'kakatiya' ? 0 : LABEL_ZOOM, filter: districtFilter(),
-      layout: { 'text-field': districtText(t), 'text-font': LABEL_FONT, 'text-size': 11, 'text-letter-spacing': 0.12, 'text-max-width': 10, 'symbol-sort-key': 10, visibility: chipOn('labels') },
-      paint: { 'text-color': t.labelMuted, 'text-halo-color': t.labelHalo, 'text-halo-width': 1.2 } });
+    const kakatiya = tankMode === 'kakatiya';
+    layers.push({ id: 'district-labels', type: 'symbol', source: 'district-points', minzoom: kakatiya ? 0 : LABEL_ZOOM, ...(kakatiya ? {} : { maxzoom: DISTRICT_MAX_ZOOM }), filter: districtFilter(),
+      layout: { 'text-field': districtText(t), 'text-font': LABEL_FONT, 'text-size': 11, 'text-letter-spacing': 0.14, 'text-max-width': 10, 'symbol-sort-key': 10, visibility: chipOn('labels') },
+      paint: { 'text-color': t.labelMuted, 'text-halo-color': t.labelHalo, 'text-halo-width': 1.5 } });
   }
   if (labelData.dams) {
-    layers.push(labelLayer('dam-labels', 'dams', t, { icon: ic(['get', 'icon']), text: ['format', ['get', 'name'], {}, ['get', 'cap'], muted(t, 0.85), ['get', 'st'], muted(t, 0.8)],
-      sort: ['get', 'sort'], filter: damFilter(), size: [11.5, 13.5], layout: { visibility: chipOn('dams') } }));
+    // T3 works: icons always; the name below zoom 8 only for big reservoirs. T4 capacity, T5 status from 8.5.
+    const full = ['format', ['get', 'name'], {}, ['get', 'cap'], muted(t, 0.9), ['step', ['zoom'], '', 8.5, ['get', 'st']], muted(t, 0.8)];
+    const text = ['step', ['zoom'], ['case', ['>=', ['get', 'capn'], DAM_TEXT_MIN_TMCFT], full, ''], 8, full];
+    layers.push(labelLayer('dam-labels', 'dams', t, { icon: ic(['get', 'icon']), text, sort: ['get', 'sort'], filter: damFilter(), layout: { visibility: chipOn('dams') } }));
   }
   if (labelData.pumphouses) {
-    const text = ['step', ['zoom'], '', LABEL_ZOOM, ['format', ['get', 'name'], {}, ['get', 'st'], muted(t, 0.8)]];   // icons only until zoomed in
-    layers.push(labelLayer('pump-labels', 'pumphouses', t, { icon: ic(['get', 'icon']), text, sort: 5, filter: withDeclutter(linkStatusFilter()), layout: { visibility: chipOn('links') } }));
+    const text = ['step', ['zoom'], '', 9, ['format', ['get', 'name'], {}, ['get', 'st'], muted(t, 0.8)]];   // icons from 8, names from 9
+    layers.push(labelLayer('pump-labels', 'pumphouses', t, { icon: ic(['get', 'icon']), text, sort: 5, minzoom: 8, filter: withDeclutter(['all', linkStatusFilter(), yearFilter()]), layout: { visibility: chipOn('links') } }));
   }
   if (labelData.wip) {
-    layers.push(labelLayer('wip-labels', 'wip', t, { icon: ic('ic|wip|link|'), text: ['get', 'name'], sort: 6, filter: linkFilter(), size: [10.5, 12], layout: { visibility: chipOn('links') } }));
+    layers.push(labelLayer('wip-labels', 'wip', t, { icon: ic('ic|wip|link|'), text: ['get', 'name'], sort: 6, minzoom: 8.5, filter: linkFilter(), color: t.labelMuted, layout: { visibility: chipOn('links') } }));
   }
   if (labelData.peaks) {
-    layers.push(labelLayer('peak-labels', 'peaks', t, { icon: ic('ic|peak|peakIcon|'), text: ['format', ['get', 'title'], {}, ['get', 'detail'], muted(t, 0.85)], sort: 1, layout: { visibility: chipOn('labels') } }));
+    layers.push(labelLayer('peak-labels', 'peaks', t, { icon: ic('ic|peak|peakIcon|'), text: ['format', ['get', 'title'], {}, ['get', 'detail'], muted(t, 0.9)], sort: 1, layout: { visibility: chipOn('labels') } }));
   }
   if (labelData['prop-labels']) {
-    const text = ['format', ['get', 'title'], {}, ['get', 'detail'], muted(t, 0.85), ' new', { 'font-scale': 0.8, 'text-color': t.prop }];
-    const far = ['in', ['get', 'kind'], ['literal', ['reservoir', 'delivery', 'trunk']]];
+    const text = ['format', ['get', 'title'], {}, ['get', 'detail'], muted(t, 0.9), ' new', { 'font-scale': 0.8, 'text-color': t.prop }];
+    const far = ['in', ['get', 'kind'], ['literal', ['reservoir', 'trunk']]];                       // always
+    const later = ['step', ['zoom'], ['==', ['get', 'kind'], 'delivery'], 9, true];                 // deliveries from 8 (the layer's minzoom), the rest from 9
     layers.push(labelLayer('prop-labels-far', 'prop-labels', t, { icon: ic(['get', 'icon']), text, sort: ['get', 'sort'], filter: far, layout: { visibility: propVisibility() } }));
-    layers.push(labelLayer('prop-labels-near', 'prop-labels', t, { icon: ic(['get', 'icon']), text, sort: 8, filter: withDeclutter(['!', far]), minzoom: LABEL_ZOOM, layout: { visibility: propVisibility() } }));
+    layers.push(labelLayer('prop-labels-near', 'prop-labels', t, { icon: ic(['get', 'icon']), text, sort: 8, filter: withDeclutter(['all', ['!', far], later]), minzoom: 8, layout: { visibility: propVisibility() } }));
   }
   return layers;
 }
@@ -1349,8 +1310,8 @@ function buildDistrictLabels(points, cityNames) {
 function applyDistrictLabels() {
   if (!map.getLayer('district-labels')) return;
   map.setFilter('district-labels', districtFilter());
-  map.setLayerZoomRange('district-labels', tankMode === 'kakatiya' ? 0 : LABEL_ZOOM, 24);
-  map.setLayoutProperty('district-labels', 'text-field', districtText(MAP_THEMES[currentTheme()]));
+  map.setLayerZoomRange('district-labels', tankMode === 'kakatiya' ? 0 : LABEL_ZOOM, tankMode === 'kakatiya' ? 24 : DISTRICT_MAX_ZOOM);
+  map.setLayoutProperty('district-labels', 'text-field', districtText(MAP_THEMES[mapTheme()]));
 }
 async function addLabelSources() {
   await ensureIcons(currentTheme());
@@ -1492,7 +1453,7 @@ function buildDamLabels(dams) {
   labelData.dams = collection(dams.map((dam, i) => pointFeature(dam.lon, dam.lat, {
     i, name: dam.name, status: dam.status, ...(damYear(dam) !== null ? { year: damYear(dam) } : {}),
     icon: `ic|${dam.kind}|${dam.kind}Icon|${iconFlags(dam)}`, sort: -(dam.capacity_tmcft || 0),
-    cap: dam.capacity_tmcft ? ` ${formatTmcft(dam.capacity_tmcft)}` : '', st: isPending(dam.status) ? ` · ${STATUS_LABEL[dam.status]}` : '' })));
+    capn: dam.capacity_tmcft || 0, cap: dam.capacity_tmcft ? ` ${formatTmcft(dam.capacity_tmcft)}` : '', st: isPending(dam.status) ? ` · ${STATUS_LABEL[dam.status]}` : '' })));
 }
 
 // ---------- Kaleshwaram links: pump houses, tunnel portals and the link list ----------
@@ -1964,12 +1925,6 @@ function openProposalPopup(p, lngLat) {
 }
 for (const id of ['prop-pool', 'prop-canal', 'prop-tunnel', 'prop-delivery', 'prop-pump', 'prop-trunk-new', 'prop-trunk-existing']) {
   map.on('click', id, (event) => { if (sketching()) return; event.originalEvent.stopPropagation(); openProposalPopup(event.features[0].properties, event.lngLat); });
-  map.on('mouseenter', id, () => { map.getCanvas().style.cursor = 'pointer'; });
-  map.on('mouseleave', id, () => { map.getCanvas().style.cursor = ''; });
-}
-map.on('click', 'prop-dam-walls', (event) => { if (sketching()) return; event.originalEvent.stopPropagation(); openProposalPopup({ kind: 'pool', id: event.features[0].properties.id }, event.lngLat); });
-map.on('click', 'dam-walls', (event) => { if (sketching()) return; event.originalEvent.stopPropagation(); const dam = damsData[event.features[0].properties.i]; if (dam) openDamPopup(dam); });
-for (const id of ['prop-dam-walls', 'dam-walls']) {
   map.on('mouseenter', id, () => { map.getCanvas().style.cursor = 'pointer'; });
   map.on('mouseleave', id, () => { map.getCanvas().style.cursor = ''; });
 }
@@ -3031,13 +2986,6 @@ map.on('load', async () => {
       document.querySelector('[data-canal]').closest('.fgroup').hidden = true;
     }
     debug.notes.cropDistricts = cropland.districts.length;
-    if (TILESETS.flow_particles) {                  // absent until publish_flow_raster.py has run
-      flowParticlesUrl = TILESETS.flow_particles;
-      map.addSource('flow-particles', flowParticleSources()['flow-particles']);
-      addLayers(flowParticleLayers(MAP_THEMES[currentTheme()]), 'flow-hit');
-      debug.notes.flowParticles = flowParticlesUrl;
-      document.querySelector('.chip[data-toggle="particles"]').hidden = false;   // an optional extra, off by default
-    }
     prepareBubbles(flowReaches);
     buildDamLabels(dams);
     renderEraCounts(dams);
@@ -3081,10 +3029,7 @@ map.on('load', async () => {
     }
     const damLines = await loadJson('data/dam_lines.geojson').catch(() => null);   // absent until build_web_data.py has written it
     if (damLines) {
-      damLinesLoaded = true;
       for (const f of damLines.features) if (f.properties.height_known === false) damsWithAssumedWall.add(f.properties.i);
-      map.addSource('dam-lines', { type: 'geojson', data: damLines });
-      addLayers(damWallLayers(MAP_THEMES[currentTheme()]));
     }
     const proposal = await loadJson('data/proposal.json').catch(() => null);   // absent until propose_water.py has run
     if (proposal) {
