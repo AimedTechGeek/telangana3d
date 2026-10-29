@@ -17,7 +17,7 @@ Line numbers below refer to `web/app.js` at `c056332` and are hints only; functi
 | Honesty | Every caveat that exists today keeps a home (section 7). Nothing new is presented as surveyed fact: 3D shapes are generic stand-ins and say so. |
 | Ownership | A package edits only what section 10 gives it. Whoever deletes a DOM element also deletes the JS that binds that element **in its own region**; a function that another package's region calls is not deleted, only its call sites are removed by their owner (dead definitions are removed post-merge, package E). |
 | Cross-package calls | Calls into another package's new function are guarded (`typeof setThematic === 'function'`, `window.Atlas3D && ...`, `window.AtlasTour && ...`) so each worktree runs on its own before the merge. |
-| Worktree setup | `web/data/` and `web/mapbox-token.js` are git-ignored. In a new worktree: copy `C:\LocalData\3DViews\web\data` to `<worktree>\web\data`, then delete the `"flow_particles"` key from the copy's `web/data/tilesets.json` (the particle feature is being removed; this makes its code path dead in every worktree). `serve.py` writes `mapbox-token.js` from the `MAPBOX_TOKEN` environment variable. Run tests with your package's own `ATLAS_PORT` (A 8771, B 8772, C 8773, D 8774). |
+| Worktree setup | `web/data/` and `web/mapbox-token.js` are git-ignored. In a new worktree: copy `C:\LocalData\3DViews\web\data` to `<worktree>\web\data`, then delete the `"flow_particles"` key from the copy's `web/data/tilesets.json` (the particle feature is being removed; this makes its code path dead in every worktree). `serve.py` writes `mapbox-token.js` from the `MAPBOX_TOKEN` environment variable. Run tests with your package's own `ATLAS_PORT` (A 8771, B 8772, C 8773, D 8774). Packages that run `build_web_data.py` (C, D) also need the git-ignored inputs: `robocopy C:\LocalData\3DViews\data <worktree>\data /E /XC /XN /XO` (copies only the missing files, about 400 MB), then `uv run python build_web_data.py --skip-tiles`; it rewrites the worktree's own `web/data` only. |
 | Checks | `node --check web/<file>.js` for every JS file touched; `uv run python web_smoke_test.py` and `uv run python web_sketch_test.py` must pass in the worktree. Screenshots go to `out/` (git-ignored) and must be looked at, not only written. Viewports: desktop 1600x1000, phone 390x844. |
 | Conventions | Classic scripts, `'use strict'`, `$()` helper, `textEl()`/`bold()` DOM builders, no framework, no build step. Comments explain why, as in app.js. |
 
@@ -177,6 +177,10 @@ Overlay control groups keep a `data-group` attribute so the data-missing fallbac
 | <= 480 px | headline numbers 2 per row; lens chips 13 px; nothing else changes. |
 | All | Touch targets >= 40 px under 900 px; no text below 12 px under 900 px; 16 px side gutter; no horizontal page scroll; `prefers-reduced-motion` drops transitions. |
 
+### 1.4b Tap/click elevation readout
+
+`#readout` is hidden until the first map click. A map `click` shows it (`showCursor(event.lngLat)` plus a small `mapboxgl.Marker` pin) unless the Sketch tool is on (`sketching()`) or `map.queryRenderedFeatures(event.point, { layers })` finds a feature in a clickable layer (`city-labels`, `town-labels`, `dam-labels`, `pump-labels`, `wip-labels`, `peak-labels`, `prop-labels-far`, `prop-labels-near`, `links-hit`, `canals-hit`, `tanks-fill`, `tanks-dots`, `gw-wells`, `gw-districts`, `prop-pool`, `prop-canal`, `prop-tunnel`, `prop-delivery`, `prop-pump`, `prop-trunk-new`, `prop-trunk-existing`; only those that exist). No hover readout, no "—" placeholder. `#readout-close` hides it and removes the pin. While a river flight runs (`body.flying`) the readout is shown and written by `flightStep` as today.
+
 ### 1.5 CSS class names (fixed, new)
 
 `topbar brand title subtitle seg scene text-btn lens-panel lenses lens-card lens-title lens-text headline hl lens-controls lens-legend lens-caveat lens-source details-btn drawer drawer-head lens-details tool-panel timeline tl-play tl-track tl-mark tl-now tl-readout map-tools tool readout plan-badge popover sheet about-section works-key`.
@@ -335,7 +339,7 @@ DOM (ids kept from today where they exist):
 - `#year-2014` sits at the 2014 position of the track (computed from `min`/`max`), click = `setYear(2014)`.
 - `#year-now` = `setYear(YEAR_MAX, false)`; `#year-out` shows "Now" when inactive (was "all").
 - Play: as today (one year per 0.6 s from the minimum).
-- Filters (unchanged rules, `yearFilter()`): `dam-labels`, `links-line`, `links-guide`, `links-pulse`, `links-arrows`, `links-hit`, `wip-labels`, every `canals-*` layer, and from now on `pump-labels` (label features get `year = Number(since)` when `since` is set). 3D: `Atlas3D.setYear(year|null)` (dams/barrages/reservoirs by `opened || began`, pump houses by `since`, conduits by the canal rule after → 2015, proposal never filtered).
+- Filters (unchanged rules, `yearFilter()`): `dam-labels`, `links-line`, `links-guide`, `links-pulse`, `links-arrows`, `links-hit`, `wip-labels`, every `canals-*` layer, and from now on `pump-labels` (label features get `year = Number(since)` when `since` is set; B builds `pump-labels` with `withDeclutter(['all', linkStatusFilter(), yearFilter()])`, A's `applyWorkFilters` re-applies the same expression, and both include the new `links-guide` layer wherever the `links-*` layers are listed). 3D: `Atlas3D.setYear(year|null)` (dams/barrages/reservoirs by `opened || began`, pump houses by `since`, conduits by the canal rule after → 2015, proposal never filtered).
 - Ground lens: before/after rasters switch at 2015 (section 3.2).
 - Not filtered: tanks, Kakatiya shading, groundwater wells/districts outside the ground lens, rivers.
 
