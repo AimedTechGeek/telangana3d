@@ -137,19 +137,21 @@ const FLOW_CLASSES = [
   { from: 1000, label: '1K–2K' }, { from: 2000, label: '2K+' },
 ];
 const FLOW_LOG_Q = ['log10', ['max', ['get', 'q'], 0.1]];
-// Animation: since Mapbox GL JS v3.33 line-dasharray is a cheap uniform, so ONE flow-dash layer
-// and ONE canals-dash layer have their dasharray set with setPaintProperty every FLOW_TICK_MS,
-// stepping through dashPatternAt(flowStep) / canalDashAt(flowStep).
+// Animation: one layer per dash phase (flow-dash-<k>, canals-dash-<k>); each tick shows the next phase
+// and hides the previous one by opacity, so no paint property that rebuilds line geometry changes per frame.
+// (A single layer with line-dasharray set every tick looked worse on real hardware, October 2026.)
 // Dashes are measured in line widths, so wider rivers get longer dashes that
 // cover more pixels per tick: that is the speed difference. Every class moves
 // one tenth of a period per tick, which always reads as forward motion.
 const FLOW_DASH = { length: 2.2, gap: 2.4 };          // in line widths
-const FLOW_DASH_STEPS = 10;                           // phases per dash period
+const FLOW_DASH_STEPS = 10;                           // phase layers, all drawn every frame: keep small
 const FLOW_DASH_MIN_CMS = 20;                         // animate streams from 20 m³/s; smaller ones stay static
 const FLOW_TICK_MS = 70;
 const PULSE_MS = 2600, PULSE_LENGTH = 0.22;          // one pulse runs the length of a link or trunk stage in 2.6 s
 const pulseWindow = (p) => [p, Math.min(1, p + PULSE_LENGTH)];
 const FLOW_DASH_OPACITY = 0.9;
+const FLOW_DASH_IDS = Array.from({ length: FLOW_DASH_STEPS }, (_, k) => `flow-dash-${k}`);
+const CANAL_DASH_IDS = Array.from({ length: FLOW_DASH_STEPS }, (_, k) => `canals-dash-${k}`);
 let flowStep = 0;
 let flowAnimating = true;
 let styleReady = true;                               // false only while a basemap switch reloads the style
@@ -254,10 +256,11 @@ function canalLayers(t) {
       paint: { 'line-color': ['case', isNew, t.canal, t.canalOld], 'line-width': width({ canal: 1, tunnel: 1.6, main: 1.2 }),
                'line-opacity': ['case', isNew, 0.95, 0.7],
                'line-dasharray': ['case', isTunnel, ['literal', [0.6, 1.1]], isMain, ['literal', [1, 0]], ['literal', CANAL_DASH]] } },
-    { id: 'canals-dash', type: 'line', source: 'canals', filter: ['all', canalFilter(), ['==', ['get', 'directed'], true]],
+    ...Array.from({ length: FLOW_DASH_STEPS }, (_, k) => ({
+      id: `canals-dash-${k}`, type: 'line', source: 'canals', filter: ['all', canalFilter(), ['==', ['get', 'directed'], true]],
       layout: { 'line-join': 'round', 'line-cap': 'butt', visibility: vis },
       paint: { 'line-color': t.canalDash, 'line-width': width({ canal: 0.45, tunnel: 0.7, main: 0.45 }),
-               'line-dasharray': ['literal', canalDashAt(flowStep)], 'line-opacity': 0.9 } },
+               'line-dasharray': ['literal', canalDashAt(k)], 'line-opacity': k === flowStep ? 0.9 : 0 } })),
     { id: 'canals-hit', type: 'line', source: 'canals', filter: canalFilter(), layout: { visibility: vis },
       paint: { 'line-color': '#000000', 'line-opacity': 0, 'line-width': 12 } },
   ];
@@ -274,10 +277,10 @@ function canalDashAt(step) {
 function applyCanalFilters() {
   if (!canalsLoaded) return;
   const vis = canalMode === 'off' ? 'none' : 'visible';
-  const ids = ['canals-casing', 'canals-line', 'canals-hit', 'canals-dash'];
+  const ids = ['canals-casing', 'canals-line', 'canals-hit', ...CANAL_DASH_IDS];
   for (const id of ids) {
     map.setLayoutProperty(id, 'visibility', vis);
-    map.setFilter(id, id === 'canals-dash' ? ['all', canalFilter(), ['==', ['get', 'directed'], true]] : canalFilter());
+    map.setFilter(id, id.startsWith('canals-dash') ? ['all', canalFilter(), ['==', ['get', 'directed'], true]] : canalFilter());
   }
 }
 function setCanalMode(mode) {
@@ -540,7 +543,7 @@ function flowParticleLayers(t) {
   if (!flowParticlesUrl) return [];
   return [{
     id: 'flow-particles', type: 'raster-particle', source: 'flow-particles', 'source-layer': 'flow',
-    layout: { visibility: chipOn('flow') },
+    layout: { visibility: chipOn('particles') },
     paint: {
       'raster-particle-speed-factor': 0.4, 'raster-particle-fade-opacity-factor': 0.9, 'raster-particle-reset-rate-factor': 0.4,
       'raster-particle-count': 4000, 'raster-particle-max-speed': PARTICLE_MAX_SPEED,
@@ -618,10 +621,11 @@ function buildStyle(theme) {
       { id: 'flow-lines', type: 'line', source: 'flow', layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: {
           'line-color': flowColorExpr(theme), 'line-width': flowWidthExpr(1, 1.8), 'line-opacity': 0.95 } },
       ...flowParticleLayers(t),
-      { id: 'flow-dash', type: 'line', source: 'flow', filter: ['>=', ['get', 'q'], FLOW_DASH_MIN_CMS],
+      ...Array.from({ length: FLOW_DASH_STEPS }, (_, k) => ({
+        id: `flow-dash-${k}`, type: 'line', source: 'flow', filter: ['>=', ['get', 'q'], FLOW_DASH_MIN_CMS],
         layout: { 'line-join': 'round', 'line-cap': 'butt', visibility: chipOn('flow') },
-        paint: { 'line-color': t.flowDash, 'line-width': flowWidthExpr(0.5), 'line-dasharray': dashPatternAt(flowStep),
-                 'line-opacity': FLOW_DASH_OPACITY } },
+        paint: { 'line-color': t.flowDash, 'line-width': flowWidthExpr(0.5), 'line-dasharray': dashPatternAt(k),
+                 'line-opacity': k === flowStep ? FLOW_DASH_OPACITY : 0 } })),
       { id: 'flow-hit', type: 'line', source: 'flow', paint: { 'line-color': '#000000', 'line-opacity': 0, 'line-width': 12 } },
       ...canalLayers(t),
       // Kaleshwaram links: solid where water flows today, dashed where the link is still being built.
@@ -942,11 +946,11 @@ const toggles = {
     setVisible(['links-highlight', 'links-casing', 'links-line', 'links-pulse', 'links-arrows', 'links-hit', ...LABEL_LAYERS.links], on);
     if (!on) linkPopup.remove();
   },
+  particles: (on) => setVisible(['flow-particles'], on),
   orbit: (on) => { orbiting = on; if (on) { stopStructureOrbit(); orbitStep(); } },
   flow: (on) => {
     flowAnimating = on;
-    map.setLayoutProperty('flow-dash', 'visibility', on ? 'visible' : 'none');
-    if (map.getLayer('flow-particles')) map.setLayoutProperty('flow-particles', 'visibility', on ? 'visible' : 'none');
+    for (const id of FLOW_DASH_IDS) map.setLayoutProperty(id, 'visibility', on ? 'visible' : 'none');
     if (on) { flowLast = 0; requestAnimationFrame(animateFlow); }
   },
 };
@@ -958,9 +962,14 @@ function animateFlow(now) {
   if (!styleReady) { requestAnimationFrame(animateFlow); return; }
   if (now - flowLast >= FLOW_TICK_MS) {
     flowLast = now;
+    const previous = flowStep;
     flowStep = (flowStep + 1) % FLOW_DASH_STEPS;
-    map.setPaintProperty('flow-dash', 'line-dasharray', dashPatternAt(flowStep));
-    if (canalsLoaded && canalMode !== 'off') map.setPaintProperty('canals-dash', 'line-dasharray', canalDashAt(flowStep));
+    map.setPaintProperty(FLOW_DASH_IDS[previous], 'line-opacity', 0);
+    map.setPaintProperty(FLOW_DASH_IDS[flowStep], 'line-opacity', FLOW_DASH_OPACITY);
+    if (canalsLoaded && canalMode !== 'off') {
+      map.setPaintProperty(CANAL_DASH_IDS[previous], 'line-opacity', 0);
+      map.setPaintProperty(CANAL_DASH_IDS[flowStep], 'line-opacity', 0.9);
+    }
   }
   drawBubbles(bubbleLast ? Math.min((now - bubbleLast) / 1000, 0.1) : 0);
   bubbleLast = now;
@@ -3027,10 +3036,9 @@ map.on('load', async () => {
       map.addSource('flow-particles', flowParticleSources()['flow-particles']);
       addLayers(flowParticleLayers(MAP_THEMES[currentTheme()]), 'flow-hit');
       debug.notes.flowParticles = flowParticlesUrl;
-    } else {
-      prepareBubbles(flowReaches);
+      document.querySelector('.chip[data-toggle="particles"]').hidden = false;   // an optional extra, off by default
     }
-    if (flowParticlesUrl) $('flow-motion').textContent = 'particles ride the rivers, faster with flow.';
+    prepareBubbles(flowReaches);
     buildDamLabels(dams);
     renderEraCounts(dams);
     setupYears(dams, links, canals);
