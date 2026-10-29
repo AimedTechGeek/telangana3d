@@ -2994,6 +2994,13 @@ map.on('draw.update', refreshSketch);
 map.on('draw.delete', refreshSketch);
 document.body.classList.add('sketch-off');
 
+// ---------- 3D works (three3d.js) ----------
+function exaggerationNow() { return Math.max(0.01, Number($('exag').value) * exaggerationFactorAt(map.getZoom()) * terrainRise); }
+function whenAtlas3D(fn) { if (window.Atlas3D) fn(window.Atlas3D); else window.addEventListener('atlas3d:ready', () => fn(window.Atlas3D), { once: true }); }
+map.on('load', () => whenAtlas3D((atlas) => atlas.init(map, { exaggeration: exaggerationNow, theme: currentTheme() })
+  .then(() => { if (proposalGeo && proposalData) atlas.setData('proposal', { data: proposalData, geo: proposalGeo }); debug.notes.atlas3d = atlas.stats(); writeDebug(); })
+  .catch((error) => { debug.errors.push(`3D: ${error.message}`); writeDebug(); })));
+
 async function loadJson(url) { const response = await fetch(url); if (!response.ok) throw new Error(`${url}: ${response.status}`); return response.json(); }
 
 map.on('load', async () => {
