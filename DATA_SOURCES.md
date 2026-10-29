@@ -32,7 +32,7 @@ public and were downloaded by `fetch_data.py` into `data/raw/` (not committed);
   proposal model's terrain, the forge3d viewer DEM and the 3D block. The
   Terrarium tiles (`web/tiles`, zoom 5–11) are still built but no longer
   served: since October 2026 the web map draws its 3D surface, hillshade,
-  relief tint and cursor readout from Mapbox Terrain-DEM (section 1b).
+  relief tint and tap readout from Mapbox Terrain-DEM (section 1b).
 - **Processing:** mosaicked; values below 0 m (a few dozen reservoir
   artefacts) clamped to 0; Gaussian smoothing σ = 1 px to tame canopy and
   building noise; reprojected to Web Mercator for tiles and to a Lambert
@@ -58,7 +58,7 @@ public and were downloaded by `fetch_data.py` into `data/raw/` (not committed);
   v3.33.0.
 - **Used for:** the web map's 3D terrain mesh, hillshade and relief tint (the
   same DEM tiles read as a raster and coloured by `raster-color` with the
-  Mapbox height decoding), the elevation under the cursor
+  Mapbox height decoding), the elevation at a tapped point
   (`map.queryTerrainElevation`, so the readout always matches the surface
   drawn), and the basemap under the atlas layers (Standard with place and POI
   labels off, theme *faded*, light preset *day* or *night* with the theme;
@@ -212,50 +212,15 @@ public and were downloaded by `fetch_data.py` into `data/raw/` (not committed);
   district; profile flow is the nearest named reach within 6 km, forced
   non-decreasing downstream.
 
-### 5b. River particles (Mapbox raster-array tileset, optional)
+### 5b. River particles (removed 30 October 2026)
 
-- **What:** the HydroRIVERS reaches of section 5 rasterised by `build_flow_raster.py`
-  into `data/flow_velocity.tif` (EPSG:3857, 250 m, two float bands: u east, v north).
-  Each reach is painted with its downstream unit vector (HydroRIVERS lines are
-  digitised downstream) times a speed of `1 + 2 log10(q)` (q = mean discharge in
-  m3/s), one pixel wide plus a 1-pixel buffer, bigger rivers winning at crossings;
-  0 elsewhere. The speed is a display scale, not a measured velocity.
-- **Publishing:** `publish_flow_raster.py` uploads it with the tilesets CLI
-  (`upload-raster-source`, `create`, `publish`) using the recipe
-  `recipes/flow_particles.json`, as tileset `<username>.tg-flow-particles`, and
-  writes `web/data/tilesets.json` (`flow_particles`). Needs `uv` (it runs the
-  `mapbox-tilesets` CLI) and a secret token (`MAPBOX_SECRET_TOKEN`, or
-  `MAPBOX_ALL_ACCESS_TOKEN` as a fallback; tilesets scopes). Terms: Mapbox
-  Tiling Service usage and storage fall under the account's Mapbox plan.
-- **Used for:** when `tilesets.json` lists `flow_particles`, the map adds a
-  `raster-array` source and a `raster-particle` layer (`flow-particles`) and skips
-  the canvas bubbles; without it nothing changes.
-- **Pages:** https://docs.mapbox.com/mapbox-gl-js/example/raster-particle-layer/ ·
-  https://docs.mapbox.com/style-spec/reference/layers/#raster-particle ·
-  https://docs.mapbox.com/mapbox-tiling-service/recipe-specification/rasterarray.md ·
-  https://docs.mapbox.com/mapbox-tiling-service/raster/raster-recipes-details.md ·
-  https://docs.mapbox.com/mapbox-tiling-service/examples/raster-mts-basic-recipe.md ·
-  https://github.com/mapbox/tilesets-cli
-- **State (29 October 2026):** published as `tecgeor.tg-flow-particles`, job
-  `success`, and drawn by the map (`flow-particles`, `raster-array` source, tile
-  requests to `rasterarrays/v1/.../*.mrt` answer 206). The recipe needed a
-  different form than the documentation example suggests:
-  - one filter selecting bands 1 and 2 together (`["all", ["in", ["bandindex"], ["literal", [1, 2]]]]`)
-    failed with the generic "An error occurred during the processing of this job";
-  - a single-band scalar recipe on the same raster succeeded, so the GeoTIFF is fine;
-  - two single-band sources with source tags (`u`, `v`) failed with "Expected
-    fourth dimension of data to match dimensionality for format uint16 (2) but got size 1";
-  - **the vector-pair form works**: `"filter"` is a list of two filters, one per
-    band (`[["all", ["in", ["bandindex"], ["literal", [1]]]], ["all", ["in", ["bandindex"], ["literal", [2]]]]]`),
-    `"name": ["literal", "flow"]`, `"input_no_data_value": -9999`, minzoom 4, maxzoom 8
-    (that is `recipes/flow_particles.json`; maxzoom 9, a `units` field and a
-    `sort_key` were in the failed recipe and were dropped, so which difference
-    besides the two-filter form mattered was not isolated).
-  Seen in headless Edge (software GL) near Bhadrachalam at zoom 9: the particle
-  layer draws along the rivers (the picture differs with the layer on and off). The
-  look at full speed on real hardware, and `raster-particle-array-band` (left
-  unset), were not examined further. The experiment tilesets and sources
-  (`tg-flow-test`, `tg-flow-v1` to `v3`, `tg-flow-u`, `tg-flow-v`) were deleted.
+- **Removed:** the optional river-particles layer (a Mapbox `raster-particle` field
+  built from the HydroRIVERS reaches of section 5, with its build and publish
+  scripts and recipe) was taken out of the atlas on 30 October 2026. The map no
+  longer reads any particle tileset. The canvas bubbles of section 5 remain.
+- **Account clean-up:** the hosted tileset `tecgeor.tg-flow-particles` and its
+  source `tg-flow-velocity` can be deleted from the Mapbox account by its owner
+  (Studio → Tilesets). Nothing in the app reads them.
 
 ## 6. Wikipedia (dams and barrages)
 
@@ -305,12 +270,12 @@ public and were downloaded by `fetch_data.py` into `data/raw/` (not committed);
   Ananthagiri, Malkapet, Amarlabanda, Katchapur, Thimmakka Palli, Issaipet,
   Bhoompally, Gujjal, Katewadi, Mothe, Kondem Cheruvu, Gandamalla, Baswapuram)
   have no coordinates in Wikipedia, Wikidata or OSM at the time of writing.
-- **Dam crest lines:** the markers above come from `center` points; the 3D dam walls need the line. `fetch_data.py` also fetches every OSM `way["waterway"="dam"]` in the box 15.6-19.95 N / 77.0-81.6 E with its geometry (`out geom`), cached as `osm_dam_lines.json` (333 ways, fetched 28 October 2026; most are unnamed check dams and small bunds, ODbL). `build_dam_lines` in `build_web_data.py` joins the named ways to the dams on the map by name (words such as dam, project, reservoir dropped; OSM `alt_name` also tried; four hand-checked aliases for names that differ, `DAM_LINE_ALIASES`) and writes `web/data/dam_lines.geojson`: 15 ways for 13 of the 42 dams (Singur, Jurala, Nagarjuna Sagar, Srisailam, Sriram Sagar, Nizam Sagar, Mid and Upper Manair, Sripada Yellampalli, Ranganayaka Sagar, Sammakka Sagar, Parvati and Saraswati barrages). The other dams have no named line in OSM, among them Mallanna Sagar and Konda Pochamma Sagar, which OSM maps as relations that the snapshot has no geometry for. Many ways are closed outlines of the dam body, so the wall runs round them; one OSM way can be a spillway or a second embankment. Heights come from `dams.json`; where no source gives one the wall is drawn 15 m high (`height_known` false in the file), a stand-in, not a measurement.
-- **Used for:** the "Dams & reservoirs" 3D walls (`dam-walls` layer): each line is extruded to the dam's height. A wall is a drawing aid, not a survey of the crest: its height is multiplied by the same zoom-dependent exaggeration as the terrain, because Mapbox does not scale extrusions with terrain exaggeration (tested: the same wall at 1x and 6x), and its width is 60 m close up and wider at state scale so it stays visible.
+- **Dam crest lines:** the markers above come from `center` points; the 3D dam bodies need the line (section 8b). `fetch_data.py` also fetches every OSM `way["waterway"="dam"]` in the box 15.6-19.95 N / 77.0-81.6 E with its geometry (`out geom`), cached as `osm_dam_lines.json` (333 ways, fetched 28 October 2026; most are unnamed check dams and small bunds, ODbL). `build_dam_lines` in `build_web_data.py` joins the named ways to the dams on the map by name (words such as dam, project, reservoir dropped; OSM `alt_name` also tried; four hand-checked aliases for names that differ, `DAM_LINE_ALIASES`) and writes `web/data/dam_lines.geojson`: 15 ways for 13 of the 42 dams (Singur, Jurala, Nagarjuna Sagar, Srisailam, Sriram Sagar, Nizam Sagar, Mid and Upper Manair, Sripada Yellampalli, Ranganayaka Sagar, Sammakka Sagar, Parvati and Saraswati barrages). The other dams have no named line in OSM, among them Mallanna Sagar and Konda Pochamma Sagar, which OSM maps as relations that the snapshot has no geometry for. Many ways are closed outlines of the dam body, so the body runs round them; one OSM way can be a spillway or a second embankment. Heights come from `dams.json`; where no source gives one the body is drawn 15 m high (`height_known` false in the file), a stand-in, not a measurement.
+- **Used for:** the 3D dam and barrage bodies (section 8b): each line is raised to the dam's listed height, and the height is raised with the terrain's vertical exaggeration. A body is a drawing aid, not a survey of the crest.
 
 ## 6c. Water links, pump houses and intakes
 
-- **Drawing of the links:** the lines are schematic (straight between the two structures, not canal alignments) and are drawn overhead, lifted about 120 m above the ground at district level (`LINK_LIFT_M`, scaled by the zoom-aware terrain exaggeration) so they stay visible over the hills. The lift is a drawing choice, not a measured height or a claim about any pipe. The river-bed line and the Orbit button use no new data: the line is the existing river profile coloured with the relief tint, the orbit circles a popup's own coordinates (4 km radius, 2,500 m above the terrain, constants chosen for the view, not from a source).
+- **Drawing of the links:** the lines are schematic (straight between the two structures, not canal alignments) and are drawn flat over the ground, with a dashed guide line (no lift). The drawing is a choice, not a measured height or a claim about any pipe. The river-bed line and the Orbit button use no new data: the line is the existing river profile coloured with the relief tint, the orbit circles a popup's own coordinates (4 km radius, 2,500 m above the terrain, constants chosen for the view, not from a source).
 - **Edges** (`LINKS` in `build_web_data.py`), each with years *planned /
   construction began / first water / complete* where a source gives them:
   - *Kaleshwaram* — the "Links" section of
@@ -371,7 +336,7 @@ public and were downloaded by `fetch_data.py` into `data/raw/` (not committed);
 
 Every structure and link carries a `status`: *operational*, *under
 construction* or *proposed* (links: *operational*, *in progress*, *planned*).
-The Status filter and the "Still to be built" list use it. Statuses are what
+The works-status chip and the "Still to be built" list use it. Statuses are what
 the sources below reported up to 2026-10-24; they change often and are not an
 official schedule. A `target` is the completion year the government last
 announced, not a forecast.
@@ -567,19 +532,26 @@ announced, not a forecast.
   projects, groundwater recovery, rainfall, tank restoration), which the data
   cannot separate.
 
-### 6d-i. Cropland blend and the Years slider (derived, no new data)
+### 6d-i. Cropland blend and the timeline (derived, no new data)
 
-- The Cropland card's Blend slider only changes the opacities of the existing
-  2008–2011 and 2016–2019 rasters (complementary, lifted slightly toward 1 in
-  the middle so the mix does not look thinner); it is a visual cross-fade, not
-  an interpolated cropland estimate for the years in between.
-- The Years slider (Filters card) uses years already in the atlas: dams
+- The Cropland blend slider (Groundwater & crops lens, Details) only changes the
+  opacities of the existing 2008–2011 and 2016–2019 rasters (complementary,
+  lifted slightly toward 1 in the middle so the mix does not look thinner); it is
+  a visual cross-fade, not an interpolated cropland estimate for the years in
+  between.
+- The timeline at the bottom of the map uses years already in the atlas: dams
   `opened` else `began` (section 6), links `done`, `water`, `began`, `planned`
-  in that order (6c), and, for canals, a rule of the atlas's own: OSM era
+  in that order (6c), pump houses by their `since` year, and, for canals, a rule of the atlas's own: OSM era
   "after" counts as 2015 and "before" as 1970 because OSM does not record a dig
   date. The canal year is therefore a bucket, not a measured year. Features
-  with no year are hidden while the slider is active. Not verified: that the
+  with no year are hidden while the timeline is active. Not verified: that the
   link `done`/`water` years are complete for every link.
+- The timeline replaced the old Years slider and the era filter. Its 2014
+  bookmark ("2014 · Telangana formed") sets the year to 2014, "Now" shows all
+  works again, and Play steps one year every 0.6 s from 1950. The era filter, which
+  picked dams by their opening period, is gone; the same years now reach the map
+  through the timeline. The works-status choice is the "Planned & under construction"
+  chip. No dataset changed.
 
 ## 6e. Official irrigation and cropping figures (Cropland panel table)
 
@@ -592,7 +564,7 @@ announced, not a forecast.
   https://thenewsminute.com/telangana/telanganas-irrigated-area-has-increased-what-role-have-irrigation-projects-played
 - These are state statistics quoted as published; they were not re-derived.
 
-## 6i. Tanks (OpenStreetMap) and Mission Kakatiya (Tanks card, "Tanks" control)
+## 6i. Tanks (OpenStreetMap) and Mission Kakatiya (Since 2014 lens)
 
 - **Tanks on the map:** every `natural=water` way or multipolygon relation and
   every `landuse=reservoir` way in the box 15.8–19.95 N, 77.2–81.4 E, with
@@ -652,7 +624,7 @@ announced, not a forecast.
   each with its count. It is a district total, not a statement about any
   individual tank.
 
-## 6j. Groundwater levels (India-WRIS) (Groundwater card, "Groundwater" control)
+## 6j. Groundwater levels (India-WRIS) (Groundwater & crops lens)
 
 - **What:** depth to water in metres below ground level from the manual monitoring networks of the Central Ground Water Board (CGWB: January, May, August and November readings, 1976–2024) and the Telangana Ground Water Department (monthly piezometer readings, 2007–2023). Source: the India-WRIS "Ground Water Level" export as mirrored by the India Data Portal (CKAN resource `06d6e79c-61ac-46bb-9e03-c7138911c619`, May 2025 export, https://ckandev.indiadataportal.com/dataset/groundwater-level). The WRIS portal itself (https://indiawris.gov.in/wris/#/groundWater) only serves a browser app and could not be reached from the build machine; the Telangana department's own site (gwd.telangana.gov.in) could not be reached either. `fetch_data.py` pulls every reading of the two agencies inside the box 15.8–19.95 N / 77.2–81.4 E through the mirror's SQL endpoint, 30,000 rows a page: 188,132 readings from 2,793 stations into `data/raw/gw_levels.csv.gz` (1 MB, committed).
 - **Processing** (`build_groundwater` in `build_web_data.py`): readings of exactly 0 are dropped, because the state network writes 0 for a missing reading (two thirds of its rows before 2015), as are the two readings above 100 m; stations are assigned to geoBoundaries districts by location; readings dated May are the pre-monsoon season. "Before 2014" is the mean of a well's May readings of 2010–14, "After 2014" the mean of May 2015–23, each needing at least two seasons; change = before − after, so a positive number means the water table rose. 1,605 wells inside the state have at least one window (945 CGWB, 660 state department), 748 have both. The year-by-year state curve averages each well's deviation from its own long-run mean over the 563 wells with ten or more May readings, so the growth of the network (about 500 CGWB wells in 2010, 1,000 from 2014) does not masquerade as a change in level. The export has no statewide May survey in 2020 and 2021, and the state network's readings end in 2019.
@@ -676,7 +648,7 @@ Hard-coded in `web/app.js` (`LANDMARKS`), checked on 2026-10-22:
 | Qutub Minar, Delhi | 72.5 m (shown as 73) | https://www.worldhistory.org/image/22160/the-qutb-minar/ |
 | Statue of Unity, Gujarat | 182 m, statue without base | https://en.wikipedia.org/wiki/Statue_of_Unity |
 
-## 8. Proposal model (Proposal card, "Show proposal" control)
+## 8. Proposal model (Proposal lens)
 
 - **What it is:** a planning sketch, not a design. `propose_water.py` computes, from the data already on the map, what it would take to put 85 % of the state's cultivable land under assured river water (90 % is shown as a sensitivity): where new reservoirs could be built, where districts have no usable dam site and need water lifted in, how water climbs the plateau in multi-stage trunk systems the way Kaleshwaram does, which river intake, existing reservoir, existing canal or new trunk stage feeds each work, how many pump stages, how much tunnel, deep cut, canal, pressure main and aqueduct, what land gravity could then serve, and an indicative cost. It is turned on with the "Show proposal" control in the Filters card and explained in the Proposal card. Its norms, source operating levels, the six trunk systems and the caveats were set by a lift-irrigation engineering review of the model on 24 October 2026 (an Opus agent briefed as a senior irrigation engineer; its numbers are recalled from practice, not verified against project reports). Every figure follows from those norms; none has been checked by a survey or a hydrological study.
 - **Inputs:** the 200 m terrain model (section 1), HydroRIVERS mean flows (section 5), WorldCover land cover (6k), the dams, barrages and reservoirs on the map (6, 6g), OSM canals (6h), OSM towns (4), the geoBoundaries districts (2), and `data/raw/nominatim_proposal.json`: Nominatim (OpenStreetMap, ODbL) centres of the towns and existing stage reservoirs the trunk systems name but the map lacks (16 of 20 found; Nandi Medaram, Bheemghanpur, Uddandapur and Keshavapuram are hand-placed and marked approximate).
@@ -692,6 +664,56 @@ Hard-coded in `web/app.js` (`LANDMARKS`), checked on 2026-10-22:
 - **Not modelled:** river regulation between states and environmental flows, real alignments and land along them, head-reservoir yields behind tapped canals, crop choice, phasing, and the operating cost of anything but power.
 - **Outputs:** `web/data/proposal.json` (norms, caveats, demand per district, water budget, works with their pumps, trunk systems with their stages, totals, gravity coverage per district) and `web/data/proposal.geojson` (pools, one `dam` line per new reservoir with `crest_m` and `dam_km`, which the map extrudes as a wall: the line is the straight crest `pool_for` found across the valley between the two cells where the ground rises to the full-reservoir level, at the 200 m resolution of the terrain model, so it marks where a dam would go, not an alignment; canal, cut, tunnel, pressure-main and aqueduct segments, pump houses, delivery points, trunk stage lines, gravity command areas; every line carries the water's height above ground sampled along it, `hg`, by which the map lifts the line off the terrain: aqueducts and rising mains ride above the valleys, canals and tunnels stay on the ground). Rebuild with `uv run python propose_water.py` after `build_web_data.py`; it takes about five minutes.
 
+## 8b. 3D works (three.js layer, free)
+
+- **What:** the dams, barrages, reservoir surfaces, pump houses and tunnel
+  portals, water conduits and proposal works drawn as 3D shapes over the terrain
+  by `web/three3d.js`. It is a visual aid. Every shape is a generic stand-in, not
+  an as-built drawing, and the map says so (About & sources, 3D models).
+- **Data used:**
+  - dams and barrages: `dam_lines.geojson` (the OpenStreetMap crest lines of
+    section 6) for the shape, and `dams.json` (section 6) for the height and kind;
+  - reservoirs: `reservoirs.geojson`, written by `build_web_data.py` from the
+    OpenStreetMap water polygons in `data/raw/osm_water.json` (section 6i, ODbL)
+    that touch a 3 km buffer of a dam, cover at least 50 ha and are simplified to
+    about 30 m. The level is the median Copernicus DEM height (section 1) along the
+    outline, ignoring nodata samples; it is `null` when fewer than half the samples
+    are valid, and the map then takes the level from the terrain at run time.
+    Dams with no matching polygon are skipped and listed in the build log;
+  - conduits: `conduits.geojson`, written by `build_web_data.py` from the OpenStreetMap
+    canals of section 6f (kinds `main` and `tunnel` dug after 2014, and the ways of
+    the Sitarama scheme), with their scheme, construction state, length and year;
+  - pump houses and tunnel portals: `pumphouses.json` (section 6c; kinds `pump` and
+    `tunnel`; approximate positions are skipped). The installed power is parsed from
+    the OpenStreetMap `power` tag (for example "320MW") and sizes the building;
+  - proposal: `proposal.json` and `proposal.geojson` (section 8): new dams at their
+    crest height, pools at their full-reservoir level, pressure mains, tunnels, pump
+    houses and new trunk-stage lifts. Approximate proposal positions get no model.
+- **Caveats (the same meaning as the on-map text):**
+  - Generic stand-ins, not as-built drawings.
+  - Dam bodies follow the OpenStreetMap crest line at the listed height. Where no
+    source gives a height the body is drawn 15 m high in a lighter colour: a
+    stand-in, not a measurement.
+  - Barrage piers are drawn every 20 m and the gates are schematic.
+  - Where a barrage's listed height is at or above its ground level, the value is
+    read as a water level and drawn as level minus ground (at least 12 m). Tummidihetti
+    (148 m, a full reservoir level) and Sammakka Sagar (83 m at 77 m ground) are the
+    cases seen. The popup still shows the listed value.
+  - Pump houses are generic buildings sized by installed MW; several real ones are
+    underground caverns and are not drawn that way.
+  - Tunnels are drawn at the surface along their OpenStreetMap line.
+  - Reservoir surfaces sit at the terrain height along the mapped shoreline. They are
+    not a surveyed full reservoir level.
+  - Every height is raised by the same vertical exaggeration as the terrain.
+  - Works at approximate positions get no 3D model; their 2D icon and dotted ring
+    stay the only mark.
+  - The Kaleshwaram climb of about 500 m (Medigadda to Konda Pochamma Sagar, from the
+    terrain at the two structures) is not the pumped head or the water levels.
+  - Dams without a named OpenStreetMap crest line get no 3D body (section 6).
+- **Rendering and licence:** three.js 0.169.0, core build, MIT licence (see
+  Software). It draws into a Mapbox GL JS custom layer. If the three.js script cannot
+  load, the map keeps its 2D icons and labels.
+
 ## Derived files
 
 | Output | Built by | From |
@@ -705,14 +727,20 @@ Hard-coded in `web/app.js` (`LANDMARKS`), checked on 2026-10-22:
 | `web/data/cities.json` | `build_web_data.py` | 4, 1, 2 |
 | `web/data/rivers.json` (bed and flow profiles) | `build_web_data.py` | 3, 1, 5 |
 | `web/data/flow.geojson`, `flow_summary.json` | `build_web_data.py` | 5, 3, 2 |
+| `web/data/flow_bubbles.geojson` (reaches with `q >= 300` m³/s only; the canvas bubbles) | `build_web_data.py` (`write_flow`) | 5 |
 | `web/data/dams.json` | `build_web_data.py` | 6 |
+| `web/data/dam_lines.geojson` (OSM crest lines of the dams) | `build_web_data.py` | 6 (`osm_dam_lines.json`) |
+| `web/data/pumphouses.json` | `build_web_data.py` | 6c (`osm_pumphouses.json`, Wikipedia) |
+| `web/data/reservoirs.geojson` (OSM water surfaces of the dams, level from the terrain) | `build_web_data.py` (`build_reservoirs`) | 6i (`osm_water.json`), 1, 6 |
+| `web/data/conduits.geojson` (OSM canals dug after 2014, mains and tunnels) | `build_web_data.py` (`build_conduits`) | 6f |
 | `out/telangana_block.png` | `block.py` | 1, 2 |
 
 ## Software
 
 | Component | Version | Licence | Role |
 |---|---|---|---|
-| Mapbox GL JS | 3.33.0 (api.mapbox.com CDN) | Mapbox Terms of Service (proprietary, token required) | web map rendering, 3D terrain, Standard basemap, symbol labels, elevated lines, heatmap |
+| Mapbox GL JS | 3.33.0 (api.mapbox.com CDN) | Mapbox Terms of Service (proprietary, token required) | web map rendering, 3D terrain, Standard basemap, symbol labels, custom layer that hosts the 3D works |
+| three.js | 0.169.0 (jsDelivr CDN, `build/three.module.min.js`, core build, no addons) | MIT | draws the 3D works (section 8b) into the Mapbox GL JS custom layer, from `web/three3d.js` |
 | mapbox-gl-draw | 1.5.1 (api.mapbox.com plugin CDN) | ISC | the Sketch tool: drawing and editing a canal line (line and bin controls only) |
 | forge3d | 1.44.0 | Apache-2.0 OR MIT | native viewer and path-traced block |
 | rasterio / GDAL | 1.5.2 | BSD-3 / MIT | raster mosaic, reprojection, tiles |

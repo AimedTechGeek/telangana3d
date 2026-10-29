@@ -26,6 +26,9 @@ sources that could not be reached are listed in
 
 ## Screenshots
 
+The screenshots below predate the redesign of the web map (the layout, lenses,
+timeline and 3D works described in the Web map section are not in them).
+
 **Overview**: relief, river flow, dams and barrages with capacities, water links
 with moving chevrons, tanks as blue dots, and the collapsible cards on both
 sides.
@@ -66,11 +69,9 @@ real outlines of the tanks.
 
 ## Web map (Mapbox GL JS)
 
-On phones and tablets (viewport 900 px wide or less) the left panel and the right stack become bottom sheets: each is a 48 px handle that expands to 60 % of the screen on tap, one at a time, and the map keeps the whole viewport.
-
-The map runs on Mapbox GL JS v3 with the Mapbox Standard basemap (or Standard
-Satellite) under the atlas layers and Mapbox Terrain-DEM as the 3D surface, so
-it needs a Mapbox public token. Create one at account.mapbox.com with the
+The map runs on Mapbox GL JS v3 (3.33.0) with the Mapbox Standard basemap (or
+Standard Satellite) under the atlas layers and Mapbox Terrain-DEM as the 3D
+surface, so it needs a Mapbox public token. Create one at account.mapbox.com with the
 default public scopes, restrict it to `http://127.0.0.1:8765/*` (and the Pages
 URL, see below), and put it in a User environment variable `MAPBOX_TOKEN`.
 `serve.py` writes it into `web/mapbox-token.js`, which is git-ignored; nothing
@@ -80,159 +81,241 @@ else needs the token.
 uv run python serve.py      # http://127.0.0.1:8765/ opens in your browser
 ```
 
-- 3D terrain with hillshade and a colour scale in metres above sea level
-- Hover anywhere for the elevation under the cursor, shown as a stack of
-  landmark silhouettes for scale (Gateway of India 26 m, Charminar 56 m,
-  Qutub Minar 73 m, Statue of Unity 182 m)
-- Hover a district (only while the Districts chip is on) to tint and outline it and see its name, its mean river flow
-  (the flow summary) and its mapped tank count; the popup stays away from tank outlines,
-  wells, dams, links and streams under the pointer and from any open popup. A hovered
-  stream turns brighter and wider. Both use feature state: districts are keyed by
-  `shapeName` (`promoteId`, GeoJSON and hosted tiles alike); `flow.geojson` has no
-  id property, so streams get generated ids on the GeoJSON path, and stream hover is
-  untested and probably inactive when the flow layer is served as hosted vector tiles
-  (the published tiles have no id property to promote; not verified against a live tileset)
-- Steeply tilted views (pitch above 55) drop town, pump-house and proposal place labels
-  beyond a distance from the view centre (`['distance-from-center']`, shrinking as
-  the pitch rises), so the far side of the 3D view stays readable. The tank dots are
-  not covered: Mapbox accepts those expressions only in symbol-layer filters
-- **River flow:** every stream drawn by its long-term average discharge
-  (HydroRIVERS): wider, darker and faster-moving dashes mean more water
-  collected upstream. Hover a stream for its m³/s and catchment area; peak
-  markers show where the Godavari and Krishna carry the most water; a list
-  gives the average flow of each river through every district it crosses
-- **Water links:** orange lines show how water is moved between the
-  structures by Kaleshwaram, the Sriram Sagar canals, the Srisailam Left Bank
-  Canal, Kalwakurthy and Palamuru-Rangareddy. Operating links carry moving
-  chevrons in the direction of flow; links still being built are dashed with
-  a work-in-progress cone. Click a link (on the map or in the list) for its
-  status, years (planned, construction, first water, complete), terrain
-  heights at both ends, straight-line distance and source. Lines are
-  schematic, not real canal alignments, and are drawn as overhead pipes: lifted
-  about 120 m above the ground at district level (scaled with the terrain
-  exaggeration, and with the 3D rise at the start) so they clear the hills
-- **River bed on the map:** the river selected in the River profiles card can be
-  drawn on the map as a line that takes the relief colours of its bed, from the
-  profile's elevations; it follows the Godavari / Krishna tab. The **Bed height
-  line** chip next to "Fly the river" shows it (off by default, so the river's flow
-  colours stay visible); a river flight turns it on and puts it back afterwards
-- **Orbit:** the dam popup and the proposal reservoir popup have an Orbit
-  button; the free camera circles the structure at a 4 km radius about 2,500 m
-  above the exaggerated terrain, one turn in 24 s. Drag, scroll, touch, Esc or
-  starting a river flight stops it
-- **Canals, tunnels and pressure mains** (OpenStreetMap): thin magenta
-  dashed lines whose dashes move with the flow; canal tunnels are dotted
-  with a wide casing, pressurised tunnels/pipes solid. The Canals control
-  shows those dug after 2014 (Kaleshwaram and Sitarama works, by project
-  since OSM has no dig dates) or everything with the older ones faint. Click
-  one for its name, scheme and length. A table under Water links sets the
-  official Kaleshwaram network figures (planned 1,832 km; CAG: 57 % of main
-  canals and 7 % of distributaries built by March 2022) against what OSM has
-  mapped
-- **Cropland cover** (GLAD, Potapov et al. 2021): the Agriculture control
+### Layout
+
+- **Top bar:** the title and a one-line subtitle, the Map / Satellite / Night
+  scene switch (desktop; on phones the switch sits inside Settings), the
+  light/dark theme button, Settings and About & sources.
+- **Five lenses** (the Story panel, left on desktop, a bottom sheet on phones).
+  Each lens has a short text, one to three headline numbers, its own controls
+  and legend, one caveat line, its source and a Details button:
+  - **Height**: the elevation colour scale, the cities and their heights, and
+    landmark silhouettes for scale. Tap or click anywhere for the height there.
+  - **Rivers & lifts**: river flow, dams and barrages, the water links and canals
+    that lift river water uphill, and the "Follow the water" tour.
+  - **Since 2014**: the same works shown by the year they were done, with the
+    Mission Kakatiya tank shading of districts.
+  - **Groundwater & crops**: monitoring wells and districts by change in depth to
+    water, and the cropland before and after 2014.
+  - **Proposal**: a planning sketch of river water for 85 % of cultivable land.
+    The map carries a "Planning sketch, not a design" badge while it is on.
+- **Details drawer** (right, closed by default): the tables and lists behind the
+  current lens, and the Sketch tool card while Sketch is on. On phones it opens
+  full screen over the sheet.
+- **Timeline** (bottom, shown by the lenses that need it): Play (one year every
+  0.6 s), a year slider from 1950 to 2026, a bookmark at 2014 ("Telangana
+  formed") and a "Now" button that returns to all works. The rules for which
+  year a work carries are in About & sources, under Timeline.
+- **Map tools** (right edge): the 3D / top-down toggle, Orbit, Sketch and Reset.
+  Reset flies back to the camera of the lens you are in.
+- **Settings**: vertical exaggeration (1 to 6, default 3), contours, elevation
+  bands, place labels, district lines, flow animation and 3D models.
+- **About & sources**: how to read the map, one section per lens, the 3D models,
+  the timeline, and the data and credits (the same list as below and in
+  [DATA_SOURCES.md](DATA_SOURCES.md)). Every caveat the map states is also
+  written out there.
+
+On phones and tablets (viewport 900 px wide or less) the Story panel is one
+bottom sheet: a handle cycles it between a peek (the lens tabs and headline
+numbers), half the screen and full screen. Details opens the drawer as a
+full-screen sheet, and its close button returns to the sheet. The timeline sits
+above the sheet, and the map keeps the rest of the viewport.
+
+### Reading the map
+
+- **Elevation:** tap or click a point on the terrain for its height above sea
+  level and coordinates, with a landmark silhouette for scale (Gateway of India
+  26 m, Charminar 56 m, Qutub Minar 73 m, Statue of Unity 182 m). Clicking a
+  feature (a label, a link, a tank, a well, a district) opens its popup instead;
+  the readout closes with its x button. There is no hover readout.
+- **Hover:** a district (while District lines is on) shows its name, its mean
+  river flow and its mapped tank count, and a stream shows its flow. Popups stay
+  away from tank outlines, wells, dams, links and streams under the pointer and
+  from any open popup.
+- **Navigation:** left-drag pans; right-drag or Ctrl-drag rotates and tilts;
+  scroll zooms; on touch screens two fingers rotate. The 3D / top-down toggle
+  flattens the view, Orbit circles the selected work.
+- **Flying to a work:** clicking a dam label, a pump-house label or a row in
+  "Still to be built" flies to it at zoom 15, tilted (the map's maximum zoom is
+  raised to 16 for the flight and restored afterwards).
+- **Scenes:** Map uses Mapbox Standard in the light or dark theme; Satellite uses
+  Standard Satellite and turns the relief tint off; Night uses Standard with its
+  night light preset and dark colours whatever the theme.
+
+### Height
+
+Telangana rises from the river beds where the Godavari and Krishna leave the
+state to the plateau towns. Colours show height above sea level, and the relief
+is raised so the plateau stands out. Details lists every city, ranked by
+elevation; click one to fly to it. The lowest river beds are listed beside them
+for comparison. Heights are terrain models, not surveyed benchmarks.
+
+### Rivers & lifts
+
+- **River flow:** every stream drawn and animated by its long-term average
+  discharge (HydroRIVERS): wider, darker and faster-moving dashes mean more water
+  collected upstream. Bubbles ride the biggest rivers, those carrying 300 m³/s or
+  more. Hover a stream for its m³/s and catchment area; peak markers show where
+  the Godavari and Krishna carry the most water as they leave the state; a list
+  gives the average flow of each river through every district it crosses. The
+  flow animation is in Settings.
+- **River bed:** the river selected in the River profiles of Details can be drawn
+  on the map as a line that takes the relief colours of its bed; "Bed height
+  line" in Details shows it, and a river flight turns it on and back off.
+- **Dams and barrages:** the arch and gated-deck icons, labelled with name and
+  gross capacity, including the Kaleshwaram barrages and the Mallanna Sagar,
+  Konda Pochamma Sagar and Ranganayaka Sagar reservoirs. Clicking one flies to it
+  and opens a popup with its height, construction-start and opening years, the
+  average river inflow at that point (HydroRIVERS) and its capacity.
+- **Water links:** orange lines show how water is moved between the structures
+  by Kaleshwaram, the Sriram Sagar canals, the Srisailam Left Bank Canal,
+  Kalwakurthy and Palamuru-Rangareddy. Operating links carry moving chevrons in
+  the direction of flow; links still being built are dashed, and planned ones
+  dotted. Click a link for its status, years (planned, construction, first water,
+  complete), the terrain heights at both ends, the straight-line distance and the
+  source. The lines are schematic, not real canal alignments, and are drawn flat
+  over the ground with a guide line; 3D conduits appear only where OpenStreetMap
+  maps a real canal, tunnel or pressure main.
+- **3D works:** dams, barrages, reservoir surfaces, pump houses, tunnel portals,
+  conduits and the proposal works are drawn in 3D (see 3D works below). With the
+  "Planned & under construction" chip on, the pending works show with their
+  status; the "Still to be built" list in Details gives them by scheme, with the
+  years and the last announced target. Works with no published location are
+  listed in grey.
+- **Canals, tunnels and pressure mains** (OpenStreetMap): thin magenta dashed
+  lines whose dashes move with the flow; canal tunnels are dotted with a wide
+  casing, pressurised tunnels and pipes solid. "Lifts & canals" shows those dug
+  after 2014 (Kaleshwaram and Sitarama works, by project since OSM has no dig
+  dates). Click one for its name, scheme and length. The Details table sets the
+  official Kaleshwaram network figures (planned 1,832 km; CAG: 57 % of main canals
+  and 7 % of distributaries built by March 2022) against what OSM has mapped.
+- **Lift tour:** "Follow the water" (see below).
+
+### Since 2014
+
+Telangana was formed in 2014. Drag the timeline or press Play to see dams,
+lifts and canals appear by the year they were done. Districts are shaded by the
+tanks taken up under Mission Kakatiya, 2015–18, and the Details table sets those
+figures against the village tanks OpenStreetMap maps (about 4,800 tanks and
+lakes of 0.5 ha or more, shown as blue dots sized by water spread, with their
+outlines when zoomed in; click one for its name, area and district). The
+headline numbers give the canals, tunnels and mains dug after 2014 in km, the
+tanks taken up, and the median change in the water table from May before 2014 to
+May after. The "Planned & under construction" chip applies here too.
+
+### Groundwater & crops
+
+- **Groundwater** (India-WRIS): 1,605 CGWB and state-department monitoring wells
+  with their mean depth to water in May before 2014 (2010–14) and after (2015–23),
+  the change per well and per district, a year-by-year state curve and popups
+  with each well's readings. Depth is below ground, so the drought years 2015–18
+  show as a fall and the wet 2020–22 monsoons as a recovery. The Details card has
+  the state curve and the district table.
+- **Cropland cover** (GLAD, Potapov et al. 2021): the Groundwater & crops lens
   switches a raster of the share of land under crops for 2008–2011 ("Before
-  2014"), 2016–2019 ("After 2014") or the change between them, and opens a
-  Cropland card on the right with the state and per-district cultivated area
-  before and after (lakh acres, change in acres, CSV download) and the
-  official irrigated-area statistics. The data show the change, not its cause.
-  With a "Before 2014" or "After 2014" layer on, the Cropland card has a
-  **Blend** slider (0 = 2008–11, 100 = 2016–19) that cross-fades the two
-  rasters (both are drawn, with complementary `raster-opacity`); the legend
-  and the card's subtitle show the blend position. The tabs set it to 0 or 100
-  and the change map is not affected
-- **Years** (Filters card): a slider from the earliest year in the data to 2026
-  with a Play button (one year every 600 ms) and "All years". While it is
-  active, dams and their 3D walls, water links (line, pulse, arrows, hit area,
-  under-construction labels) and canals show only features with a year at or
-  before the slider value; features with no year hide. A year is: dams, opened
-  else began; links, done, else water, began or planned; canals, era "after"
-  counts as 2015 and "before" as 1970 (OSM has no dig date). Years are
-  precomputed on the loaded GeoJSON, one shared `yearFilter()` composes with the
-  status and opening-year filters, and the readout (with the shipped data,
-  "By 1990: 13 dams · 1 links · canals after 2014 hidden"; "By 2026" gives 32
-  dams and 18 links) counts dams and distinct links (a link's segments count
-  once, from its earliest dated segment) from the loaded data, not from the
-  rendered tiles. With no canal data the canal clause reads "canal years
-  unavailable". Pump houses are not filtered by year (they carry none)
-- Godavari and Krishna river-bed and flow profiles through the state; hover or
-  drag the slider to follow the river on the map, click to fly there
-- Dams (arch icon) and barrages (gated-deck icon), including the Kaleshwaram
-  barrages and its Mallanna Sagar, Konda Pochamma Sagar and Ranganayaka Sagar
-  reservoirs. Labels show name and gross capacity; clicking one zooms in and
-  opens a popup with height, construction-start–opening years, the average
-  river inflow at that point (HydroRIVERS) and capacity
-- **Dams as 3D walls:** the Dams & reservoirs chip also extrudes the OpenStreetMap
-  crest line of 13 dams (Nagarjuna Sagar, Srisailam, Sriram Sagar, Nizam Sagar,
-  Jurala and others) into a wall as high as the dam; with the proposal on, each
-  proposed reservoir gets a wall as high as its dam. Click a wall for the
-  popup. Heights are exaggerated with the terrain, see DATA_SOURCES.md 6b.
-- **Still to be built:** every dam, reservoir, barrage, pump house, tunnel,
-  water link and canal carries a status (operating, under construction,
-  proposed). The Status filter on the right shows only the operating works or
-  only the pending ones; pending markers have a dashed outline and a cone,
-  approximate positions (a village standing in for the structure) a dotted
-  ring. A "Still to be built" list in the left panel groups them by scheme
-  (Kaleshwaram Link III/V/VI/VII and Baswapur, the Palamuru-Rangareddy
-  reservoirs and tunnels, Dindi, the SLBC tunnel, Devadula Phase III, Sitamma
-  Sagar and the four Sitarama pump houses, Chanaka–Korata, Gouravelli,
-  Tummidihetti, Icchampally …) with the
-  years and last announced target; works with no published location are
-  listed in grey
-- **Tanks** (OpenStreetMap): about 4,800 village tanks, lakes and reservoirs
-  of 0.5 ha or more as blue dots sized by water spread, with their real
-  outlines when zoomed in; click one for its name, area and district. The
-  Tanks card gives the Mission Kakatiya figures (46,531 tanks to restore,
-  27,318 taken up in four phases 2015–18, Government of India report) by
-  district next to what OSM has mapped, and the "Restored 2015–18" view
-  shades each district by tanks taken up, since no source publishes which
-  tanks were restored with their locations
-- **Groundwater** (India-WRIS): 1,605 CGWB and state-department monitoring wells with their mean depth to water in May before 2014 (2010–14) and after (2015–23), the change per well and per district, a year-by-year state curve, and popups with each well's readings. Depth is below ground, so the drought years 2015–18 show as a fall and the wet 2020–22 monsoons as a recovery.
-- **Proposal** (a planning sketch, off by default): the "Show proposal" control
-  in the Filters card draws what it would take to put 85 % of the state's
-  cultivable land under river water, computed by `propose_water.py` from the
-  terrain, HydroRIVERS flows, ESA WorldCover land cover and the works already
-  on the map, under norms set by a lift-irrigation engineering review: new
-  reservoirs sited on the DEM, lift deliveries for districts without a dam
-  site, six multi-stage trunk systems that reuse Kaleshwaram's, Devadula's and
-  Palamuru's stages and add new ones, the cheapest feed for each work (river
-  intake, existing reservoir or canal, trunk stage or cascade), pump stages,
-  tunnels, deep cuts, canals and pressure mains routed inside the state, and
-  the land gravity could then serve. Everything drawn is marked "new" with its
-  TMC; the Proposal card gives the water budget against the Godavari and
-  Krishna shares, every system and work with its lift, route and indicative
-  cost, the per-district need, the engineering caveats and the norms
-- **Sketch a canal** (off by default): the "Sketch" chip in the Navigation card
-  turns on [mapbox-gl-draw](https://github.com/mapbox/mapbox-gl-draw) with only
-  its line and bin buttons, in a Sketch card at the top of the left column.
-  Click vertices, double-click to finish; dragging a vertex or deleting the
-  line updates the card, "Clear" removes it, and switching the chip off leaves
-  no layers behind. If the plugin script from the Mapbox CDN fails to load, the chip
-  stays off and the Sketch card says so. For the line it shows the length in km (haversine over the
-  vertices), an elevation profile read from the Terrain-DEM every 500 m (it
-  fits the line in view and says "terrain still loading" until every sample
-  is a number), start and end elevation, net fall and highest point, and a
-  verdict under the proposal model's norms (`norms` in `web/data/proposal.json`):
-  gravity is feasible when the end is lower than the start by the canal fall
-  plus the stage loss and no ground stands more than the tunnel cover above
-  the falling water line; otherwise it gives the lift needed (highest point
-  minus start plus those losses) and the stretches that would need a tunnel
-  (ground above the water line by more than the tunnel cover) or a deep cut
-  (more than the cut cover). It also lists the districts crossed and the
-  tanks within 2 km. Layer popups are hidden while the tool is on, since
-  clicks place vertices. `web_sketch_test.py` runs the tool headless
-- 27 cities and towns ranked by elevation, with the lowest river beds for
-  comparison; click one to fly to it
-- Both side columns are stacks of small collapsible cards, one per category.
-  Left: Elevation (live readout and colour scale), Rivers (flow and
-  profiles), Water works (links, Kaleshwaram network, still to be built), Tanks,
-  Groundwater and Cities. Right: Terrain (exaggeration, hillshade, contours), Layers
-  (districts, place labels, flow animation, dams, water links, canals,
-  tanks, groundwater, cropland), Filters (works status, dams' opening year) and Navigation (drag
-  mode, orbit, sketch, reset); the Cropland card opens beneath them. Click a card's
-  title to fold it away. Light/dark theme follows the OS setting; the toggle
-  in the left panel overrides it
-- Mouse: left-drag pans (switch "Left-drag" to *Rotates* for a full 360° orbit
-  with tilt), right-drag or Ctrl-drag always rotates and tilts, scroll zooms
+  2014"), 2016–2019 ("After 2014") or the change between them. The timeline
+  picks the period when the Depth or Cover view is on (before 2015 is "before",
+  otherwise "after"); with Change the timeline is hidden. Details opens a card
+  with the state and per-district cultivated area before and after (lakh acres,
+  change in acres, CSV download) and the official irrigated-area statistics. A
+  Blend slider cross-fades the two rasters when one of the periods is on. The
+  data show the change, not its cause.
+- The relief turns grey in this lens so the overlay reads.
+
+### Proposal
+
+A planning sketch, off by default, in the Proposal lens: what it would take to
+put 85 % of the state's cultivable land under river water, computed by
+`propose_water.py` from the terrain, HydroRIVERS flows, ESA WorldCover land cover
+and the works already on the map, under norms set by a lift-irrigation engineering
+review: new reservoirs sited on the DEM, lift deliveries for districts without a
+dam site, six multi-stage trunk systems that reuse Kaleshwaram's, Devadula's and
+Palamuru's stages and add new ones, the cheapest feed for each work (river
+intake, existing reservoir or canal, trunk stage or cascade), pump stages,
+tunnels, deep cuts, canals and pressure mains routed inside the state, and the
+land gravity could then serve. Everything drawn is marked "new" with its TMC. The
+Details card gives the water budget against the Godavari and Krishna shares,
+every system and work with its lift, route and indicative cost, the per-district
+need, the engineering caveats and the norms. The proposal's dams, pools and
+pumps appear in 3D; a proposed reservoir is drawn at the full-reservoir level it
+was sited for.
+
+### Follow the water (tour)
+
+"Follow the water" in the Rivers & lifts lens steps the camera through seven
+stops, from Medigadda Barrage on the Godavari up to Konda Pochamma Sagar:
+Medigadda → Saraswati → Parvati barrages → Sripada Yellampalli → Mid Manair →
+Mallanna Sagar → Konda Pochamma Sagar. Each stop flies to the structure (zoom
+12.5, pitch 62, four seconds) and gives a caption with its name, terrain height,
+capacity, year, the lift link into it (through its pump house and that house's
+MW) and the source. A climb profile along the bottom of the screen shows the
+seven stops by height, with the current one highlighted; the last stop reads
+"Water lifted about 500 m — terrain at the structures, not the pumped head".
+Prev, Pause/Play (auto-advances every seven seconds) and Next move through it;
+Esc, dragging, the wheel or touching the map stops the auto-advance. With reduced
+motion the camera jumps.
+
+### 3D works
+
+Dams, barrages, reservoirs, pump houses, tunnel portals, conduits and the
+proposal are drawn in 3D by `web/three3d.js`, an ES module that loads
+three.js 0.169.0 (core build, from jsDelivr) and adds one custom layer to the
+Mapbox map, so the works sit on the same terrain, lit like the hillshade and
+raised by the same vertical exaggeration as the surface. If the three.js script
+cannot load, the map keeps its 2D icons and labels and nothing else changes.
+
+| Group | Drawn as |
+|---|---|
+| Dams | a prism along the OpenStreetMap crest line, as high as the listed height |
+| Barrages | a deck with piers every 20 m and gates between them |
+| Reservoirs | a flat water surface at the level read from the terrain along the mapped shoreline |
+| Pump houses | boxes sized by installed MW; tunnel portals as arches |
+| Conduits | OpenStreetMap canals dug after 2014: pressure pipes, tunnel tubes and canal troughs |
+| Proposal | dams at their crest, pools at their level, pressure mains, tunnels, pump houses and trunk stages |
+
+Operating works are solid; works under construction are tinted towards amber;
+planned or proposed works are translucent. The 3D models chip in Settings turns
+the whole layer off, and the timeline filters it by year like the 2D works.
+Works at approximate positions (a village standing in for the structure) have
+no 3D model; their dotted ring stays the only mark.
+
+**All 3D shapes are generic stand-ins, not as-built drawings.** The listed
+heights come from the sources in [DATA_SOURCES.md](DATA_SOURCES.md) section 8b,
+where each caveat is spelled out. Where a height is unknown, a dam is drawn 15 m
+high in a lighter colour. Barrage piers and gates are schematic, and tunnels are
+drawn at the surface along their OpenStreetMap line. Reservoir levels are read
+from the terrain, not surveyed full levels. Pump houses are generic buildings
+and several real ones are underground. The Kaleshwaram climb of about 500 m
+(Medigadda to Konda Pochamma Sagar) is terrain at the structures, not the pumped
+head or the water levels.
+
+### Sketch a canal
+
+The "Sketch" chip in the map tools turns on [mapbox-gl-draw](https://github.com/mapbox/mapbox-gl-draw) with only
+its line and bin buttons, in a Sketch card in the Details drawer. Click vertices, double-click to finish; dragging a vertex or deleting the
+line updates the card, "Clear" removes it, and switching the chip off leaves
+no layers behind. If the plugin script from the Mapbox CDN fails to load, the chip
+stays off and the Sketch card says so. For the line it shows the length in km (haversine over the
+vertices), an elevation profile read from the Terrain-DEM every 500 m (it
+fits the line in view and says "terrain still loading" until every sample
+is a number), start and end elevation, net fall and highest point, and a
+verdict under the proposal model's norms (`norms` in `web/data/proposal.json`):
+gravity is feasible when the end is lower than the start by the canal fall
+plus the stage loss and no ground stands more than the tunnel cover above
+the falling water line; otherwise it gives the lift needed (highest point
+minus start plus those losses) and the stretches that would need a tunnel
+(ground above the water line by more than the tunnel cover) or a deep cut
+(more than the cut cover). It also lists the districts crossed and the
+tanks within 2 km. Layer popups are hidden while the tool is on, since
+clicks place vertices. The sketch is a screening check, a planning-sketch
+tool, not a design. `web_sketch_test.py` runs the tool headless.
+
+### Settings and About
+
+Settings holds the exaggeration slider and the layer chips (contours, elevation
+bands, place labels, district lines, flow animation, 3D models); on phones it
+also holds the scene switch and About & sources. About & sources is the sheet
+with every caveat in full, and the credits line of the map.
 
 ### Fonts
 
@@ -292,13 +375,14 @@ uv run python fetch_data.py       # downloads into data/raw (~250 MB); the small
                                   # stable files (DEM, HydroRIVERS, boundaries, GLAD) are fetched
 uv run python prepare_data.py     # mosaic, reproject, clip -> data/
 uv run python make_overlay.py     # map colours and lines -> data/overlay.png (forge3d)
-uv run python build_web_data.py   # profiles, contours, layers -> web/data (and Terrarium tiles -> web/tiles, no longer used by the map)
-uv run python build_flow_raster.py   # optional: river velocity GeoTIFF -> data/flow_velocity.tif
-uv run python publish_flow_raster.py # optional: publish it as a Mapbox raster-array tileset (needs MAPBOX_SECRET_TOKEN or MAPBOX_ALL_ACCESS_TOKEN, and uv);
-                                     # the map then draws river particles instead of the canvas bubbles (see DATA_SOURCES.md 5b)
+uv run python build_web_data.py   # profiles, contours, layers -> web/data (and Terrarium tiles -> web/tiles, no longer used by the map);
+                                  # also web/data/reservoirs.geojson, web/data/conduits.geojson (the 3D works)
+                                  # and web/data/flow_bubbles.geojson (the canvas bubbles, reaches of 300 m³/s or more)
 uv run python propose_water.py    # the Proposal view: reservoir sites, routes, pump houses -> web/data/proposal.*
 uv run python web_smoke_test.py   # headless Edge check of the web map -> out/web_home.png
 uv run python web_sketch_test.py  # headless Edge check of the Sketch tool -> out/web_sketch.png
+uv run python web_ui_test.py      # headless Edge check of the lenses, drawer, timeline and settings
+uv run python web_phase3_test.py  # headless Edge check of the Follow the water tour, fly-to and the proposal
 ```
 
 ## Publish to GitHub Pages
@@ -319,7 +403,7 @@ After rebuilding `web/`, redeploy from the repo root:
 git worktree add ../telangana3d-pages gh-pages          # once per clone
 SRC=$(git rev-parse --short HEAD)
 rm -rf ../telangana3d-pages/data ../telangana3d-pages/tiles
-cp -r web/data web/index.html web/app.js web/style.css ../telangana3d-pages/
+cp -r web/data web/index.html web/app.js web/ui.js web/three3d.js web/tour.js web/style.css web/tour.css ../telangana3d-pages/
 mkdir -p ../telangana3d-pages/.github/workflows && cp .github/workflows/pages.yml ../telangana3d-pages/.github/workflows/
 cd ../telangana3d-pages && git add -A && git commit -m "Deploy the built map from $SRC" && git push
 ```
@@ -330,13 +414,13 @@ project path.
 ### Hosted tiles
 
 State on 29 October 2026, account `tecgeor`: both scripts have been run. Live (latest job `success`):
-`tg-flow`, `tg-tanks`, `tg-tank_points`, `tg-canals` (republished with the numeric `year` property the Years slider
-needs), `tg-contours`, `tg-districts`, `tg-state`, `tg-groundwater` and the raster-array tileset `tg-flow-particles`.
+`tg-flow`, `tg-tanks`, `tg-tank_points`, `tg-canals` (republished with the numeric `year` property the timeline
+needs), `tg-contours`, `tg-districts`, `tg-state`, `tg-groundwater`.
 **Not live: `tg-mask`.** Its job (the world-minus-state polygon) ran for over an hour and then failed with "Error
 processing tileset ..., Please contact support", so `mask` is left out of `tilesets.json` and the map keeps its
 GeoJSON; republishing it (`publish_tilesets.py mask`) was not retried. The tileset ids and the files
 `web/data/tilesets.json` and `web/data/fonts.json` are generated and git-ignored: a fresh clone has neither and
-needs `publish_tilesets.py`, `publish_flow_raster.py` and `upload_font.py` run with your own tokens, or a copy of
+needs `publish_tilesets.py` and `upload_font.py` run with your own tokens, or a copy of
 those two files from a checkout that has them (the tilesets live in the `tecgeor` account, so the copied ids work
 only where the Mapbox token can read that account's published tilesets; not tested with another token).
 
@@ -357,9 +441,9 @@ zoom), publishes each as `<username>.tg-<layer>`, waits for the job and writes
 name is read from the public token (`MAPBOX_TOKEN`, JWT field `u`) or given
 with `--username`. Without the secret token the script exits with code 2.
 The converter adds a numeric `year` property to the `canals` features (era
-"after" = 2015, "before" = 1970) that the Years slider filters on: **tilesets
+"after" = 2015, "before" = 1970) that the timeline filters on: **tilesets
 published before this change lack it, so republish `canals`
-(`publish_tilesets.py canals`) or the Years slider hides every canal on the
+(`publish_tilesets.py canals`) or the timeline hides every canal on the
 hosted-tiles path.** The links are always GeoJSON, so they get theirs at load.
 
 The map reads `data/tilesets.json` at boot: present, the mapped layers become
@@ -370,23 +454,6 @@ points and the proposal are still fetched as small JSON where the panels
 need them. `web/data/` is git-ignored, so copy `tilesets.json` along with the
 rest when you redeploy. Re-run the script after rebuilding the data. Free tier
 and terms: DATA_SOURCES.md, section 1c.
-
-### River particles
-
-`build_flow_raster.py` writes `data/flow_velocity.tif` (two bands, u and v); `publish_flow_raster.py` uploads it
-and publishes `<username>.tg-flow-particles` from `recipes/flow_particles.json`, and writes `"flow_particles"` to
-`tilesets.json`; the map then draws a `raster-particle` layer (`flow-particles`) in place of the canvas bubbles.
-It is live on `tecgeor` (job `success` on 29 October 2026) and was seen rendering along the Godavari near
-Bhadrachalam in headless Edge (the picture differs with the layer on and off, and particles show on the
-rivers; this is a software-GL render, so the look at full speed on a real GPU was not seen). The tileset is built to
-zoom 8 and over-zoomed beyond. What the recipe has to look like: a recipe that selects both bands with **one**
-filter (`["all", ["in", ["bandindex"], ["literal", [1, 2]]]]`, what the repo had) fails with the generic "An error
-occurred during the processing of this job"; a single-band recipe on the same raster succeeds, so the raster is fine;
-the working form is a **vector pair**, one filter per band: `"filter": [["all", ["in", ["bandindex"],
-["literal", [1]]]], ["all", ["in", ["bandindex"], ["literal", [2]]]]]` with `"name": ["literal", "flow"]` and
-`"input_no_data_value": -9999`. Splitting u and v into two single-band sources with source tags also failed
-(`Expected fourth dimension of data to match dimensionality for format uint16 (2) but got size 1`). The map
-requests the tileset's raster-array tiles (`rasterarrays/v1/...`) and gets HTTP 206.
 
 ## Data and choices
 
