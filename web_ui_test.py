@@ -118,6 +118,7 @@ def desktop(browser, problems: list[str], errors: list[str]) -> None:
     page.wait_for_timeout(600)
     check(page.is_visible("#drawer") and page.is_visible("#details-height") and not page.evaluate("document.getElementById('drawer').hasAttribute('inert')"),
           "Details opens the drawer on the height details", problems)
+    page.wait_for_timeout(1500)          # the 0.35 s slide-in starts late under software rendering; the screenshot should show the drawer in place
     page.screenshot(path=str(OUT / "ui_desktop_drawer.png"))
     page.keyboard.press("Escape")
     page.wait_for_timeout(700)
@@ -191,6 +192,7 @@ def phone(browser, problems: list[str], errors: list[str]) -> None:
 
 
 def main() -> int:
+    sys.stdout.reconfigure(errors="replace")   # the messages quote page text ("≈ 500 m") that a cp1252 console cannot print
     OUT.mkdir(exist_ok=True)
     problems: list[str] = []
     errors: list[str] = []
