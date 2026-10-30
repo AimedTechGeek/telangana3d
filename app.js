@@ -1,11 +1,46 @@
-/* Telangana Relief: MapLibre 3D terrain served from local Terrarium tiles. */
+/* Telangana Relief: Mapbox GL JS, the Standard basemap under the atlas layers, Mapbox Terrain-DEM for the 3D surface. */
 'use strict';
 
-const TILE_URL = 'tiles/{z}/{x}/{y}.png';
-const TILE_MAX_ZOOM = 11;          // must match build_web_data.MAX_ZOOM
-const TILE_PX = 256;
-const DEM_BOUNDS = [77, 15, 82, 20];
-const HOME = { center: [79.35, 17.75], zoom: 7.05, pitch: 56, bearing: -18 };
+const DEM_TILESET = 'mapbox://mapbox.mapbox-terrain-dem-v1';   // 3D surface, hillshade, relief tint and the cursor readout
+const RELIEF_TILES = 'https://api.mapbox.com/raster/v1/mapbox.mapbox-terrain-dem-v1/{z}/{x}/{y}.webp';   // no {ratio}: the DEM has no @2x tiles
+const BASEMAPS = { standard: 'mapbox://styles/mapbox/standard', satellite: 'mapbox://styles/mapbox/standard-satellite' };
+let scene = 'map';                 // map | satellite | night (setScene)
+let thematic = false;              // setThematic: relief muted to grey hillshade so an overlay reads
+let roadLabelsShown = false;       // the basemap's road shields and names, only once zoomed in (see updateLabelDensity)
+const basemapKind = () => (scene === 'satellite' ? 'satellite' : 'standard');
+/** The colour tokens the map paints with: the night scene is dark whatever the UI theme. */
+const mapTheme = () => (scene === 'night' ? 'dark' : currentTheme());
+const scenePreset = (theme) => (scene === 'night' ? 'night' : MAP_THEMES[theme].lightPreset);   // day in the light theme, dusk in the dark one
+const reliefVisibility = () => (scene === 'satellite' || thematic ? 'none' : 'visible');   // imagery shows only without the tint
+const labelData = {};              // label source id -> GeoJSON, built from the data at boot; the style picks them up (generateId gives feature ids)
+const INTER_FONT = ['Inter Medium', 'Arial Unicode MS Regular'];   // exists only after upload_font.py has put Inter into the Mapbox account
+let LABEL_FONT = ['DIN Pro Medium', 'Arial Unicode MS Regular'];  // Mapbox-hosted default for every label; Inter when data/fonts.json says it is uploaded
+const fontsInfo = fetch('data/fonts.json').then((r) => (r.ok ? r.json() : null)).catch(() => null);
+let profileLine = { type: 'FeatureCollection', features: [] };
+let profileGradient = ['interpolate', ['linear'], ['line-progress'], 0, '#888888', 1, '#888888'];   // relief colour along the bed, set once profiles load   // the active river's bed as one line, coloured by its elevation
+let scrubPoint = { type: 'FeatureCollection', features: [] };   // the river profile position on the map
+const TILE_PX = 256;               // Web Mercator tile width the metres-per-pixel formula is written for
+const HOME = { center: [79.35, 17.75], zoom: 7.3, pitch: 66, bearing: -18 };
+// Telangana's relief is about 1 km across a 500 km state, so the exaggeration follows the zoom: the slider value applies
+// at district level, more than twice that at state level so the plateau stands out, and never less than the slider close up.
+const EXAGGERATION_BY_ZOOM = [[6, 2.2], [9, 1.6], [12, 1.2], [13.5, 1.0]];
+let terrainRise = 1;                       // 0–1 while the terrain rises into a 3D view
+function terrainExaggeration() {
+  const scale = Number($('exag').value) * terrainRise;
+  return ['interpolate', ['linear'], ['zoom'], ...EXAGGERATION_BY_ZOOM.flatMap(([z, f]) => [z, Math.max(0.01, scale * f)])];
+}
+/** Raises the terrain from flat to full over `ms`, so the switch into 3D shows the elevation differences growing. */
+function riseTerrain(ms = 1800) {
+  const start = performance.now();
+  const step = (now) => {
+    terrainRise = Math.min(1, (now - start) / ms);
+    terrainRise = 1 - (1 - terrainRise) ** 3;
+    map.setTerrain({ source: 'mapbox-dem', exaggeration: terrainExaggeration() });
+    if (terrainRise < 1) requestAnimationFrame(step); else terrainRise = 1;
+  };
+  terrainRise = 0.05;
+  requestAnimationFrame(step);
+}
 const RELIEF_STOPS = [              // metres above sea level -> colour (hypsometric tint)
   [1, '#27624a'], [75, '#3b7f55'], [150, '#6ea263'], [250, '#a9c279'], [350, '#d6d48e'],
   [450, '#dcc07e'], [550, '#cfa06a'], [650, '#b8805a'], [750, '#a0664f'], [850, '#cfbfb3'], [950, '#f4f1ec'],
@@ -26,29 +61,47 @@ const ORBIT_DEG_PER_FRAME = 0.035;
 const MAP_THEMES = {
   light: {
     background: '#e9e6df', mask: '#efece5', maskOpacity: 0.5,
+    districtHover: '#1d4ed8', flowHover: '#00a6ff',
     district: '#3b3a36', districtOpacity: 0.55, state: '#161616', stateCasing: '#ffffff',
-    contour: '#5a4634', flowGlow: '#ffffff', flowDash: '#eef7ff', link: '#c2410c', linkDash: '#fff4e8', cropOpacity: 0.82,
-    canal: '#c2187f', canalOld: '#8a6f84', canalDash: '#fff0fa', canalCasing: '#ffffff',
-    tank: '#3b95dc', tankEdge: '#1b5a93', tankRamp: ['#e6eef5', '#1d5f99'],
+    contour: '#5a4634', flowDash: '#eef7ff', profileCasing: 'rgba(20,28,40,0.9)', cropOpacity: 0.82,
+    // Water grammar: blue = river water (darker and wider = more of it), orange = water moved by people, teal = proposed.
+    link: '#c2410c', linkDash: '#fff4e8',
+    canal: '#c2410c', canalMain: '#9a3412', canalTunnelCasing: '#fed7aa', canalOld: '#a8836b', canalBuilding: '#ea580c', canalDash: '#fff4e8', canalCasing: '#ffffff',
+    tank: '#5aa6e0', tankEdge: '#1f6fc4', tankRamp: ['#e6eef5', '#1d5f99'],
     gwDepth: [[0, '#0b5fa5'], [2, '#4f9bd8'], [5, '#a9d4ef'], [10, '#f2e2b8'], [20, '#d98b3c'], [40, '#7a2e0d']],   // metres below ground
     gwChange: [[-6, '#b2182b'], [-2, '#ef8a62'], [0, '#f4f1ea'], [2, '#67a9cf'], [6, '#2166ac']], gwStroke: '#ffffff',       // fell … rose
-    prop: '#0f766e', propPool: '#4f46e5', propPump: '#b45309', propTrunk: '#7c3aed', propCmdExisting: 'rgba(34,197,94,0.22)', propCmdNew: 'rgba(20,184,166,0.32)',
-    flow: ['#86d9e3', '#36aee6', '#2566d8', '#1a3aa6', '#5f2aa8'],   // FLOW_CLASSES: cyan -> blue -> navy -> purple
+    prop: '#0f766e', propPool: '#2dd4bf', propPoolOpacity: 0.5, propPoolLine: '#0f766e', propPump: '#115e59', propTrunk: '#0d9488', propTrunkExisting: '#5f9e98', propPulse: '#ffffff',
+    propCmdExisting: 'rgba(13,148,136,0.12)', propCmdNew: 'rgba(20,184,166,0.30)',
+    flow: ['#9cd3f0', '#4aa3e0', '#1f6fc4', '#0d3f8a'],   // FLOW_CLASSES: pale -> navy, one hue
+    sketch: '#e8590c', sketchHalo: 'rgba(255,255,255,0.9)',   // the Sketch tool's dashed line and its outline
     shadow: '#2b2016', highlight: '#fff4e2', accent: '#4e3d2e',
-    sky: { 'sky-color': '#cfe3f6', 'horizon-color': '#eef3f8', 'fog-color': '#e9e6df' },
+    thematicShadow: 'rgba(43,32,22,0.35)', thematicHighlight: '#ffffff',   // the grey hillshade under a thematic overlay
+    label: '#1f1d1a', labelMuted: '#6b6560', labelHalo: 'rgba(255,255,255,0.95)', labelActive: '#c2410c', iconBg: '#ffffff', damIcon: '#b4532a', damIconUnknown: '#dfb39d', barrageIcon: '#0f7f78', peakIcon: '#1a3aa6',
+    // Standard basemap kept behind the atlas: water as the tank blue so lakes, tanks and rivers agree, greenspace muted so it does not fight the relief tint
+    basemapColours: { colorWater: '#5aa6e0', colorGreenspace: '#d5ddc9', colorLand: '#e9e6df', colorRoads: '#f7f4ee', colorMotorways: '#e6cfae', colorTrunks: '#ede2cf', colorPlaceLabels: '#6b6560', colorRoadLabels: '#6b6560' },
+    lightPreset: 'day', reliefOpacity: [[6, 0.88], [10, 0.72], [13.5, 0.58]],
+    fog: { range: [0.6, 9], color: '#e3e9ee', 'high-color': '#b7d0ea', 'space-color': '#e9f0f6', 'horizon-blend': 0.08, 'star-intensity': 0 },
   },
   dark: {
     background: '#0e0f12', mask: '#0e0f12', maskOpacity: 0.58,
+    districtHover: '#ffffff', flowHover: '#9fe8ff',
     district: '#d8d4cc', districtOpacity: 0.38, state: '#f0efec', stateCasing: '#000000',
-    contour: '#d8d4cc', flowGlow: '#0b1a33', flowDash: '#ffffff', link: '#fb923c', linkDash: '#fff7ed', cropOpacity: 0.9,
-    canal: '#ff6fd0', canalOld: '#d2b4c8', canalDash: '#fff0fa', canalCasing: '#2a0d20',
-    tank: '#4fb3ff', tankEdge: '#bfe3ff', tankRamp: ['#161c26', '#3f8fd0'],
+    contour: '#d8d4cc', flowDash: '#ffffff', profileCasing: 'rgba(0,0,0,0.9)', cropOpacity: 0.9,
+    link: '#fb923c', linkDash: '#fff7ed',
+    canal: '#fb923c', canalMain: '#fdba74', canalTunnelCasing: '#7c2d12', canalOld: '#a08876', canalBuilding: '#f97316', canalDash: '#fff7ed', canalCasing: '#2a1408',
+    tank: '#3f8fd0', tankEdge: '#9fd0ff', tankRamp: ['#161c26', '#3f8fd0'],
     gwDepth: [[0, '#9fd8ff'], [2, '#5eb0ea'], [5, '#2f6f9f'], [10, '#4a4238'], [20, '#b86b2a'], [40, '#ff9d5c']],
     gwChange: [[-6, '#ff6b6b'], [-2, '#c97a6a'], [0, '#2a2f38'], [2, '#5f9bd0'], [6, '#8fd0ff']], gwStroke: '#0b1a33',
-    prop: '#2dd4bf', propPool: '#818cf8', propPump: '#fbbf24', propTrunk: '#c4b5fd', propCmdExisting: 'rgba(74,222,128,0.20)', propCmdNew: 'rgba(45,212,191,0.30)',
-    flow: ['#2f96a8', '#3cbbea', '#6a9cff', '#a9bdff', '#dcaaff'],   // FLOW_CLASSES: teal -> sky -> blue -> lilac on the dark surface
+    prop: '#2dd4bf', propPool: '#2dd4bf', propPoolOpacity: 0.4, propPoolLine: '#5eead4', propPump: '#99f6e4', propTrunk: '#5eead4', propTrunkExisting: '#3c8f88', propPulse: '#ffffff',
+    propCmdExisting: 'rgba(45,212,191,0.10)', propCmdNew: 'rgba(45,212,191,0.26)',
+    flow: ['#3f7fa8', '#4aa8e8', '#7ab8ff', '#b5d8ff'],   // FLOW_CLASSES: dim steel -> pale blue on the dark surface
+    sketch: '#ffd43b', sketchHalo: 'rgba(0,0,0,0.75)',
     shadow: '#000000', highlight: '#b9a68c', accent: '#000000',
-    sky: { 'sky-color': '#0b1020', 'horizon-color': '#1b2233', 'fog-color': '#0e0f12' },
+    thematicShadow: 'rgba(0,0,0,0.45)', thematicHighlight: '#8a8a8a',
+    label: '#f1efe9', labelMuted: '#b5b0a8', labelHalo: 'rgba(14,15,18,0.92)', labelActive: '#fb923c', iconBg: '#1b1e26', damIcon: '#f2996b', damIconUnknown: '#9c6650', barrageIcon: '#4fd1c5', peakIcon: '#7ab8ff',
+    basemapColours: { colorWater: '#1f4f7a', colorGreenspace: '#1a2320', colorLand: '#14161a', colorRoads: '#2b2e35', colorMotorways: '#4b4438', colorTrunks: '#3b3933', colorPlaceLabels: '#b5b0a8', colorRoadLabels: '#b5b0a8' },
+    lightPreset: 'dusk', reliefOpacity: [[6, 0.82], [10, 0.66], [13.5, 0.52]],
+    fog: { range: [0.6, 9], color: '#0f1520', 'high-color': '#1a2a45', 'space-color': '#04060c', 'horizon-blend': 0.06, 'star-intensity': 0.4 },
   },
 };
 
@@ -68,26 +121,34 @@ function currentTheme() {
 function setTheme(theme) {
   document.documentElement.dataset.theme = theme;
   try { localStorage.setItem('theme', theme); } catch (_) { /* storage unavailable */ }
-  if (map && map.getLayer('background')) { applyMapTheme(); renderFlowLegend(); renderGwLegend(); syncArrowImage(); }
+  if (map && map.getLayer('relief')) ensureIcons(mapTheme()).then(() => { applyMapTheme(); renderFlowLegend(); renderGwLegend(); syncArrowImage(); sketchRestyle(); });
 }
 try { const saved = localStorage.getItem('theme'); if (saved) document.documentElement.dataset.theme = saved; } catch (_) { /* ignore */ }
 
 // ---------- style ----------
+// Relief tint: the Terrain-DEM tiles read as a plain raster and decoded by raster-color-mix
+// (Mapbox encoding, channels 0–1): height = −10000 + (R·256² + G·256 + B)·0.1.
+const DEM_COLOR_MIX = [255 * 6553.6, 255 * 25.6, 255 * 0.1, -10000];
+const RELIEF_RANGE_M = 1000;        // the colour ramp is sampled over 0–1000 m
+const BAND_M = 100;
+const bandsOn = () => document.querySelector('.chip[data-toggle="bands"]').getAttribute('aria-pressed') === 'true';
 function reliefExpression(theme) {
-  // Exactly 0 m only occurs on the flat plane outside the DEM, so it takes the page colour.
-  return ['interpolate', ['linear'], ['elevation'], 0, MAP_THEMES[theme].background, ...RELIEF_STOPS.flat()];
+  if (!bandsOn()) return ['interpolate', ['linear'], ['raster-value'], 0, MAP_THEMES[theme].background, ...RELIEF_STOPS.flat()];
+  const bands = [];                        // each 100 m band takes the ramp colour of its middle height, so steps are countable
+  for (let m = BAND_M; m < RELIEF_RANGE_M; m += BAND_M) bands.push(m, rampColour(RELIEF_STOPS, m + BAND_M / 2));
+  return ['step', ['raster-value'], rampColour(RELIEF_STOPS, BAND_M / 2), ...bands];
 }
 
 // River flow styling: width and colour follow log10 of the average discharge.
-const FLOW_WIDTH_STOPS = [[-1, 0.6], [0, 1.0], [1, 1.9], [2, 3.0], [3, 5.2], [3.6, 8]];  // log10(m³/s) -> px
+const FLOW_WIDTH_STOPS = [[-1, 0.6], [0, 1.0], [1, 1.9], [2, 3.0], [3, 5.6], [3.6, 9.5]];  // log10(m³/s) -> px, the biggest rivers widest
 // Colour classes (m³/s lower bounds): stepped so thin lines still read as different flows.
 const FLOW_CLASSES = [
-  { from: 0, label: '< 10' }, { from: 10, label: '10–100' }, { from: 100, label: '100–1K' },
-  { from: 1000, label: '1K–2K' }, { from: 2000, label: '2K+' },
+  { from: 0, label: '< 10' }, { from: 10, label: '10–100' }, { from: 100, label: '100–1K' }, { from: 1000, label: '1K+' },
 ];
 const FLOW_LOG_Q = ['log10', ['max', ['get', 'q'], 0.1]];
-// Animation: changing line-dasharray makes MapLibre rebuild the source tiles, so
-// the page carries one layer per dash phase and only cycles their opacity.
+// Animation: one layer per dash phase (flow-dash-<k>, canals-dash-<k>; the canals use the same rhythm as the rivers); each tick shows the next phase
+// and hides the previous one by opacity, so no paint property that rebuilds line geometry changes per frame.
+// (A single layer with line-dasharray set every tick looked worse on real hardware, October 2026.)
 // Dashes are measured in line widths, so wider rivers get longer dashes that
 // cover more pixels per tick: that is the speed difference. Every class moves
 // one tenth of a period per tick, which always reads as forward motion.
@@ -95,17 +156,32 @@ const FLOW_DASH = { length: 2.2, gap: 2.4 };          // in line widths
 const FLOW_DASH_STEPS = 10;                           // phase layers, all drawn every frame: keep small
 const FLOW_DASH_MIN_CMS = 20;                         // animate streams from 20 m³/s; smaller ones stay static
 const FLOW_TICK_MS = 70;
+const PULSE_MS = 2600, PULSE_LENGTH = 0.22;          // one pulse runs the length of a link or trunk stage in 2.6 s
+const pulseWindow = (p) => [p, Math.min(1, p + PULSE_LENGTH)];
 const FLOW_DASH_OPACITY = 0.9;
+const ROAD_LABEL_ZOOM = 11;                          // the basemap's road names, apart from LABEL_ZOOM (towns and district names)
+const FLOW_DASH_IDS = Array.from({ length: FLOW_DASH_STEPS }, (_, k) => `flow-dash-${k}`);
+const CANAL_DASH_IDS = Array.from({ length: FLOW_DASH_STEPS }, (_, k) => `canals-dash-${k}`);
 let flowStep = 0;
 let flowAnimating = true;
+let styleReady = true;                               // false only while a basemap switch reloads the style
 
-function flowWidthExpr(scale) {
-  const px = (zoomScale) => ['interpolate', ['linear'], FLOW_LOG_Q, ...FLOW_WIDTH_STOPS.flatMap(([l, w]) => [l, w * scale * zoomScale])];
+/** Beyond a distance from the view centre, hide the busiest labels when the map is tilted steeply (the far side of a 3D view is where they pile up). Symbol layers only: Mapbox rejects both expressions in a circle layer's filter, so tanks-dots is not covered. The distance allowed shrinks as the pitch grows. */
+const DECLUTTER_PITCH = 55;
+const declutterFilter = () => ['any', ['<=', ['pitch'], DECLUTTER_PITCH],
+  ['<', ['distance-from-center'], ['interpolate', ['linear'], ['pitch'], DECLUTTER_PITCH, 0.5, 60, 0.4, 70, 0.22]]];
+const withDeclutter = (filter) => (filter ? ['all', filter, declutterFilter()] : declutterFilter());
+function flowWidthExpr(scale, hoverBoost) {
+  const px = (zoomScale) => {
+    const width = ['interpolate', ['linear'], FLOW_LOG_Q, ...FLOW_WIDTH_STOPS.flatMap(([l, w]) => [l, w * scale * zoomScale])];
+    return hoverBoost ? ['*', width, ['case', ['boolean', ['feature-state', 'hover'], false], hoverBoost, 1]] : width;
+  };
   return ['interpolate', ['linear'], ['zoom'], 6, px(0.7), 9, px(1.3), 12, px(2.2)];
 }
 function flowColorExpr(theme) {
   const colours = MAP_THEMES[theme].flow;
-  return ['step', ['get', 'q'], colours[0], ...FLOW_CLASSES.slice(1).flatMap((cls, i) => [cls.from, colours[i + 1]])];
+  const byClass = ['step', ['get', 'q'], colours[0], ...FLOW_CLASSES.slice(1).flatMap((cls, i) => [cls.from, colours[i + 1]])];
+  return ['case', ['boolean', ['feature-state', 'hover'], false], MAP_THEMES[theme].flowHover, byClass];
 }
 /** The dash pattern shifted by `step` tenths of a period, so successive steps slide the dashes downstream. */
 function dashPatternAt(step) {
@@ -124,12 +200,21 @@ function cropCoords() {
   const [w, s, e, n] = cropBounds;
   return [[w, n], [e, n], [e, s], [w, s]];
 }
+let cropBlend = 0;                         // 0 = 2008-11 only, 100 = 2016-19 only; both rasters show in before and after mode
+const cropVisible = (mode) => (cropMode === 'before' || cropMode === 'after' ? mode !== 'change' : cropMode === mode);
+/** Complementary opacities; the sum is lifted toward 1 in the middle, where two translucent rasters would otherwise look thinner. */
+function cropOpacityFor(mode, t) {
+  if (mode === 'change') return t.cropOpacity;
+  const w = (mode === 'after' ? cropBlend : 100 - cropBlend) / 100;
+  const cover = t.cropOpacity + (1 - t.cropOpacity) * 4 * (cropBlend / 100) * (1 - cropBlend / 100);
+  return w * cover;
+}
 function cropLayers(t) {
   if (!cropBounds) return [];
   return ['before', 'after', 'change'].map((mode) => ({
     id: `crop-${mode}`, type: 'raster', source: `crop-${mode}`,
-    layout: { visibility: cropMode === mode ? 'visible' : 'none' },
-    paint: { 'raster-opacity': t.cropOpacity, 'raster-resampling': 'linear', 'raster-fade-duration': 0 },
+    layout: { visibility: cropVisible(mode) ? 'visible' : 'none' },
+    paint: { 'raster-opacity': cropOpacityFor(mode, t), 'raster-resampling': 'linear', 'raster-fade-duration': 0 },
   }));
 }
 function cropSources() {
@@ -138,18 +223,23 @@ function cropSources() {
     `crop-${mode}`, { type: 'image', url: `data/cropland_${mode}.png`, coordinates: cropCoords() }]));
 }
 
-// Canals (OpenStreetMap): thin dashed cyan lines, dashes sliding in the flow direction.
+// Canals (OpenStreetMap): the orange family of water moved by people, dashes sliding in the flow direction at the rivers' rhythm.
 let canalMode = 'after';                   // off | after | all
 let canalsLoaded = false;
-const CANAL_DASH = [3, 2.2];               // in line widths, longer than the river dashes
+let linksData = null, canalsData = null;   // GeoJSON with the precomputed 'year' property, reused when the basemap reloads the style
 // Status filter (all | built | pending) shared by dams, pump houses, links and canals.
 let statusMode = 'all';
 const isPending = (status) => status !== 'operational';
 const statusShown = (status) => statusMode === 'all' || (statusMode === 'pending') === isPending(status);
 const STATUS_LABEL = { operational: 'operating', 'in progress': 'under construction', 'under construction': 'under construction', planned: 'planned', proposed: 'proposed' };
+// Years slider: features show when their year <= yearValue; undated features hide while it is active.
+let yearActive = false, yearValue = 2026;
+const YEAR_MAX = 2026, CANAL_YEAR = { after: 2015, before: 1970 };
+const yearFilter = () => (yearActive ? ['all', ['has', 'year'], ['<=', ['get', 'year'], yearValue]] : ['literal', true]);
 const linkStatusFilter = () => (statusMode === 'all' ? ['literal', true] : [statusMode === 'built' ? '==' : '!=', ['get', 'status'], 'operational']);
 // OSM marks the Sitarama canals under construction; every other canal counts as built.
-const canalFilter = () => ['all', canalMode === 'all' ? ['literal', true] : ['==', ['get', 'era'], 'after'],
+const linkFilter = () => ['all', linkStatusFilter(), yearFilter()];
+const canalFilter = () => ['all', canalMode === 'all' ? ['literal', true] : ['==', ['get', 'era'], 'after'], yearFilter(),
                            statusMode === 'all' ? ['literal', true] : ['==', ['get', 'construction'], statusMode === 'pending']];
 function canalLayers(t) {
   if (!canalsLoaded) return [];
@@ -157,47 +247,45 @@ function canalLayers(t) {
   const isNew = ['==', ['get', 'era'], 'after'];
   const isTunnel = ['==', ['get', 'kind'], 'tunnel'];
   const isMain = ['==', ['get', 'kind'], 'main'];
+  const isBuilding = ['==', ['get', 'construction'], true];
   // MapLibre allows one zoom interpolation per expression, so the kind and era cases sit inside each stop.
   // `s` scales the base width per kind; older canals draw at 60 %.
   const kindWidth = (base, s) => ['case',
     isTunnel, ['case', isNew, base * s.tunnel, base * 0.6 * s.tunnel],
     isMain, ['case', isNew, base * s.main, base * 0.6 * s.main],
     ['case', isNew, base * s.canal, base * 0.6 * s.canal]];
-  const width = (s) => ['interpolate', ['linear'], ['zoom'], 6, kindWidth(1.4, s), 9, kindWidth(2.6, s), 12, kindWidth(4.2, s)];
+  // Pressure mains thin to hairlines between z12 and z13.5 (`close`): the 3D pipes carry them there, and the 30–100 parallel OSM ways
+  // at a Kaleshwaram pump house, 9–20 m apart, would otherwise fill a 300–400 m corridor with casing and dashes (a hatched slab at z14–15.5).
+  const width = (s, close = { ...s, main: s.main * 0.15 }) => ['interpolate', ['linear'], ['zoom'], 6, kindWidth(1.2, s), 9, kindWidth(2, s), 12, kindWidth(4, s), 13.5, kindWidth(4, close)];
   return [
     // Casing: canals get a thin contrast edge; tunnels a wide one so they read as a tube; mains in between.
     { id: 'canals-casing', type: 'line', source: 'canals', filter: canalFilter(), layout: { 'line-join': 'round', 'line-cap': 'round', visibility: vis },
-      paint: { 'line-color': t.canalCasing, 'line-width': width({ canal: 1.9, tunnel: 3.2, main: 2.4 }),
+      paint: { 'line-color': ['case', isTunnel, t.canalTunnelCasing, t.canalCasing], 'line-width': width({ canal: 1.6, tunnel: 2.6, main: 1.9 }),
                'line-opacity': ['case', isNew, ['case', isTunnel, 0.9, 0.75], 0.4] } },
+    // Core: solid where built, dashed [2,2] where OSM marks it under construction (as the links); a tunnel is a thin core in a wide casing.
     { id: 'canals-line', type: 'line', source: 'canals', filter: canalFilter(), layout: { 'line-join': 'round', 'line-cap': 'round', visibility: vis },
-      paint: { 'line-color': ['case', isNew, t.canal, t.canalOld], 'line-width': width({ canal: 1, tunnel: 1.6, main: 1.2 }),
-               'line-opacity': ['case', isNew, 0.95, 0.7],
-               'line-dasharray': ['case', isTunnel, ['literal', [0.6, 1.1]], isMain, ['literal', [1, 0]], ['literal', CANAL_DASH]] } },
+      paint: { 'line-color': ['case', isNew, ['case', isBuilding, t.canalBuilding, isMain, t.canalMain, t.canal], t.canalOld],
+               'line-width': width({ canal: 1, tunnel: 0.8, main: 1.3 }),
+               'line-opacity': ['case', isNew, 0.95, 0.6],
+               'line-dasharray': ['case', isBuilding, ['literal', [2, 2]], ['literal', [1, 0]]] } },
     ...Array.from({ length: FLOW_DASH_STEPS }, (_, k) => ({
-      id: `canals-dash-${k}`, type: 'line', source: 'canals', filter: ['all', canalFilter(), ['==', ['get', 'directed'], true]],
+      id: `canals-dash-${k}`, type: 'line', source: 'canals', filter: canalDashFilter(),
       layout: { 'line-join': 'round', 'line-cap': 'butt', visibility: vis },
-      paint: { 'line-color': t.canalDash, 'line-width': width({ canal: 0.45, tunnel: 0.7, main: 0.45 }),
-               'line-dasharray': ['literal', canalDashAt(k)], 'line-opacity': k === flowStep ? 0.9 : 0 } })),
+      paint: { 'line-color': t.canalDash, 'line-width': width({ canal: 0.45, tunnel: 0.35, main: 0.55 }, { canal: 0.45, tunnel: 0.35, main: 0 }),
+               'line-dasharray': dashPatternAt(k), 'line-opacity': k === flowStep ? 0.9 : 0 } })),
     { id: 'canals-hit', type: 'line', source: 'canals', filter: canalFilter(), layout: { visibility: vis },
       paint: { 'line-color': '#000000', 'line-opacity': 0, 'line-width': 12 } },
   ];
 }
-/** Canal dash pattern shifted by `step` tenths of a period (same mechanism as the rivers). */
-function canalDashAt(step) {
-  const round = (v) => Math.round(v * 100) / 100;
-  const [length, gap] = CANAL_DASH, period = length + gap;
-  const p = round((step % FLOW_DASH_STEPS) / FLOW_DASH_STEPS * period);
-  if (p <= gap) return [0, p, length, round(gap - p)];
-  const shift = round(p - gap);
-  return [round(length - shift), gap, shift, 0];
-}
+/** Moving dashes only on canals that carry water: not on those OSM marks under construction. */
+const canalDashFilter = () => ['all', canalFilter(), ['==', ['get', 'directed'], true], ['!=', ['get', 'construction'], true]];
 function applyCanalFilters() {
   if (!canalsLoaded) return;
   const vis = canalMode === 'off' ? 'none' : 'visible';
-  const ids = ['canals-casing', 'canals-line', 'canals-hit', ...Array.from({ length: FLOW_DASH_STEPS }, (_, k) => `canals-dash-${k}`)];
+  const ids = ['canals-casing', 'canals-line', 'canals-hit', ...CANAL_DASH_IDS];
   for (const id of ids) {
     map.setLayoutProperty(id, 'visibility', vis);
-    map.setFilter(id, id.startsWith('canals-dash') ? ['all', canalFilter(), ['==', ['get', 'directed'], true]] : canalFilter());
+    map.setFilter(id, id.startsWith('canals-dash') ? canalDashFilter() : canalFilter());
   }
 }
 function setCanalMode(mode) {
@@ -213,9 +301,11 @@ let tankMode = 'tanks';                    // off | tanks | kakatiya
 let tanksLoaded = false;
 let tankSummary = null;
 const TANK_POLYGON_ZOOM = 9;               // real outlines from here up, centroid dots below
-const districtLabels = new Map();          // district -> label element (carries the Mission Kakatiya count)
+const TANK_DOT_ZOOM = 7;                   // centroid dots from here to the polygons (Since 2014: the tanks are the story)
+const TANK_DOT_ZOOM_RIVERS = 8.5;          // in the Rivers & lifts lens 4,800 dots at the lens's z8.3 would drown the thin lifts, so they wait a step
 const districtCentres = new Map();         // district -> [lon, lat]
 const tankVisibility = () => (tankMode !== 'off' && statusMode !== 'pending' ? 'visible' : 'none');   // tanks all exist today
+const tankDotMinZoom = () => (tankMode === 'kakatiya' ? TANK_DOT_ZOOM : TANK_DOT_ZOOM_RIVERS);
 function tankLayers(t) {
   if (!tanksLoaded) return [];
   const vis = tankVisibility();
@@ -227,10 +317,10 @@ function tankLayers(t) {
     { id: 'tanks-kakatiya', type: 'fill', source: 'districts', layout: { visibility: tankMode === 'kakatiya' ? 'visible' : 'none' },
       paint: { 'fill-color': kakatiyaFill(t), 'fill-opacity': 0.7 } },
     { id: 'tanks-fill', type: 'fill', source: 'tanks', minzoom: TANK_POLYGON_ZOOM, layout: { visibility: vis },
-      paint: { 'fill-color': t.tank, 'fill-opacity': 0.72 } },
+      paint: { 'fill-color': t.tank, 'fill-opacity': 0.85 } },
     { id: 'tanks-outline', type: 'line', source: 'tanks', minzoom: TANK_POLYGON_ZOOM, layout: { visibility: vis, 'line-join': 'round' },
       paint: { 'line-color': t.tankEdge, 'line-width': 0.8, 'line-opacity': 0.8 } },
-    { id: 'tanks-dots', type: 'circle', source: 'tank-points', maxzoom: TANK_POLYGON_ZOOM, layout: { visibility: vis },
+    { id: 'tanks-dots', type: 'circle', source: 'tank-points', minzoom: tankDotMinZoom(), maxzoom: TANK_POLYGON_ZOOM, layout: { visibility: vis },
       paint: { 'circle-radius': radius, 'circle-color': t.tank, 'circle-opacity': 0.85, 'circle-stroke-color': t.tankEdge, 'circle-stroke-width': 0.5 } },
   ];
 }
@@ -259,6 +349,7 @@ function mixColour(a, b, f) {
 function applyTankVisibility() {
   if (!tanksLoaded) return;
   for (const id of ['tanks-fill', 'tanks-outline', 'tanks-dots']) map.setLayoutProperty(id, 'visibility', tankVisibility());
+  map.setLayerZoomRange('tanks-dots', tankDotMinZoom(), TANK_POLYGON_ZOOM);
   map.setLayoutProperty('tanks-kakatiya', 'visibility', tankMode === 'kakatiya' ? 'visible' : 'none');
 }
 function setTankMode(mode) {
@@ -266,6 +357,7 @@ function setTankMode(mode) {
   for (const button of document.querySelectorAll('[data-tank]')) button.setAttribute('aria-pressed', String(button.dataset.tank === mode));
   document.body.classList.toggle('tank-mk', mode === 'kakatiya');
   applyTankVisibility();
+  applyDistrictLabels();
   if (mode === 'off') tankPopup.remove();
 }
 for (const button of document.querySelectorAll('[data-tank]')) button.addEventListener('click', () => setTankMode(button.dataset.tank));
@@ -305,7 +397,7 @@ function gwLayers(t) {
 }
 function applyGwMode() {
   if (!gwLoaded) return;
-  const t = MAP_THEMES[currentTheme()];
+  const t = MAP_THEMES[mapTheme()];
   const field = gwField();
   map.setLayoutProperty('gw-districts', 'visibility', gwVisibility());
   map.setLayoutProperty('gw-wells', 'visibility', gwVisibility());
@@ -327,82 +419,185 @@ let proposalMode = 'off';                  // off | on
 let proposalLoaded = false;
 let proposalData = null;                   // proposal.json
 let proposalGeo = null;                    // proposal.geojson, also handed to the map source
-const proposalMarkers = [];
 const propVisibility = () => (proposalMode === 'on' ? 'visible' : 'none');
+// Elevated line: the `hg` array (water height above ground, sampled evenly along the line) sets the height at each point.
+const RIBBON = { 'line-elevation-reference': 'ground', 'line-z-offset': ['at-interpolated', ['*', ['line-progress'], ['-', ['length', ['get', 'hg']], 1]], ['get', 'hg']] };
 function proposalLayers(t) {
   if (!proposalLoaded) return [];
   const vis = propVisibility();
   const kind = (k) => ['==', ['get', 'kind'], k];
+  const near = { minzoom: 8 };   // below zoom 8 only the trunks and the pools draw: the story at state level
   return [
-    { id: 'prop-command-existing', type: 'fill', source: 'proposal', filter: kind('command_existing'), layout: { visibility: vis }, paint: { 'fill-color': t.propCmdExisting } },
-    { id: 'prop-command-new', type: 'fill', source: 'proposal', filter: kind('command_new'), layout: { visibility: vis }, paint: { 'fill-color': t.propCmdNew } },
-    { id: 'prop-pool', type: 'fill', source: 'proposal', filter: kind('pool'), layout: { visibility: vis }, paint: { 'fill-color': t.propPool, 'fill-opacity': 0.6 } },
-    { id: 'prop-pool-line', type: 'line', source: 'proposal', filter: kind('pool'), layout: { visibility: vis }, paint: { 'line-color': t.propPool, 'line-width': 1.5 } },
-    { id: 'prop-canal', type: 'line', source: 'proposal', filter: kind('canal'), layout: { visibility: vis, 'line-cap': 'round' },
-      paint: { 'line-color': t.prop, 'line-width': ['interpolate', ['linear'], ['zoom'], 6, 1.8, 10, 3.4] } },
-    { id: 'prop-tunnel', type: 'line', source: 'proposal', filter: kind('tunnel'), layout: { visibility: vis },
+    { id: 'prop-command-existing', type: 'fill', source: 'proposal', ...near, filter: kind('command_existing'), layout: { visibility: vis }, paint: { 'fill-color': t.propCmdExisting } },
+    { id: 'prop-command-new', type: 'fill', source: 'proposal', ...near, filter: kind('command_new'), layout: { visibility: vis }, paint: { 'fill-color': t.propCmdNew } },
+    { id: 'prop-pool', type: 'fill', source: 'proposal', filter: kind('pool'), layout: { visibility: vis }, paint: { 'fill-color': t.propPool, 'fill-opacity': t.propPoolOpacity } },
+    { id: 'prop-pool-line', type: 'line', source: 'proposal', filter: kind('pool'), layout: { visibility: vis }, paint: { 'line-color': t.propPoolLine, 'line-width': 1.5 } },
+    // Routes ride the terrain as ribbons: lifted off the ground by the water's height above it (aqueducts, rising mains), on it elsewhere.
+    { id: 'prop-canal', type: 'line', source: 'proposal', ...near, filter: ['in', ['get', 'kind'], ['literal', ['canal', 'cut', 'aqueduct', 'pressure main']]],
+      layout: { visibility: vis, 'line-cap': 'round', 'line-join': 'round', ...RIBBON },
+      paint: { 'line-color': ['match', ['get', 'kind'], 'pressure main', t.propPump, t.prop], 'line-width': ['interpolate', ['linear'], ['zoom'], 6, 2.2, 10, 4.2] } },
+    { id: 'prop-tunnel', type: 'line', source: 'proposal', ...near, filter: kind('tunnel'), layout: { visibility: vis },
       paint: { 'line-color': t.prop, 'line-width': ['interpolate', ['linear'], ['zoom'], 6, 2.6, 10, 4.8], 'line-dasharray': [0.5, 1.3] } },
-    { id: 'prop-delivery', type: 'circle', source: 'proposal', filter: kind('delivery'), layout: { visibility: vis },
+    { id: 'prop-delivery', type: 'circle', source: 'proposal', ...near, filter: kind('delivery'), layout: { visibility: vis },
       paint: { 'circle-radius': 7, 'circle-color': t.prop, 'circle-stroke-color': '#ffffff', 'circle-stroke-width': 1.5 } },
-    { id: 'prop-pump', type: 'circle', source: 'proposal', filter: kind('pump'), layout: { visibility: vis },
+    { id: 'prop-pump', type: 'circle', source: 'proposal', ...near, filter: kind('pump'), layout: { visibility: vis },
       paint: { 'circle-radius': 5, 'circle-color': t.propPump, 'circle-stroke-color': '#ffffff', 'circle-stroke-width': 1.2 } },
-    { id: 'prop-trunk-existing', type: 'line', source: 'proposal', filter: ['all', kind('trunk'), ['==', ['get', 'existing'], true]], layout: { visibility: vis },
-      paint: { 'line-color': t.propTrunk, 'line-width': 2, 'line-opacity': 0.7, 'line-dasharray': [2, 1.5] } },
-    { id: 'prop-trunk-new', type: 'line', source: 'proposal', filter: ['all', kind('trunk'), ['==', ['get', 'existing'], false]], layout: { visibility: vis, 'line-cap': 'round' },
+    { id: 'prop-trunk-existing', type: 'line', source: 'proposal', filter: ['all', kind('trunk'), ['==', ['get', 'existing'], true]], layout: { visibility: vis, ...RIBBON },
+      paint: { 'line-color': t.propTrunkExisting, 'line-width': 2, 'line-opacity': 0.85, 'line-dasharray': [2, 1.5] } },
+    { id: 'prop-trunk-new', type: 'line', source: 'proposal', filter: ['all', kind('trunk'), ['==', ['get', 'existing'], false]], layout: { visibility: vis, 'line-cap': 'round', 'line-join': 'round', ...RIBBON },
       paint: { 'line-color': t.propTrunk, 'line-width': ['interpolate', ['linear'], ['zoom'], 6, 3.2, 10, 6] } },
+    { id: 'prop-trunk-pulse', type: 'line', source: 'proposal', filter: kind('trunk'), layout: { visibility: vis, 'line-cap': 'round', 'line-join': 'round', ...RIBBON },
+      paint: { 'line-color': 'rgba(0,0,0,0)', 'line-width': ['interpolate', ['linear'], ['zoom'], 6, 3.6, 10, 6.4],
+               'line-trim-offset': pulseWindow(0), 'line-trim-color': t.propPulse, 'line-trim-fade-range': [0.45, 0.45] } },
   ];
+}
+const damsWithAssumedWall = new Set();   // dam indexes whose wall is a 15 m stand-in (height_known false): popup text and the 3D layer
+function exaggerationFactorAt(zoom) {
+  const stops = EXAGGERATION_BY_ZOOM;
+  if (zoom <= stops[0][0]) return stops[0][1];
+  for (let i = 1; i < stops.length; i++) {
+    if (zoom <= stops[i][0]) return stops[i - 1][1] + (stops[i][1] - stops[i - 1][1]) * (zoom - stops[i - 1][0]) / (stops[i][0] - stops[i - 1][0]);
+  }
+  return stops[stops.length - 1][1];
 }
 function setProposalMode(mode) {
   proposalMode = mode;
   for (const button of document.querySelectorAll('[data-proposal]')) button.setAttribute('aria-pressed', String(button.dataset.proposal === mode));
   document.body.classList.toggle('proposal-off', mode === 'off');
-  if (proposalLoaded) for (const layer of proposalLayers(MAP_THEMES[currentTheme()])) map.setLayoutProperty(layer.id, 'visibility', propVisibility());
+  if (mode === 'on') ensureProposal().catch((error) => { debug.errors.push(String(error)); $('toast').textContent = `Proposal failed to load: ${error.message}`; });
+  if (proposalLoaded) {
+    const ids = [...proposalLayers(MAP_THEMES[currentTheme()]).map((layer) => layer.id), 'prop-labels-far', 'prop-labels-near'];
+    for (const id of ids) if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', propVisibility());
+  }
+  window.Atlas3D && Atlas3D.setVisible('proposal', mode === 'on');
   if (mode === 'off') proposalPopup.remove();
 }
 for (const button of document.querySelectorAll('[data-proposal]')) button.addEventListener('click', () => setProposalMode(button.dataset.proposal));
+// proposal.geojson is 4.2 MB, so it loads the first time the proposal is shown (proposal.json is small and loads at boot).
+let proposalPromise = null;
+function ensureProposal() {
+  if (!proposalData) return Promise.resolve(null);       // no proposal.json: nothing to show
+  if (!proposalPromise) {
+    proposalPromise = (async () => {
+      proposalGeo = await loadJson('data/proposal.geojson');
+      map.addSource('proposal', { type: 'geojson', data: proposalGeo, lineMetrics: true });
+      proposalLoaded = true;                              // from here the style builder and the layer lists include the proposal
+      addLayers(proposalLayers(MAP_THEMES[currentTheme()]), 'districts');
+      addProposalMarkers(proposalData, proposalGeo);
+      map.addSource('prop-labels', { type: 'geojson', data: labelData['prop-labels'], generateId: true });
+      await ensureIcons(currentTheme());
+      addLayers(labelLayers(currentTheme()).filter((l) => l.source === 'prop-labels'));
+      for (const id of ['prop-labels-far', 'prop-labels-near']) interactive(id, (p) => labelActions['prop-labels'][p.i]());
+      const ids = [...proposalLayers(MAP_THEMES[currentTheme()]).map((layer) => layer.id), 'prop-labels-far', 'prop-labels-near'];
+      for (const id of ids) if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', propVisibility());
+      window.Atlas3D && Atlas3D.setData('proposal', { data: proposalData, geo: proposalGeo });
+      return { data: proposalData, geo: proposalGeo };
+    })().catch((error) => { proposalPromise = null; throw error; });
+  }
+  return proposalPromise;
+}
 document.body.classList.add('proposal-off');
 
+// Layer switches without a chip in the UI (relief, hillshade, particles) and the chips' initial state: chipOn never throws for a missing chip.
+const TOGGLE_DEFAULTS = { relief: true, hillshade: true, contours: true, bands: false, districts: true, labels: true, flow: true, dams: true, links: true, bed: false, particles: false, models3d: true, pending: true, orbit: false, sketch: false };
 function chipOn(name) {
   const chip = document.querySelector(`.chip[data-toggle="${name}"]`);
-  return chip.getAttribute('aria-pressed') === 'true' ? 'visible' : 'none';
+  const on = chip ? chip.getAttribute('aria-pressed') === 'true' : Boolean(TOGGLE_DEFAULTS[name]);
+  return on ? 'visible' : 'none';
 }
 
+// Hosted tiles: web/data/tilesets.json (written by publish_tilesets.py) maps a static layer to {url, sourceLayer}.
+// Absent -> every layer loads from its GeoJSON file as before. links and proposal always stay GeoJSON (lineMetrics).
+// Read synchronously because the style is built the moment the map is constructed.
+const TILESETS = (() => {
+  try {
+    const request = new XMLHttpRequest();
+    request.open('GET', 'data/tilesets.json', false);
+    request.send();
+    return request.status === 200 ? JSON.parse(request.responseText) : {};
+  } catch (error) { return {}; }
+})();
+const TILESET_KEY = { 'tank-points': 'tank_points' };            // source id -> tileset key where they differ
+const tilesetFor = (sourceId) => TILESETS[TILESET_KEY[sourceId] || sourceId];
+/** A static source: a hosted vector tileset when one is published, otherwise the GeoJSON file. */
+function staticSource(sourceId, file, { promoteId, generateId } = {}) {
+  const tileset = tilesetFor(sourceId);
+  if (tileset) return { type: 'vector', url: tileset.url, ...(promoteId ? { promoteId } : {}) };
+  return { type: 'geojson', data: `data/${file}`, ...(promoteId ? { promoteId } : {}), ...(generateId ? { generateId } : {}) };
+}
+
+/** Which Mapbox Standard slot an atlas layer renders in: polygons and rasters under the basemap's roads, lines above them, labels on top. */
+function slotFor(layer) {
+  if (layer.slot) return layer.slot;           // the contours ask for 'bottom' so they can sit under the mask
+  if (layer.type === 'symbol') return 'top';
+  return ['line', 'circle'].includes(layer.type) ? 'middle' : 'bottom';
+}
+
+function basemapConfig(theme) {
+  const labels = { showPlaceLabels: false, showPointOfInterestLabels: false, showTransitLabels: false, showRoadLabels: roadLabelsShown };
+  return basemapKind() === 'satellite' ? labels : { ...labels, lightPreset: scenePreset(theme), theme: 'faded', show3dObjects: true,
+    show3dFacades: true, show3dTrees: true, ...MAP_THEMES[theme].basemapColours };
+}
+const fogFor = (theme) => (scene === 'night' ? { ...MAP_THEMES.dark.fog, 'star-intensity': 0.6 } : MAP_THEMES[theme].fog);
+const maskOpacityFor = (t) => t.maskOpacity + (thematic ? 0.1 : 0);
+/** Thematic mode greys the hillshade so an overlay reads against it; otherwise the theme's warm light. */
+const hillshadeColours = (t) => (thematic
+  ? { 'hillshade-shadow-color': t.thematicShadow, 'hillshade-highlight-color': t.thematicHighlight, 'hillshade-accent-color': t.thematicShadow }
+  : { 'hillshade-shadow-color': t.shadow, 'hillshade-highlight-color': t.highlight, 'hillshade-accent-color': t.accent });
 function buildStyle(theme) {
   const t = MAP_THEMES[theme];
-  return {
+  const style = {
     version: 8,
+    imports: [{ id: 'basemap', url: BASEMAPS[basemapKind()], config: basemapConfig(theme) }],
+    glyphs: 'mapbox://fonts/mapbox/{fontstack}/{range}.pbf',
+    projection: { name: 'mercator' },
     sources: {
-      // MapLibre wants the terrain mesh and the shading layers on separate sources.
-      dem: { type: 'raster-dem', tiles: [TILE_URL], tileSize: TILE_PX, encoding: 'terrarium',
-             minzoom: 5, maxzoom: TILE_MAX_ZOOM, bounds: DEM_BOUNDS },
-      shade: { type: 'raster-dem', tiles: [TILE_URL], tileSize: TILE_PX, encoding: 'terrarium',
-               minzoom: 5, maxzoom: TILE_MAX_ZOOM, bounds: DEM_BOUNDS },
-      mask: { type: 'geojson', data: 'data/mask.geojson' },
-      state: { type: 'geojson', data: 'data/state.geojson' },
-      districts: { type: 'geojson', data: 'data/districts.geojson' },
-      flow: { type: 'geojson', data: 'data/flow.geojson' },
-      contours: { type: 'geojson', data: 'data/contours.geojson' },
-      links: { type: 'geojson', data: 'data/links.geojson' },
+      'mapbox-dem': { type: 'raster-dem', url: DEM_TILESET, tileSize: 512, maxzoom: 14 },
+      'hillshade-dem': { type: 'raster-dem', url: DEM_TILESET, tileSize: 512, maxzoom: 14 },   // its own source so the hillshade neither shares tiles nor loses them to the terrain's
+      // The same tiles read as colours for the relief tint. Explicit tiles, not the TileJSON url: its template ends in {ratio}, which GL JS fills with @2x on a
+      // devicePixelRatio > 1 screen, and Terrain-DEM has no @2x tiles (404, so no tint on phones and Retina laptops). GL JS still adds the token for api.mapbox.com.
+      'relief-dem': { type: 'raster', tiles: [RELIEF_TILES], tileSize: 512, maxzoom: 14 },
+      mask: staticSource('mask', 'mask.geojson'),
+      state: staticSource('state', 'state.geojson'),
+      districts: staticSource('districts', 'districts.geojson', { promoteId: 'shapeName' }),   // a stable id for the hover state
+      flow: staticSource('flow', 'flow.geojson', { generateId: true }),   // flow.geojson has no id property; vector tiles carry none either, so reach hover works on the GeoJSON path only
+      contours: staticSource('contours', 'contours.geojson'),
+      links: { type: 'geojson', data: linksData || 'data/links.geojson', lineMetrics: true },
       ...cropSources(),
-      ...(canalsLoaded ? { canals: { type: 'geojson', data: 'data/canals.geojson' } } : {}),
-      ...(tanksLoaded ? { tanks: { type: 'geojson', data: 'data/tanks.geojson' }, 'tank-points': { type: 'geojson', data: 'data/tank_points.geojson' } } : {}),
-      ...(gwLoaded ? { groundwater: { type: 'geojson', data: 'data/groundwater.geojson' } } : {}),
-      ...(proposalLoaded ? { proposal: { type: 'geojson', data: proposalGeo } } : {}),
+      ...(canalsLoaded ? { canals: canalsData ? { type: 'geojson', data: canalsData } : staticSource('canals', 'canals.geojson') } : {}),
+      ...(tanksLoaded ? { tanks: staticSource('tanks', 'tanks.geojson'), 'tank-points': staticSource('tank-points', 'tank_points.geojson') } : {}),
+      ...(gwLoaded ? { groundwater: staticSource('groundwater', 'groundwater.geojson') } : {}),
+      ...(proposalLoaded ? { proposal: { type: 'geojson', data: proposalGeo, lineMetrics: true } } : {}),
+      ...Object.fromEntries(Object.entries(labelData).map(([id, data]) => [id, { type: 'geojson', data, generateId: true }])),
+      scrub: { type: 'geojson', data: scrubPoint },
+      profile: { type: 'geojson', data: profileLine, lineMetrics: true },
     },
     layers: [
-      { id: 'background', type: 'background', paint: { 'background-color': t.background } },
-      { id: 'relief', type: 'color-relief', source: 'shade', paint: { 'color-relief-color': reliefExpression(theme) } },
-      { id: 'hillshade', type: 'hillshade', source: 'shade', layout: { visibility: chipOn('hillshade') }, paint: {
-          'hillshade-method': 'standard', 'hillshade-illumination-direction': 315, 'hillshade-exaggeration': 0.75,
-          'hillshade-shadow-color': t.shadow, 'hillshade-highlight-color': t.highlight, 'hillshade-accent-color': t.accent } },
+      { id: 'relief', type: 'raster', source: 'relief-dem', layout: { visibility: reliefVisibility() }, paint: {
+          'raster-color': reliefExpression(theme), 'raster-color-mix': DEM_COLOR_MIX, 'raster-color-range': [0, RELIEF_RANGE_M],
+          'raster-opacity': ['interpolate', ['linear'], ['zoom'], ...t.reliefOpacity.flat()],   // stops: strong at state level, never faded out close up
+          'raster-resampling': 'linear', 'raster-fade-duration': 0 } },
+      { id: 'hillshade', type: 'hillshade', source: 'hillshade-dem', layout: { visibility: 'visible' }, paint: {
+          'hillshade-illumination-direction': 315, 'hillshade-exaggeration': ['interpolate', ['linear'], ['zoom'], 6, 0.8, 10, 0.6],
+          ...hillshadeColours(t) } },
       ...cropLayers(t),                      // under the mask so land outside the state stays dimmed
-      { id: 'mask', type: 'fill', source: 'mask', paint: { 'fill-color': t.mask, 'fill-opacity': t.maskOpacity } },
-      { id: 'contours', type: 'line', source: 'contours', layout: { visibility: chipOn('contours'), 'line-join': 'round' }, paint: {
+      // Under the mask too: outside the state they are dimmed with the rest (clipping them needs a re-published tileset).
+      { id: 'contours', type: 'line', source: 'contours', slot: 'bottom', minzoom: 9.5, layout: { visibility: chipOn('contours'), 'line-join': 'round' }, paint: {
           'line-color': t.contour, 'line-opacity': 0.55,
           'line-width': ['case', ['==', ['%', ['get', 'elev'], 500], 0], 1.4, 0.6] } },
+      { id: 'mask', type: 'fill', source: 'mask', paint: { 'fill-color': t.mask, 'fill-opacity': maskOpacityFor(t) } },
+      { id: 'contour-labels', type: 'symbol', source: 'contours', minzoom: 10.5, filter: ['==', ['%', ['get', 'elev'], 200], 0],
+        layout: { visibility: chipOn('contours'), 'symbol-placement': 'line', 'symbol-spacing': 260, 'text-field': ['concat', ['get', 'elev'], ' m'], 'text-font': LABEL_FONT,
+                  'text-size': 10.5, 'text-rotation-alignment': 'map', 'text-pitch-alignment': 'map', 'text-max-angle': 45, 'text-allow-overlap': false, 'text-padding': 6 },
+        paint: { 'text-color': t.contour, 'text-halo-color': t.labelHalo, 'text-halo-width': 1.2, 'text-opacity': 0.9 } },
       ...tankLayers(t),                      // tanks and the Mission Kakatiya shading sit under the district lines
       ...gwLayers(t),                        // groundwater wells and district shading, same slot
       ...proposalLayers(t),                  // proposed reservoirs, routes and commands
+      { id: 'district-hover', type: 'fill', source: 'districts', layout: { visibility: chipOn('districts') }, paint: {
+          'fill-color': t.districtHover, 'fill-opacity': ['case', ['boolean', ['feature-state', 'hover'], false], 0.18, 0] } },
+      { id: 'district-hover-line', type: 'line', source: 'districts', layout: { 'line-join': 'round', visibility: chipOn('districts') }, paint: {
+          'line-color': t.districtHover, 'line-opacity': ['case', ['boolean', ['feature-state', 'hover'], false], 0.9, 0],
+          'line-width': ['interpolate', ['linear'], ['zoom'], 6, 2.2, 10, 3.4] } },
       { id: 'districts', type: 'line', source: 'districts', layout: { visibility: chipOn('districts'), 'line-join': 'round' }, paint: {
           'line-color': t.district, 'line-opacity': t.districtOpacity,
           'line-width': ['interpolate', ['linear'], ['zoom'], 6, 0.5, 10, 1.2] } },
@@ -410,11 +605,8 @@ function buildStyle(theme) {
           'line-color': t.stateCasing, 'line-width': ['interpolate', ['linear'], ['zoom'], 6, 3, 10, 6], 'line-opacity': 0.6 } },
       { id: 'state', type: 'line', source: 'state', layout: { 'line-join': 'round' }, paint: {
           'line-color': t.state, 'line-width': ['interpolate', ['linear'], ['zoom'], 6, 1.4, 10, 2.6] } },
-      { id: 'flow-glow', type: 'line', source: 'flow', filter: ['>=', ['get', 'q'], 300],
-        layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: {
-          'line-color': t.flowGlow, 'line-width': flowWidthExpr(2.2), 'line-opacity': 0.55, 'line-blur': 3 } },
       { id: 'flow-lines', type: 'line', source: 'flow', layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: {
-          'line-color': flowColorExpr(theme), 'line-width': flowWidthExpr(1), 'line-opacity': 0.95 } },
+          'line-color': flowColorExpr(theme), 'line-width': flowWidthExpr(1, 1.8), 'line-opacity': thematic ? 0.5 : 0.95 } },
       ...Array.from({ length: FLOW_DASH_STEPS }, (_, k) => ({
         id: `flow-dash-${k}`, type: 'line', source: 'flow', filter: ['>=', ['get', 'q'], FLOW_DASH_MIN_CMS],
         layout: { 'line-join': 'round', 'line-cap': 'butt', visibility: chipOn('flow') },
@@ -426,36 +618,80 @@ function buildStyle(theme) {
       { id: 'links-highlight', type: 'line', source: 'links', filter: ['==', ['get', 'link'], ''],
         layout: { 'line-join': 'round', 'line-cap': 'round', visibility: chipOn('links') },
         paint: { 'line-color': t.link, 'line-width': 12, 'line-opacity': 0.25, 'line-blur': 2 } },
-      { id: 'links-casing', type: 'line', source: 'links', filter: linkStatusFilter(), layout: { 'line-join': 'round', 'line-cap': 'round', visibility: chipOn('links') },
-        paint: { 'line-color': t.linkDash, 'line-width': ['interpolate', ['linear'], ['zoom'], 6, 5, 10, 7.5], 'line-opacity': 0.8 } },
-      { id: 'links-line', type: 'line', source: 'links', filter: linkStatusFilter(), layout: { 'line-join': 'round', 'line-cap': 'round', visibility: chipOn('links') },
-        paint: { 'line-color': t.link, 'line-width': ['interpolate', ['linear'], ['zoom'], 6, 2.6, 10, 4.2],
+      // Zoomed out the links are bold schematic lines; from zoom 9 they thin to a dashed guide so the real canals and tunnels show through.
+      { id: 'links-line', type: 'line', source: 'links', maxzoom: 9.5, filter: linkFilter(), layout: { 'line-join': 'round', 'line-cap': 'round', visibility: chipOn('links') },
+        paint: { 'line-color': t.link, 'line-width': ['interpolate', ['linear'], ['zoom'], 6, 2.6, 9, 3.4],
                  'line-opacity': ['case', ['==', ['get', 'status'], 'operational'], 0.9, 0.6],
                  'line-dasharray': ['case', ['==', ['get', 'status'], 'operational'], ['literal', [1, 0]], ['==', ['get', 'status'], 'planned'], ['literal', [0.6, 2.4]], ['literal', [2, 2]]] } },
-      // Static arrows give direction on links still being built; operating links get moving chevrons on the canvas.
-      { id: 'links-arrows', type: 'symbol', source: 'links', filter: ['all', ['!=', ['get', 'status'], 'operational'], linkStatusFilter()],
+      { id: 'links-guide', type: 'line', source: 'links', minzoom: 9, filter: linkFilter(), layout: { 'line-join': 'round', 'line-cap': 'round', visibility: chipOn('links') },
+        paint: { 'line-color': t.link, 'line-width': 1.5, 'line-opacity': 0.4, 'line-dasharray': [3, 3] } },
+      // Operating links carry a pulse of light travelling in the direction of pumping: a line-trim window moved every frame.
+      { id: 'links-pulse', type: 'line', source: 'links', maxzoom: 9.5, filter: ['all', ['==', ['get', 'status'], 'operational'], linkFilter()],
+        layout: { 'line-join': 'round', 'line-cap': 'round', visibility: chipOn('links') },
+        paint: { 'line-color': 'rgba(0,0,0,0)', 'line-width': ['interpolate', ['linear'], ['zoom'], 6, 3.4, 10, 5.6],
+                 'line-trim-offset': pulseWindow(0), 'line-trim-color': t.linkDash, 'line-trim-fade-range': [0.45, 0.45] } },
+      // Static arrows give direction on links still being built.
+      { id: 'links-arrows', type: 'symbol', source: 'links', filter: ['all', ['!=', ['get', 'status'], 'operational'], linkFilter()],
         layout: { 'symbol-placement': 'line', 'symbol-spacing': 70, 'icon-image': 'arrow', 'icon-size': ['interpolate', ['linear'], ['zoom'], 6, 0.4, 10, 0.6],
                   'icon-rotation-alignment': 'map', 'icon-allow-overlap': true, 'icon-ignore-placement': true, visibility: chipOn('links') },
         paint: { 'icon-opacity': 0.7 } },
-      { id: 'links-hit', type: 'line', source: 'links', filter: linkStatusFilter(), layout: { visibility: chipOn('links') },
+      { id: 'links-hit', type: 'line', source: 'links', filter: linkFilter(), layout: { visibility: chipOn('links') },
         paint: { 'line-color': '#000000', 'line-opacity': 0, 'line-width': 16 } },
+      // The active river's bed, coloured along its length by the relief tint of its elevation (updated when the Rivers tab changes).
+      { id: 'profile-casing', type: 'line', source: 'profile', layout: { 'line-join': 'round', 'line-cap': 'round', visibility: chipOn('bed') },
+        paint: { 'line-color': t.profileCasing, 'line-width': 8, 'line-opacity': 0.85 } },
+      { id: 'profile-line', type: 'line', source: 'profile', layout: { 'line-join': 'round', 'line-cap': 'round', visibility: chipOn('bed') },
+        paint: { 'line-color': '#888888', 'line-width': 5, 'line-gradient': profileGradient } },
+      { id: 'scrub', type: 'circle', source: 'scrub', paint: { 'circle-radius': 6, 'circle-color': t.labelActive, 'circle-stroke-color': t.iconBg, 'circle-stroke-width': 2 } },
+      ...labelLayers(theme),
     ],
-    terrain: { source: 'dem', exaggeration: Number($('exag').value) },
-    sky: { ...t.sky, 'fog-ground-blend': 0.6, 'horizon-fog-blend': 0.7, 'sky-horizon-blend': 0.85,
-           'atmosphere-blend': ['interpolate', ['linear'], ['zoom'], 0, 1, 9, 1, 12, 0] },
+    terrain: { source: 'mapbox-dem', exaggeration: terrainExaggeration() },
+    fog: fogFor(theme),
   };
+  for (const layer of style.layers) decorate(layer);
+  return style;
+}
+// Slot in the Standard stack, and full emissive strength for data layers so the day/night lighting shades the
+// terrain and basemap but never the atlas's own colours (the relief tint and hillshade stay lit too: the relief is the hero).
+const EMISSIVE = { line: 'line-emissive-strength', fill: 'fill-emissive-strength', circle: 'circle-emissive-strength', raster: 'raster-emissive-strength', hillshade: 'hillshade-emissive-strength' };
+function decorate(layer) {
+  layer.slot = slotFor(layer);
+  const tileset = layer.source && tilesetFor(layer.source);
+  if (tileset && !layer['source-layer']) layer['source-layer'] = tileset.sourceLayer;   // vector sources need it, GeoJSON ones must not have it
+  const property = EMISSIVE[layer.type];
+  if (property) { layer.paint = layer.paint || {}; if (!(property in layer.paint)) layer.paint[property] = 1; }
+  return layer;
+}
+/** addLayer with a `before` only when both layers share a slot (Mapbox refuses to order across slots). */
+function addLayers(layers, beforeId) {
+  for (const layer of layers) {
+    decorate(layer);
+    const before = beforeId && map.getLayer(beforeId) && slotFor(map.getLayer(beforeId)) === layer.slot ? beforeId : undefined;
+    map.addLayer(layer, before);
+  }
 }
 
-const map = new maplibregl.Map({
-  container: 'map',
+if (!window.MAPBOX_TOKEN) {
+  $('toast').textContent = 'Mapbox token missing: set the MAPBOX_TOKEN environment variable and restart serve.py (see the README).';
+  throw new Error('MAPBOX_TOKEN missing');
+}
+const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const INTRO = { zoom: 5.2, pitch: 0, bearing: 0 };                      // where the opening flight starts: high above the state, on flat terrain
+const MAX_ZOOM = 13.5;
+const MIN_ZOOM = 5.6;                                                    // the intro lowers it to 4 so it can start higher, then it is restored
+const playIntro = !location.hash && !reducedMotion && !DEBUG;
+if (playIntro) terrainRise = 0.05;
+const map = new mapboxgl.Map({
+  container: 'map', accessToken: window.MAPBOX_TOKEN,
   style: buildStyle(currentTheme()),
-  center: HOME.center, zoom: HOME.zoom, pitch: HOME.pitch, bearing: HOME.bearing,
-  minZoom: 5.6, maxZoom: 13.5, maxPitch: 75,
-  maxBounds: [[76.4, 14.5], [82.6, 20.6]],
-  attributionControl: false, hash: true, antialias: true,   // the URL carries the view, so views can be shared
+  center: HOME.center, ...(playIntro ? INTRO : { zoom: HOME.zoom, pitch: HOME.pitch, bearing: HOME.bearing }),
+  minZoom: playIntro ? 4 : MIN_ZOOM, maxZoom: MAX_ZOOM, maxPitch: 80,
+  maxBounds: [[72.5, 11.5], [86.5, 23.5]],   // generous: Mapbox keeps the whole tilted view inside the bounds by zooming in, so a tight box would push the state view past zoom 7
+  attributionControl: false, logoPosition: 'bottom-left', hash: true, antialias: true,   // the URL carries the view, so views can be shared
 });
-map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'bottom-right');
-map.addControl(new maplibregl.ScaleControl({ maxWidth: 140, unit: 'metric' }), 'bottom-right');
+map.addControl(new mapboxgl.AttributionControl({ compact: true }), 'bottom-right');
+map.addControl(new mapboxgl.NavigationControl({ visualizePitch: true }), 'bottom-right');
+map.addControl(new mapboxgl.ScaleControl({ maxWidth: 140, unit: 'metric' }), 'bottom-right');
 map.on('error', (event) => { const message = event && event.error ? event.error.message : String(event); debug.errors.push(message); console.error(message); writeDebug(); });
 debug.phase = 'map-created'; writeDebug();
 
@@ -473,64 +709,141 @@ function syncArrowImage() {
   const image = arrowImage(MAP_THEMES[currentTheme()].link);
   if (map.hasImage('arrow')) map.updateImage('arrow', image); else map.addImage('arrow', image, { pixelRatio: 2 });
 }
-map.on('styleimagemissing', (event) => { if (event.id === 'arrow') syncArrowImage(); });
+// ---------- icons: the SVG symbols in index.html rasterised on demand for the symbol layers ----------
+// Image ids read "ic|symbol|colourKey|flags|theme"; flags: p = pending (dashed ring, cone badge), a = approximate (dotted outer ring),
+// n = proposed (dashed ring), s = small. The theme is part of the id, so a theme change simply asks for new images.
+const ICON_PX = 40, ICON_RATIO = 2;
+const iconsInProgress = new Set();
+function svgImage(symbol, colour, px) {
+  const inner = document.getElementById(`ic-${symbol}`).innerHTML;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${px}" height="${px}" viewBox="0 0 16 16" style="color:${colour};fill:${colour}">${inner}</svg>`;
+  const image = new Image();
+  image.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+  return image.decode().then(() => image);
+}
+async function renderIcon(id) {
+  const [, symbol, colourKey, flags, theme] = id.split('|');
+  const t = MAP_THEMES[theme] || MAP_THEMES[currentTheme()];
+  const colour = t[colourKey] || t.link;
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = ICON_PX;
+  const ctx = canvas.getContext('2d');
+  const c = ICON_PX / 2;
+  const disc = (radius, fill, stroke, width, dash) => {
+    ctx.beginPath(); ctx.arc(c, c, radius, 0, Math.PI * 2);
+    if (fill) { ctx.fillStyle = fill; ctx.fill(); }
+    if (stroke) { ctx.lineWidth = width; ctx.strokeStyle = stroke; ctx.setLineDash(dash || []); ctx.stroke(); ctx.setLineDash([]); }
+  };
+  if (symbol === 'dot') {                      // cities and towns
+    disc(flags.includes('s') ? 4 : 5.5, colour, t.iconBg, 2);
+  } else if (symbol === 'peak') {              // where a river leaves the state: a ring around a core
+    disc(13, null, colour, 2); disc(5, colour, t.iconBg, 1.5);
+  } else {
+    disc(15, t.iconBg, colour, 2, flags.includes('p') || flags.includes('n') ? [3.5, 3] : null);
+    if (flags.includes('a')) disc(18.5, null, colour, 1.5, [1.5, 3]);
+    ctx.drawImage(await svgImage(symbol, colour, 40), c - 10, c - 10, 20, 20);
+    if (flags.includes('p')) {                 // the "still being built" cone
+      ctx.beginPath(); ctx.arc(c + 11, c + 11, 7.5, 0, Math.PI * 2); ctx.fillStyle = t.iconBg; ctx.fill();
+      ctx.lineWidth = 1; ctx.strokeStyle = t.link; ctx.stroke();
+      ctx.drawImage(await svgImage('wip', t.link, 24), c + 5, c + 5, 12, 12);
+    }
+  }
+  return ctx.getImageData(0, 0, ICON_PX, ICON_PX);
+}
+/** Every icon the label layers will ask for in a theme, rendered and added before the symbols lay out. */
+async function ensureIcons(theme) {
+  const ids = new Set(['ic|dot|label|', 'ic|dot|label|s', 'ic|wip|link|', 'ic|peak|peakIcon|']);
+  for (const data of Object.values(labelData)) for (const f of data.features) if (f.properties.icon) ids.add(f.properties.icon);
+  await Promise.all([...ids].map(async (base) => {
+    const id = `${base}|${theme}`;
+    if (map.hasImage(id) || iconsInProgress.has(id)) return;
+    iconsInProgress.add(id);
+    const image = await renderIcon(id);
+    if (!map.hasImage(id)) map.addImage(id, image, { pixelRatio: ICON_RATIO });
+    iconsInProgress.delete(id);
+  }));
+}
+map.on('styleimagemissing', async (event) => {
+  if (event.id === 'arrow') { syncArrowImage(); return; }
+  if (!event.id.startsWith('ic|') || map.hasImage(event.id) || iconsInProgress.has(event.id)) return;
+  iconsInProgress.add(event.id);
+  const image = await renderIcon(event.id);
+  if (!map.hasImage(event.id)) map.addImage(event.id, image, { pixelRatio: ICON_RATIO });
+  iconsInProgress.delete(event.id);
+});
 
 function applyMapTheme() {
-  // The style is the single source of truth for colours; a diffed setStyle
-  // updates paint properties and the sky without reloading sources.
-  map.setStyle(buildStyle(currentTheme()), { diff: true });
+  // buildStyle stays the single source of truth for colours, but its result is applied property by property:
+  // a diffed setStyle cannot cope with the Standard import and reloads the whole style, dropping our icons.
+  const theme = mapTheme();
+  const style = buildStyle(theme);
+  for (const layer of style.layers) {
+    if (!map.getLayer(layer.id)) continue;
+    for (const [key, value] of Object.entries(layer.paint || {})) map.setPaintProperty(layer.id, key, value);
+    for (const [key, value] of Object.entries(layer.layout || {})) map.setLayoutProperty(layer.id, key, value);
+    if (layer.appearances) map.setLayerProperty(layer.id, 'appearances', layer.appearances);
+  }
+  if (basemapKind() === 'standard') {
+    map.setConfigProperty('basemap', 'lightPreset', scenePreset(theme));
+    for (const [key, value] of Object.entries(MAP_THEMES[theme].basemapColours)) map.setConfigProperty('basemap', key, value);
+  }
+  map.setFog(fogFor(theme));
+  if (window.Atlas3D) Atlas3D.setTheme(theme);
+}
+let builtBasemap = 'standard';                                      // the basemap import the current style was built with
+const sceneButtons = () => document.querySelectorAll('[data-scene]');   // the top bar and the phone settings each carry a copy
+function syncSceneButtons() { for (const button of sceneButtons()) button.setAttribute('aria-pressed', String(button.dataset.scene === scene)); }
+/** Map (day, or dusk in the dark theme), Satellite (imagery, relief off) or Night (dark tokens, stars, relief still lit). */
+function setScene(id) {
+  if (!['map', 'satellite', 'night'].includes(id)) return;
+  scene = id;
+  syncSceneButtons();
+  if (window.Atlas3D) Atlas3D.setTheme(mapTheme());                // the 3D works follow the scene, not only the UI theme
+  if (!map.getLayer('relief') || !styleReady) { map.once('style.load', () => setScene(id)); return; }   // no style yet, or one is reloading: the state is kept and applied when it has loaded
+  const reload = builtBasemap !== basemapKind();
+  if (!reload) {                                                    // Standard to Standard: the same style, new tokens and light preset
+    map.setConfigProperty('basemap', 'lightPreset', scenePreset(mapTheme()));
+    ensureIcons(mapTheme()).then(() => { applyMapTheme(); renderFlowLegend(); renderGwLegend(); syncArrowImage(); sketchRestyle(); });
+    return;
+  }
+  builtBasemap = basemapKind();
+  styleReady = false;                                               // the flow animation leaves the style alone while it loads
+  const sketchKept = sketchSuspend();                               // Draw's layers do not survive a style reload
+  map.once('style.load', () => { styleReady = true; ensureIcons(mapTheme()); sketchResume(sketchKept); });   // a new style starts without our images
+  map.setStyle(buildStyle(mapTheme()), { diff: false });            // the Standard import cannot be diffed
+}
+for (const button of sceneButtons()) button.addEventListener('click', () => setScene(button.dataset.scene));
+syncSceneButtons();
+/** Thematic mode: the relief colours step back to a grey hillshade so a data overlay (groundwater, crops, Kakatiya) reads. */
+function applyThematic() {
+  const t = MAP_THEMES[mapTheme()];
+  map.setLayoutProperty('relief', 'visibility', reliefVisibility());
+  for (const [key, value] of Object.entries(hillshadeColours(t))) map.setPaintProperty('hillshade', key, value);
+  map.setPaintProperty('flow-lines', 'line-opacity', thematic ? 0.5 : 0.95);
+  map.setPaintProperty('mask', 'fill-opacity', maskOpacityFor(t));
+}
+function setThematic(on) {
+  thematic = Boolean(on);
+  if (map.getLayer('relief') && styleReady) applyThematic(); else map.once('style.load', applyThematic);   // a style still loading is built from the old state
 }
 
-// ---------- elevation under the cursor (decoded from the Terrarium tiles) ----------
-const tileCache = new Map();        // "z/x/y" -> Uint8ClampedArray | Promise
-const TILE_CACHE_LIMIT = 48;
-
-function loadTilePixels(key) {
-  if (tileCache.has(key)) return tileCache.get(key);
-  const promise = new Promise((resolve) => {
-    const image = new Image();
-    image.onload = () => {
-      const canvas = document.createElement('canvas');
-      canvas.width = canvas.height = TILE_PX;
-      const context = canvas.getContext('2d', { willReadFrequently: true });
-      context.drawImage(image, 0, 0);
-      const pixels = context.getImageData(0, 0, TILE_PX, TILE_PX).data;
-      if (tileCache.size >= TILE_CACHE_LIMIT) tileCache.delete(tileCache.keys().next().value);
-      tileCache.set(key, pixels);
-      resolve(pixels);
-    };
-    image.onerror = () => { tileCache.delete(key); resolve(null); };
-    image.src = TILE_URL.replace('{z}/{x}/{y}', key);
-  });
-  tileCache.set(key, promise);
-  return promise;
+// ---------- elevation under the cursor (the terrain the map is drawing, so the number always matches the surface) ----------
+/** Elevation in metres above sea level from the loaded terrain tiles; null where none is loaded yet. */
+function elevationAt(lngLat) {
+  const elevation = map.queryTerrainElevation(lngLat, { exaggerated: false });
+  return elevation === null || elevation === undefined ? null : elevation;
 }
 
-/** Elevation in metres above sea level; null while the tile loads, undefined outside the DEM. */
-function elevationAt(lng, lat) {
-  if (lng < DEM_BOUNDS[0] || lng > DEM_BOUNDS[2] || lat < DEM_BOUNDS[1] || lat > DEM_BOUNDS[3]) return undefined;
-  const n = 2 ** TILE_MAX_ZOOM;
-  const x = (lng + 180) / 360 * n;
-  const latRad = lat * Math.PI / 180;
-  const y = (1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2 * n;
-  const tx = Math.floor(x), ty = Math.floor(y);
-  const px = Math.min(TILE_PX - 1, Math.floor((x - tx) * TILE_PX));
-  const py = Math.min(TILE_PX - 1, Math.floor((y - ty) * TILE_PX));
-  const entry = tileCache.get(`${TILE_MAX_ZOOM}/${tx}/${ty}`);
-  if (!(entry instanceof Uint8ClampedArray)) { loadTilePixels(`${TILE_MAX_ZOOM}/${tx}/${ty}`); return null; }
-  const i = (py * TILE_PX + px) * 4;
-  return entry[i] * 256 + entry[i + 1] + entry[i + 2] / 256 - 32768;
-}
-
+// ---------- tap/click readout: the height of the spot clicked, with a pin; hidden until the first click ----------
 const cursorElev = $('cursor-elev'), cursorPos = $('cursor-pos');
-let pendingCursor = null;
+const readoutPin = new mapboxgl.Marker({ color: '#c2410c', scale: 0.8 });
 function showCursor(lngLat) {
-  const elevation = elevationAt(lngLat.lng, lngLat.lat);
-  if (elevation === undefined) { clearCursor(); return; }
-  if (elevation === null) { pendingCursor = lngLat; setTimeout(() => { if (pendingCursor === lngLat) showCursor(lngLat); }, 120); return; }
+  const elevation = elevationAt(lngLat);
+  if (elevation === null) { clearCursor(); return; }
   cursorElev.textContent = Math.round(elevation).toLocaleString('en-IN');
   cursorPos.textContent = `${Math.abs(lngLat.lat).toFixed(3)}°${lngLat.lat >= 0 ? 'N' : 'S'}  ${Math.abs(lngLat.lng).toFixed(3)}°${lngLat.lng >= 0 ? 'E' : 'W'}`;
   showComparison(elevation);
+  $('readout').hidden = false;
 }
 
 /** Tallest landmark that fits into the elevation at least once (so the count stays small). */
@@ -565,20 +878,32 @@ function showComparison(elevation) {
   text.append('≈ ', bold(`${ratio >= 10 ? Math.round(ratio) : ratio.toFixed(1)} ×`), ` ${landmark.name} (${landmark.height} m)`);
   $('cursor-compare').hidden = false;
 }
-let cursorFrame = 0;
-map.on('mousemove', (event) => {
-  if (cursorFrame) return;
-  cursorFrame = requestAnimationFrame(() => { cursorFrame = 0; showCursor(event.lngLat); });
-});
 function clearCursor() {
-  cursorElev.textContent = '—'; cursorPos.textContent = 'Move the pointer over the terrain';
+  $('readout').hidden = true;
   $('cursor-compare').hidden = true;
+  readoutPin.remove();
 }
-map.on('mouseout', clearCursor);
+// Layers whose own popup or action takes the click; a click on bare terrain shows the readout (not while the Sketch tool owns clicks).
+const READOUT_TAKERS = ['city-labels', 'town-labels', 'dam-labels', 'pump-labels', 'wip-labels', 'peak-labels', 'prop-labels-far', 'prop-labels-near',
+  'links-hit', 'canals-hit', 'tanks-fill', 'tanks-dots', 'gw-wells', 'gw-districts', 'prop-pool', 'prop-canal', 'prop-tunnel', 'prop-delivery', 'prop-pump', 'prop-trunk-new', 'prop-trunk-existing'];
+map.on('click', (event) => {
+  if (sketching() || flight) return;
+  const layers = READOUT_TAKERS.filter((id) => map.getLayer(id));
+  if (layers.length && map.queryRenderedFeatures(event.point, { layers }).length) return;
+  readoutPin.setLngLat(event.lngLat).addTo(map);
+  showCursor(event.lngLat);
+});
+$('readout-close').addEventListener('click', clearCursor);
 
 // ---------- legend ----------
+function renderLegend() {
+  const pct = (m) => `${(m / LEGEND_MAX * 100).toFixed(1)}%`;
+  $('ramp').style.background = bandsOn()
+    ? `linear-gradient(90deg, ${Array.from({ length: LEGEND_MAX / BAND_M }, (_, i) => { const c = rampColour(RELIEF_STOPS, i * BAND_M + BAND_M / 2); return `${c} ${pct(i * BAND_M)}, ${c} ${pct((i + 1) * BAND_M)}`; }).join(', ')})`
+    : `linear-gradient(90deg, ${RELIEF_STOPS.map(([m, c]) => `${c} ${pct(m)}`).join(', ')})`;
+}
 (function buildLegend() {
-  $('ramp').style.background = `linear-gradient(90deg, ${RELIEF_STOPS.map(([m, c]) => `${c} ${(m / LEGEND_MAX * 100).toFixed(1)}%`).join(', ')})`;
+  renderLegend();
   const ticks = $('ramp-ticks');
   for (const metres of LEGEND_TICKS) {
     const span = document.createElement('span');
@@ -592,10 +917,11 @@ map.on('mouseout', clearCursor);
 $('exag').addEventListener('input', (event) => {
   const value = Number(event.target.value);
   $('exag-out').value = `${value}×`;
-  map.setTerrain({ source: 'dem', exaggeration: value });
+  map.setTerrain({ source: 'mapbox-dem', exaggeration: terrainExaggeration() });
   map.triggerRepaint();
 });
 
+function setVisible(ids, on) { for (const id of ids) if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', on ? 'visible' : 'none'); }
 let orbiting = false;
 function orbitStep() {
   if (!orbiting) return;
@@ -603,49 +929,64 @@ function orbitStep() {
   requestAnimationFrame(orbitStep);
 }
 const toggles = {
-  hillshade: (on) => map.setLayoutProperty('hillshade', 'visibility', on ? 'visible' : 'none'),
-  contours: (on) => map.setLayoutProperty('contours', 'visibility', on ? 'visible' : 'none'),
-  districts: (on) => { map.setLayoutProperty('districts', 'visibility', on ? 'visible' : 'none'); document.body.classList.toggle('districts-off', !on); },
-  labels: (on) => document.body.classList.toggle('labels-off', !on),
-  dams: (on) => document.body.classList.toggle('dams-off', !on),
-  links: (on) => {
-    const visibility = on ? 'visible' : 'none';
-    for (const id of ['links-highlight', 'links-casing', 'links-line', 'links-arrows', 'links-hit']) map.setLayoutProperty(id, 'visibility', visibility);
-    document.body.classList.toggle('links-off', !on);
-    if (!on) linkPopup.remove();
+  bands: () => { map.setPaintProperty('relief', 'raster-color', reliefExpression(currentTheme())); renderLegend(); },
+  contours: (on) => setVisible(['contours', 'contour-labels'], on),
+  bed: (on) => setVisible(['profile-casing', 'profile-line'], on),
+  sketch: (on) => setSketch(on),
+  districts: (on) => {
+    setVisible(['districts', 'district-hover', 'district-hover-line'], on);   // a hidden hover layer fires no mouse events
+    document.body.classList.toggle('districts-off', !on);
+    if (!on) { setDistrictHover(null); districtPopup.remove(); }
   },
-  orbit: (on) => { orbiting = on; if (on) orbitStep(); },
+  labels: (on) => setVisible(LABEL_LAYERS.labels, on),
+  dams: (on) => {
+    setVisible(['dam-labels'], on);
+    if (window.Atlas3D) { Atlas3D.setVisible('dams', on); Atlas3D.setVisible('reservoirs', on); }
+  },
+  links: (on) => {
+    setVisible(['links-highlight', 'links-line', 'links-guide', 'links-pulse', 'links-arrows', 'links-hit', ...LABEL_LAYERS.links], on);
+    if (!on) linkPopup.remove();
+    if (window.Atlas3D) { Atlas3D.setVisible('pumps', on); Atlas3D.setVisible('conduits', on); }
+  },
+  models3d: (on) => { if (window.Atlas3D) Atlas3D.setEnabled(on); },   // the master switch; the lens keeps choosing its groups beneath it
+  pending: (on) => {                           // on = planned and under-construction works shown beside the operating ones
+    setStatusMode(on ? 'all' : 'built');
+    if (window.Atlas3D) Atlas3D.setStatus(on ? 'all' : 'built');
+  },
+  orbit: (on) => { orbiting = on; if (on) { stopStructureOrbit(); orbitStep(); } },
   flow: (on) => {
     flowAnimating = on;
-    for (let k = 0; k < FLOW_DASH_STEPS; k++) map.setLayoutProperty(`flow-dash-${k}`, 'visibility', on ? 'visible' : 'none');
+    for (const id of FLOW_DASH_IDS) map.setLayoutProperty(id, 'visibility', on ? 'visible' : 'none');
     if (on) { flowLast = 0; requestAnimationFrame(animateFlow); }
   },
 };
 
-// Flow animation: show the next phase layer, hide the previous one (opacity only, no tile reload),
-// and move the bubbles every frame.
+// Flow animation: advance the dash phase on the two dash layers every tick, and move the bubbles every frame.
 let flowLast = 0, bubbleLast = 0;
 function animateFlow(now) {
   if (!flowAnimating) { clearBubbles(); return; }
+  if (!styleReady) { requestAnimationFrame(animateFlow); return; }
   if (now - flowLast >= FLOW_TICK_MS) {
     flowLast = now;
     const previous = flowStep;
     flowStep = (flowStep + 1) % FLOW_DASH_STEPS;
-    map.setPaintProperty(`flow-dash-${previous}`, 'line-opacity', 0);
-    map.setPaintProperty(`flow-dash-${flowStep}`, 'line-opacity', FLOW_DASH_OPACITY);
+    map.setPaintProperty(FLOW_DASH_IDS[previous], 'line-opacity', 0);
+    map.setPaintProperty(FLOW_DASH_IDS[flowStep], 'line-opacity', FLOW_DASH_OPACITY);
     if (canalsLoaded && canalMode !== 'off') {
-      map.setPaintProperty(`canals-dash-${previous}`, 'line-opacity', 0);
-      map.setPaintProperty(`canals-dash-${flowStep}`, 'line-opacity', 0.9);
+      map.setPaintProperty(CANAL_DASH_IDS[previous], 'line-opacity', 0);
+      map.setPaintProperty(CANAL_DASH_IDS[flowStep], 'line-opacity', 0.9);
     }
   }
   drawBubbles(bubbleLast ? Math.min((now - bubbleLast) / 1000, 0.1) : 0);
   bubbleLast = now;
+  const window = pulseWindow((now % PULSE_MS) / PULSE_MS);
+  for (const id of ['links-pulse', 'prop-trunk-pulse']) if (map.getLayer(id)) map.setPaintProperty(id, 'line-trim-offset', window);
   requestAnimationFrame(animateFlow);
 }
 
 // ---------- bubbles: particles riding the bigger rivers ----------
 // [min m³/s, spacing km, radius px, speed px/s]: more water = denser, bigger, faster.
-const BUBBLE_CLASSES = [[2000, 1.5, 3.2, 60], [1000, 2.2, 2.7, 48], [300, 3.2, 2.2, 38], [100, 5.0, 1.7, 30]];
+const BUBBLE_CLASSES = [[2000, 1.5, 3.2, 60], [1000, 2.2, 2.7, 48], [300, 3.2, 2.2, 38]];
 const BUBBLE_FADE_M = 1000;                          // fade in/out over the ends of each reach
 const EARTH_M_PER_DEG = 111320;
 const bubbleCanvas = document.createElement('canvas');
@@ -695,59 +1036,9 @@ function resizeBubbleCanvas() {
   bubbleCtx.setTransform(ratio, 0, 0, ratio, 0, 0);
 }
 function clearBubbles() { bubbleCtx.clearRect(0, 0, bubbleCanvas.width, bubbleCanvas.height); }
-// Operating Kaleshwaram links carry moving chevrons so the direction of pumping is unmistakable.
-const LINK_CHEVRON = { spacingM: 4000, speedPx: 45, size: 4.5 };
-let linkTracks = [];
-
-function prepareLinkParticles(links) {
-  linkTracks = [];
-  for (const feature of links.features) {
-    if (feature.properties.status !== 'operational') continue;
-    const coords = feature.geometry.coordinates, cum = [0];
-    for (let i = 1; i < coords.length; i++) {
-      const dx = (coords[i][0] - coords[i - 1][0]) * EARTH_M_PER_DEG * Math.cos(coords[i][1] * Math.PI / 180);
-      const dy = (coords[i][1] - coords[i - 1][1]) * EARTH_M_PER_DEG;
-      cum.push(cum[i - 1] + Math.hypot(dx, dy));
-    }
-    const length = cum[cum.length - 1];
-    const count = Math.max(2, Math.round(length / LINK_CHEVRON.spacingM));
-    const lngs = coords.map((c) => c[0]), lats = coords.map((c) => c[1]);
-    linkTracks.push({ coords, cum, length, bbox: [Math.min(...lngs), Math.min(...lats), Math.max(...lngs), Math.max(...lats)],
-                      particles: Array.from({ length: count }, (_, i) => i * length / count) });
-  }
-}
-
-function drawLinkChevrons(dt, metresPerPixel, west, south, east, north, width, height) {
-  if (document.body.classList.contains('links-off') || statusMode === 'pending') return;   // chevrons mark operating links only
-  const colour = MAP_THEMES[currentTheme()].link;
-  for (const track of linkTracks) {
-    const step = LINK_CHEVRON.speedPx * metresPerPixel * dt;
-    for (let i = 0; i < track.particles.length; i++) track.particles[i] = (track.particles[i] + step) % track.length;
-    const [minLng, minLat, maxLng, maxLat] = track.bbox;
-    if (maxLng < west || minLng > east || maxLat < south || minLat > north) continue;
-    for (const distance of track.particles) {
-      const here = map.project(pointAlong(track, distance));
-      const ahead = map.project(pointAlong(track, Math.min(distance + 300, track.length)));
-      if (here.x < -20 || here.y < -20 || here.x > width + 20 || here.y > height + 20) continue;
-      const angle = Math.atan2(ahead.y - here.y, ahead.x - here.x);
-      const alpha = Math.min(1, distance / 1500, (track.length - distance) / 1500);
-      drawChevron(here.x, here.y, angle, LINK_CHEVRON.size, colour, alpha);
-    }
-  }
-}
-function drawChevron(x, y, angle, size, colour, alpha) {
-  bubbleCtx.save();
-  bubbleCtx.translate(x, y); bubbleCtx.rotate(angle); bubbleCtx.globalAlpha = alpha;
-  bubbleCtx.beginPath();
-  bubbleCtx.moveTo(size, 0); bubbleCtx.lineTo(-size * 0.8, size * 0.9); bubbleCtx.lineTo(-size * 0.3, 0); bubbleCtx.lineTo(-size * 0.8, -size * 0.9); bubbleCtx.closePath();
-  bubbleCtx.fillStyle = colour; bubbleCtx.fill();
-  bubbleCtx.lineWidth = 1; bubbleCtx.strokeStyle = 'rgba(255,255,255,0.95)'; bubbleCtx.lineJoin = 'round'; bubbleCtx.stroke();
-  bubbleCtx.restore();
-}
-
 function drawBubbles(dt) {
   clearBubbles();
-  if (!bubbleReaches.length) return;
+  if (!bubbleReaches.length || flight) return;        // the flight keeps the view clear
   const bounds = map.getBounds(), west = bounds.getWest(), south = bounds.getSouth(), east = bounds.getEast(), north = bounds.getNorth();
   const metresPerPixel = EARTH_M_PER_DEG * 360 * Math.cos(map.getCenter().lat * Math.PI / 180) / (TILE_PX * 2 ** map.getZoom());
   const width = map.getCanvas().clientWidth, height = map.getCanvas().clientHeight;
@@ -767,7 +1058,6 @@ function drawBubbles(dt) {
       drawBubble(point.x, point.y, reach.radius, alpha);
     }
   }
-  drawLinkChevrons(dt, metresPerPixel, west, south, east, north, width, height);
 }
 // Bubbles keep one light body and a dark rim in both themes, so they show on
 // every river colour (a bubble in its river's own colour vanished on the Krishna).
@@ -784,8 +1074,18 @@ function drawBubble(x, y, radius, alpha) {
 map.on('resize', resizeBubbleCanvas);
 
 // Hovering a stream shows its average flow.
-const flowPopup = new maplibregl.Popup({ closeButton: false, closeOnClick: false, offset: 14, className: 'flow-popup' });
+const flowPopup = new mapboxgl.Popup({ closeButton: false, closeOnClick: false, offset: 14, className: 'flow-popup' });
+/** A feature-state target: vector sources also need their source layer. */
+const stateTarget = (source, id) => (tilesetFor(source) ? { source, sourceLayer: tilesetFor(source).sourceLayer, id } : { source, id });
+let hoveredReach = null;   // feature id on the flow source (generated ids: GeoJSON path only)
+function setReachHover(id) {
+  if (hoveredReach === id) return;
+  if (hoveredReach !== null) map.setFeatureState(stateTarget('flow', hoveredReach), { hover: false });
+  hoveredReach = id;
+  if (id !== null) map.setFeatureState(stateTarget('flow', id), { hover: true });
+}
 map.on('mousemove', 'flow-hit', (event) => {
+  setReachHover(event.features[0].id === undefined ? null : event.features[0].id);
   const reach = event.features[0].properties;
   const node = document.createElement('div');
   node.append(bold(`${Math.round(reach.q).toLocaleString('en-IN')} m³/s`), ' ',
@@ -793,7 +1093,39 @@ map.on('mousemove', 'flow-hit', (event) => {
   flowPopup.setLngLat(event.lngLat).setDOMContent(node).addTo(map);
   map.getCanvas().style.cursor = 'pointer';
 });
-map.on('mouseleave', 'flow-hit', () => { flowPopup.remove(); map.getCanvas().style.cursor = ''; });
+map.on('mouseleave', 'flow-hit', () => { setReachHover(null); flowPopup.remove(); map.getCanvas().style.cursor = ''; });
+
+// Hovering a district highlights it and names it with its mean river flow and mapped tanks, unless something more specific is under the pointer.
+let flowSummaryData = null;
+let hoveredDistrict = null;
+const districtPopup = new mapboxgl.Popup({ closeButton: false, closeOnClick: false, offset: 14, className: 'flow-popup' });
+// Layers whose own hover or popup wins; the dense tank dots are left out on purpose, they would suppress the district popup almost everywhere.
+const HOVER_BLOCKERS = ['gw-wells', 'tanks-fill', 'flow-hit', 'links-hit', 'dam-labels'];
+const clickPopups = () => [tankPopup, gwPopup, damPopup, linkPopup, canalPopup, proposalPopup, notePopup];
+function setDistrictHover(name) {
+  if (hoveredDistrict === name) return;
+  if (hoveredDistrict !== null) map.setFeatureState(stateTarget('districts', hoveredDistrict), { hover: false });
+  hoveredDistrict = name;
+  if (name !== null) map.setFeatureState(stateTarget('districts', name), { hover: true });
+}
+function districtHoverContent(name) {
+  const node = document.createElement('div');
+  node.append(bold(name));
+  const flow = flowSummaryData && flowSummaryData.districts.filter((row) => row.district === name);
+  const tanks = tankSummary && tankSummary.districts.find((row) => row.district === name);
+  if (flow && flow.length) node.append(' ', spanText(`${flow.map((row) => `${Math.round(row.mean_q).toLocaleString('en-IN')} m³/s mean on the ${row.river}`).join(' · ')}`));
+  if (tanks) node.append(' ', spanText(`${flow && flow.length ? '· ' : ''}${tanks.osm_tanks.toLocaleString('en-IN')} mapped tanks`));
+  return node;
+}
+map.on('mousemove', 'district-hover', (event) => {
+  const feature = event.features[0];
+  if (!feature || feature.id === undefined) return;
+  setDistrictHover(feature.id);
+  const blocked = clickPopups().some((popup) => popup.isOpen()) || map.queryRenderedFeatures(event.point, { layers: HOVER_BLOCKERS.filter((id) => map.getLayer(id)) }).length;
+  if (blocked) { districtPopup.remove(); return; }
+  districtPopup.setLngLat(event.lngLat).setDOMContent(districtHoverContent(feature.id)).addTo(map);
+});
+map.on('mouseleave', 'district-hover', () => { setDistrictHover(null); districtPopup.remove(); });
 
 // ---------- river flow panel ----------
 function flowWidth(q) {   // mirrors FLOW_WIDTH_STOPS at zoom scale 1
@@ -819,7 +1151,29 @@ function renderFlowLegend() {
   legend.appendChild(unit);
 }
 function textEl(tag, className, text) { const node = document.createElement(tag); node.className = className; node.textContent = text; return node; }
-function flyToPoint(lon, lat, zoom) { map.flyTo({ center: [lon, lat], zoom, pitch: 60, bearing: -20, duration: 2200, essential: true }); }
+function flyToPoint(lon, lat, zoom) { stopStructureOrbit(); map.flyTo({ center: [lon, lat], zoom, pitch: 60, bearing: -20, duration: 2200, essential: true }); }
+// Close to a work the camera needs more room than MAX_ZOOM gives; the limit is raised for the flight and restored once the view moves away.
+const WORK_MAX_ZOOM = 16, WORK_KEEP_KM = 3, WORK_KEEP_ZOOM = 12;
+let workTarget = null;                      // [lon, lat] while the raised zoom limit is in force
+function flyToWork(lon, lat) {
+  stopStructureOrbit();
+  workTarget = null;                        // the stop below fires a moveend that must not restore the limit
+  map.stop();
+  map.setMaxZoom(WORK_MAX_ZOOM);
+  const camera = { center: [lon, lat], zoom: 15, pitch: 65, bearing: map.getBearing(), duration: 2600, essential: true };
+  if (typeof lensPadding === 'function') camera.padding = lensPadding();   // ui.js: keep the work clear of the lens panel or the phone sheet
+  map.flyTo(camera);
+  workTarget = [lon, lat];
+}
+map.on('moveend', () => {
+  if (!workTarget) return;
+  const near = map.getCenter().distanceTo(new mapboxgl.LngLat(workTarget[0], workTarget[1])) <= WORK_KEEP_KM * 1000;
+  if (near && map.getZoom() >= WORK_KEEP_ZOOM) return;
+  workTarget = null;
+  if (map.getZoom() <= MAX_ZOOM) { map.setMaxZoom(MAX_ZOOM); return; }
+  map.easeTo({ zoom: MAX_ZOOM, duration: 600, essential: true });   // under the old limit first, as stopStructureOrbit does
+  map.once('moveend', () => { if (!workTarget && !structureOrbit) map.setMaxZoom(MAX_ZOOM); });
+});
 function renderPeaks(summary) {
   const box = $('peaks');
   box.textContent = '';
@@ -835,12 +1189,8 @@ function renderPeaks(summary) {
   }
 }
 function addPeakMarker(river, peak) {
-  const node = document.createElement('div'); node.className = 'mk-peak';
-  const label = textEl('span', 'lbl', `${river} peak`);
-  label.appendChild(textEl('span', 'e', `${peak.q.toLocaleString('en-IN')} m³/s`));
-  node.append(textEl('span', 'ring', ''), textEl('span', 'core', ''), label);
-  node.addEventListener('click', () => flyToPoint(peak.lon, peak.lat, 10));
-  new maplibregl.Marker({ element: node, anchor: 'center' }).setLngLat([peak.lon, peak.lat]).addTo(map);
+  if (!labelData.peaks) labelData.peaks = collection([]);
+  labelData.peaks.features.push(pointFeature(peak.lon, peak.lat, { title: `${river} peak`, detail: ` ${peak.q.toLocaleString('en-IN')} m³/s`, lon: peak.lon, lat: peak.lat }));
 }
 function renderDistrictFlow(summary) {
   const list = $('district-flow');
@@ -866,122 +1216,229 @@ function renderDistrictFlow(summary) {
     item.appendChild(button); list.appendChild(item);
   }
 }
+// A chip can have a copy in more than one lens card (dams, links, pending): every copy shows the same state.
 for (const chip of document.querySelectorAll('.chip[data-toggle]')) {
   chip.addEventListener('click', () => {
     const on = chip.getAttribute('aria-pressed') !== 'true';
-    chip.setAttribute('aria-pressed', String(on));
+    for (const copy of document.querySelectorAll(`.chip[data-toggle="${chip.dataset.toggle}"]`)) copy.setAttribute('aria-pressed', String(on));
     toggles[chip.dataset.toggle](on);
   });
 }
 function stopOrbit() { if (orbiting) document.querySelector('[data-toggle="orbit"]').click(); }
 map.on('dragstart', stopOrbit);
 
-// Left-drag mode: MapLibre only rotates with the right button or Ctrl, so a
-// "rotates" mode turns left-drag into a full 360° orbit with tilt.
-const ROTATE_DEG_PER_PX = 0.35;
-let rotateDrag = null;
-function setDragMode(mode) {
-  for (const button of document.querySelectorAll('[data-drag]')) button.setAttribute('aria-pressed', String(button.dataset.drag === mode));
-  if (mode === 'rotate') map.dragPan.disable(); else map.dragPan.enable();
-  $('map').classList.toggle('rotate-mode', mode === 'rotate');
-}
-for (const button of document.querySelectorAll('[data-drag]')) button.addEventListener('click', () => setDragMode(button.dataset.drag));
-map.getCanvasContainer().addEventListener('mousedown', (event) => {
-  if (!$('map').classList.contains('rotate-mode') || event.button !== 0 || event.ctrlKey) return;
-  stopOrbit();
-  rotateDrag = { x: event.clientX, y: event.clientY, bearing: map.getBearing(), pitch: map.getPitch() };
-  $('map').classList.add('rotating');
-  event.preventDefault();
+// 3D / top-down: tilts to the active lens's pitch (ui.js) or lays the map flat; the button reads pressed while tilted.
+$('view-toggle').addEventListener('click', () => {
+  stopFlight();
+  if (map.getPitch() >= 30) { map.easeTo({ pitch: 0, duration: 1200, essential: true }); return; }
+  riseTerrain(1800);                                                 // from top-down: let the relief grow as the view tilts
+  map.easeTo({ pitch: typeof lensCamera === 'function' ? lensCamera().pitch : HOME.pitch, duration: 1800, essential: true });
 });
-window.addEventListener('mousemove', (event) => {
-  if (!rotateDrag) return;
-  const pitch = rotateDrag.pitch - (event.clientY - rotateDrag.y) * ROTATE_DEG_PER_PX;
-  map.jumpTo({ bearing: rotateDrag.bearing + (event.clientX - rotateDrag.x) * ROTATE_DEG_PER_PX,
-               pitch: Math.min(Math.max(pitch, 0), map.getMaxPitch()) });
-});
-window.addEventListener('mouseup', () => { rotateDrag = null; $('map').classList.remove('rotating'); });
-$('reset').addEventListener('click', () => map.flyTo({ ...HOME, duration: 1800, essential: true }));
+map.on('pitchend', () => $('view-toggle').setAttribute('aria-pressed', String(map.getPitch() >= 30)));
 $('theme').addEventListener('click', () => setTheme(currentTheme() === 'dark' ? 'light' : 'dark'));
-$('collapse').addEventListener('click', () => { $('panel').classList.add('hidden'); $('expand').hidden = false; });
-$('expand').addEventListener('click', () => { $('panel').classList.remove('hidden'); $('expand').hidden = true; });
-$('filters-collapse').addEventListener('click', () => { $('filters').classList.add('hidden'); $('filters-expand').hidden = false; });
-$('filters-expand').addEventListener('click', () => { $('filters').classList.remove('hidden'); $('filters-expand').hidden = true; });
-const updateLabelDensity = () => document.body.classList.toggle('z-far', map.getZoom() < LABEL_ZOOM);
+const updateLabelDensity = () => {
+  const near = map.getZoom() >= ROAD_LABEL_ZOOM;
+  if (near === roadLabelsShown || !styleReady) return;
+  roadLabelsShown = near;
+  map.setConfigProperty('basemap', 'showRoadLabels', near);
+};
 map.on('zoom', updateLabelDensity);
+map.on('moveend', updateLabelDensity);
 map.on('load', updateLabelDensity);   // a view restored from the URL hash fires no zoom event
 updateLabelDensity();
 
-// ---------- markers ----------
-const cityMarkers = new Map();
-function addCityMarker(city) {
-  const el = document.createElement('div');
-  el.className = `mk-city ${city.place}`;
-  const dot = document.createElement('span'); dot.className = 'dot';
-  const label = document.createElement('span'); label.className = 'lbl';
-  const name = document.createElement('span'); name.textContent = city.name;
-  const elev = document.createElement('span'); elev.className = 'e'; elev.textContent = `${city.elev} m`;
-  label.append(name, elev); el.append(dot, label);
-  el.addEventListener('click', () => flyToCity(city));
-  const marker = new maplibregl.Marker({ element: el, anchor: 'left', offset: [-5, 0] }).setLngLat([city.lon, city.lat]).addTo(map);
-  cityMarkers.set(city.name, marker);
+// ---------- labels: symbol layers from one GeoJSON source per kind, text in Mapbox fonts, icons from the SVG symbols ----------
+const cityIndex = new Map();                // city name -> feature id, for the active state
+const districtFeatures = new Map();         // district -> its label feature (carries the Mission Kakatiya count)
+const labelActions = { 'prop-labels': [] }; // per-feature click handlers for the proposal labels
+const LABEL_LAYERS = {
+  labels: ['city-labels', 'town-labels', 'district-labels', 'peak-labels', 'prop-labels-far', 'prop-labels-near'],   // the Place labels chip
+  links: ['pump-labels', 'wip-labels'],                                                                                // the Water links chip
+};
+function pointFeature(lon, lat, properties) { return { type: 'Feature', geometry: { type: 'Point', coordinates: [lon, lat] }, properties }; }
+function collection(features) { return { type: 'FeatureCollection', features }; }
+const muted = (t, scale) => ({ 'font-scale': scale, 'text-color': t.labelMuted });
+const damFilter = () => ['all', linkStatusFilter(), yearFilter()];
+const districtFilter = () => (tankMode === 'kakatiya' ? ['literal', true] : ['!', ['get', 'named_by_city']]);
+const districtText = (t) => (tankMode === 'kakatiya'
+  ? ['format', ['upcase', ['get', 'name']], {}, '\n', {}, ['get', 'mk'], { 'font-scale': 1.05, 'text-color': t.label }]
+  : ['upcase', ['get', 'name']]);
+
+/** A point symbol layer: icon on the point, text beside it on whichever side is free, text dropped before the icon when space is short.
+ *  Tiers (spec 8.3): size and halo are fixed per tier, so the hierarchy is the same at every zoom. */
+function labelLayer(id, source, t, { icon, text, sort, minzoom, filter, size = 12, halo = 1.5, color, layout = {} }) {
+  const appearance = (name, iconSize) => ({ name, condition: ['boolean', ['feature-state', name], false], properties: { 'text-color': t.labelActive, 'icon-size': iconSize } });
+  return { id, type: 'symbol', source, ...(minzoom ? { minzoom } : {}), ...(filter ? { filter } : {}),
+    layout: { 'icon-image': icon, 'icon-size': 1, 'icon-allow-overlap': true, 'text-field': text, 'text-font': LABEL_FONT,
+              'text-size': size, 'text-variable-anchor': ['left', 'right'], 'text-radial-offset': 0.95,
+              'text-justify': 'auto', 'text-max-width': 14, 'text-optional': true, 'symbol-sort-key': sort || 0, ...layout },
+    paint: { 'text-color': color || t.label, 'text-halo-color': t.labelHalo, 'text-halo-width': halo, 'text-halo-blur': 0.4 },
+    appearances: [appearance('hover', 1.15), appearance('active', 1.2)] };
 }
-function addDistrictLabels(points, cityNames) {
-  for (const feature of points.features) {
-    const name = feature.properties.shapeName;
-    const el = document.createElement('div');
-    el.className = 'mk-district' + (cityNames.has(name.toLowerCase()) ? ' named-by-city' : '');   // the city label already names it
-    el.append(textEl('span', 'nm', name), textEl('b', 'cnt', ''));
-    districtLabels.set(name, el);
-    districtCentres.set(name, feature.geometry.coordinates);
-    new maplibregl.Marker({ element: el, anchor: 'center' }).setLngLat(feature.geometry.coordinates).addTo(map);
+const DAM_TEXT_MIN_TMCFT = 15;              // below zoom 8 only the big reservoirs carry their name
+const DISTRICT_MAX_ZOOM = 10;               // district names give way to towns and works above this (Kakatiya mode keeps them)
+function labelLayers(theme) {
+  const t = MAP_THEMES[theme];
+  const ic = (base) => ['concat', base, '|', theme];        // image id with the theme appended
+  const layers = [];
+  if (labelData.cities) {
+    // T2: places. T4: the value part (height) is smaller and muted.
+    const text = ['format', ['get', 'name'], {}, ['get', 'elev'], muted(t, 0.9)];
+    layers.push(labelLayer('city-labels', 'cities', t, { icon: ic('ic|dot|label|'), text, sort: ['get', 'sort'], filter: ['==', ['get', 'place'], 'city'], size: 14, halo: 2, layout: { visibility: chipOn('labels') } }));
+    layers.push(labelLayer('town-labels', 'cities', t, { icon: ic('ic|dot|label|s'), text, sort: ['get', 'sort'], filter: withDeclutter(['!=', ['get', 'place'], 'city']), minzoom: 8, size: 13, halo: 2, layout: { visibility: chipOn('labels') } }));
   }
+  if (labelData['district-points']) {
+    const kakatiya = tankMode === 'kakatiya';
+    layers.push({ id: 'district-labels', type: 'symbol', source: 'district-points', minzoom: kakatiya ? 0 : LABEL_ZOOM, ...(kakatiya ? {} : { maxzoom: DISTRICT_MAX_ZOOM }), filter: districtFilter(),
+      layout: { 'text-field': districtText(t), 'text-font': LABEL_FONT, 'text-size': 11, 'text-letter-spacing': 0.14, 'text-max-width': 10, 'symbol-sort-key': 10, visibility: chipOn('labels') },
+      paint: { 'text-color': t.labelMuted, 'text-halo-color': t.labelHalo, 'text-halo-width': 1.5 } });
+  }
+  if (labelData.dams) {
+    // T3 works: icons always; the name below zoom 8 only for big reservoirs. T4 capacity, T5 status from 8.5.
+    const full = ['format', ['get', 'name'], {}, ['get', 'cap'], muted(t, 0.9), ['step', ['zoom'], '', 8.5, ['get', 'st']], muted(t, 0.8)];
+    const text = ['step', ['zoom'], ['case', ['>=', ['get', 'capn'], DAM_TEXT_MIN_TMCFT], full, ''], 8, full];
+    layers.push(labelLayer('dam-labels', 'dams', t, { icon: ic(['get', 'icon']), text, sort: ['get', 'sort'], filter: damFilter(), layout: { visibility: chipOn('dams') } }));
+  }
+  if (labelData.pumphouses) {
+    const text = ['step', ['zoom'], '', 9, ['format', ['get', 'name'], {}, ['get', 'st'], muted(t, 0.8)]];   // icons from 8, names from 9
+    layers.push(labelLayer('pump-labels', 'pumphouses', t, { icon: ic(['get', 'icon']), text, sort: 5, minzoom: 8, filter: withDeclutter(['all', linkStatusFilter(), yearFilter()]), layout: { visibility: chipOn('links') } }));
+  }
+  if (labelData.wip) {
+    layers.push(labelLayer('wip-labels', 'wip', t, { icon: ic('ic|wip|link|'), text: ['get', 'name'], sort: 6, minzoom: 8.5, filter: linkFilter(), color: t.labelMuted, layout: { visibility: chipOn('links') } }));
+  }
+  if (labelData.peaks) {
+    layers.push(labelLayer('peak-labels', 'peaks', t, { icon: ic('ic|peak|peakIcon|'), text: ['format', ['get', 'title'], {}, ['get', 'detail'], muted(t, 0.9)], sort: 1, layout: { visibility: chipOn('labels') } }));
+  }
+  if (labelData['prop-labels']) {
+    const text = ['format', ['get', 'title'], {}, ['get', 'detail'], muted(t, 0.9), ' new', { 'font-scale': 0.8, 'text-color': t.prop }];
+    const far = ['in', ['get', 'kind'], ['literal', ['reservoir', 'trunk']]];                       // always
+    const later = ['step', ['zoom'], ['==', ['get', 'kind'], 'delivery'], 9, true];                 // deliveries from 8 (the layer's minzoom), the rest from 9
+    layers.push(labelLayer('prop-labels-far', 'prop-labels', t, { icon: ic(['get', 'icon']), text, sort: ['get', 'sort'], filter: far, layout: { visibility: propVisibility() } }));
+    layers.push(labelLayer('prop-labels-near', 'prop-labels', t, { icon: ic(['get', 'icon']), text, sort: 8, filter: withDeclutter(['all', ['!', far], later]), minzoom: 8, layout: { visibility: propVisibility() } }));
+  }
+  return layers;
 }
+/** Hover and click through the Interactions API: a pointer cursor and a hover state on the feature. */
+/** The Sketch tool owns map clicks: its vertices must not also open popups or fly the camera. */
+function sketching() { return !document.body.classList.contains('sketch-off'); }
+function interactive(layerId, onClick) {
+  const target = { layerId };
+  map.addInteraction(`${layerId}-enter`, { type: 'mouseenter', target, handler: ({ feature }) => { map.getCanvas().style.cursor = 'pointer'; if (feature) map.setFeatureState(feature, { hover: true }); } });
+  map.addInteraction(`${layerId}-leave`, { type: 'mouseleave', target, handler: ({ feature }) => { map.getCanvas().style.cursor = ''; if (feature) map.setFeatureState(feature, { hover: false }); } });
+  if (onClick) map.addInteraction(`${layerId}-click`, { type: 'click', target, handler: (event) => { if (sketching()) return false; onClick(event.feature.properties, event.lngLat); return true; } });
+}
+function buildCityLabels(cities) {
+  labelData.cities = collection(cities.map((city, i) => {
+    cityIndex.set(city.name, i);
+    return pointFeature(city.lon, city.lat, { i, name: city.name, elev: ` ${city.elev} m`, place: city.place, sort: -(city.population || 0) });
+  }));
+}
+function buildDistrictLabels(points, cityNames) {
+  labelData['district-points'] = collection(points.features.map((f) => {
+    const name = f.properties.shapeName;
+    const feature = pointFeature(f.geometry.coordinates[0], f.geometry.coordinates[1], { name, named_by_city: cityNames.has(name.toLowerCase()), mk: '' });
+    districtFeatures.set(name, feature);
+    districtCentres.set(name, f.geometry.coordinates);
+    return feature;
+  }));
+}
+function applyDistrictLabels() {
+  if (!map.getLayer('district-labels')) return;
+  map.setFilter('district-labels', districtFilter());
+  map.setLayerZoomRange('district-labels', tankMode === 'kakatiya' ? 0 : LABEL_ZOOM, tankMode === 'kakatiya' ? 24 : DISTRICT_MAX_ZOOM);
+  map.setLayoutProperty('district-labels', 'text-field', districtText(MAP_THEMES[mapTheme()]));
+}
+async function addLabelSources() {
+  await ensureIcons(currentTheme());
+  for (const [id, data] of Object.entries(labelData)) if (!map.getSource(id)) map.addSource(id, { type: 'geojson', data, generateId: true });
+  addLayers(labelLayers(currentTheme()));
+  interactive('city-labels', (p) => flyToCity(citiesData[p.i]));
+  interactive('town-labels', (p) => flyToCity(citiesData[p.i]));
+  interactive('dam-labels', (p) => { const dam = damsData[p.i]; openDamPopup(dam); flyToWork(dam.lon, dam.lat); });
+  interactive('pump-labels', (p, lngLat) => { notePopup.setLngLat(lngLat).setText(p.title).addTo(map); flyToWork(lngLat.lng, lngLat.lat); });
+  interactive('wip-labels', (p, lngLat) => notePopup.setLngLat(lngLat).setText(p.title).addTo(map));
+  interactive('peak-labels', (p) => flyToPoint(p.lon, p.lat, 10));
+}
+let citiesData = [], damsData = [], pumphousesData = [];
+const notePopup = new mapboxgl.Popup({ closeButton: true, closeOnClick: true, offset: 12, className: 'flow-popup', maxWidth: '280px' });
 // ---------- dams: markers and the year filter (Telangana was formed in 2014) ----------
-const ERA_YEAR = 2014;
-const damMarkers = [];                       // { dam, element }
 function damYear(dam) { return dam.opened || dam.began || null; }
-function damInEra(dam, era) {
-  const year = damYear(dam);
-  return era === 'all' || (year !== null && (era === 'before' ? year < ERA_YEAR : year >= ERA_YEAR));
+
+// ---------- years slider: dams, links and canals by the year they were done ----------
+const linkYear = (p) => p.done || p.water || p.began || p.planned || null;
+const canalYear = (p) => CANAL_YEAR[p.era] || null;
+// Undated features carry no year property: 'year: null' makes ['get','year'] fail the number comparison in yearFilter.
+const setYearProperty = (p, year) => { if (year !== null) p.year = year; else delete p.year; };
+let yearData = { dams: [], links: [], canals: [] };   // sorted years of the dated features, from the loaded data
+let yearTimer = null;
+function yearReadout() {
+  if (!yearActive) return 'All years';
+  const upTo = (years) => years.filter((y) => y <= yearValue).length;
+  const canals = yearData.canals.length === 0 ? 'canal years unavailable'
+    : yearValue < CANAL_YEAR.before ? 'all canals hidden'
+    : yearValue < CANAL_YEAR.after ? 'canals after 2014 hidden' : 'all dated canals shown';
+  return `By ${yearValue}: ${upTo(yearData.dams)} dams · ${upTo(yearData.links)} links · ${canals}`;
 }
-function setEra(era) {
-  for (const button of document.querySelectorAll('[data-era]')) button.setAttribute('aria-pressed', String(button.dataset.era === era));
-  for (const { dam, element } of damMarkers) element.classList.toggle('era-hidden', !damInEra(dam, era));
+function setYear(value, active = true) {
+  yearActive = active;
+  yearValue = Math.min(YEAR_MAX, Math.max(Number($('year').min), value));
+  $('year').value = String(yearValue);
+  $('year-out').textContent = yearActive ? String(yearValue) : 'Now';
+  $('year-out').hidden = !yearActive;        // the Now button already says it
+  $('year-readout').textContent = yearReadout();
+  if (!active) stopYearPlay();
+  applyWorkFilters();
+  damPopup.remove(); linkPopup.remove(); canalPopup.remove();
+  document.dispatchEvent(new CustomEvent('atlas:year', { detail: { year: yearActive ? yearValue : null } }));   // ui.js: ground lens period, 3D works
 }
-function renderEraCounts(dams) {
-  for (const button of document.querySelectorAll('[data-era]')) {
-    const count = dams.filter((dam) => damInEra(dam, button.dataset.era)).length;
-    const badge = button.querySelector('b') || button.appendChild(textEl('b', '', ''));
-    badge.textContent = String(count);
+function stopYearPlay() {
+  clearInterval(yearTimer); yearTimer = null;
+  $('year-play').textContent = 'Play'; $('year-play').setAttribute('aria-pressed', 'false');
+}
+function toggleYearPlay() {
+  if (yearTimer) { stopYearPlay(); return; }
+  $('year-play').textContent = 'Pause'; $('year-play').setAttribute('aria-pressed', 'true');
+  if (!yearActive || yearValue >= YEAR_MAX) setYear(Number($('year').min));
+  yearTimer = setInterval(() => {
+    if (yearValue >= YEAR_MAX) { stopYearPlay(); return; }
+    setYear(yearValue + 1);
+  }, 600);
+}
+function setupYears(dams, links, canals) {
+  const years = (list, fn) => list.map(fn).filter((y) => y !== null).sort((a, b) => a - b);
+  const firstYear = new Map();   // one entry per link: its earliest dated segment
+  for (const f of links.features) {
+    const key = linkKey(f.properties), y = f.properties.year;
+    if (y !== undefined && !(firstYear.get(key) <= y)) firstYear.set(key, y);
   }
+  // Hosted canal tiles are never read here, but every canal carries one of the two era years, so the readout can still say what the filter does.
+  yearData = { dams: years(dams, damYear), links: [...firstYear.values()].sort((a, b) => a - b),
+               canals: canals ? years(canals.features, (f) => f.properties.year ?? null) : canalsLoaded ? [CANAL_YEAR.before, CANAL_YEAR.after] : [] };
+  const all = [...yearData.dams, ...yearData.links, ...yearData.canals];
+  $('year').min = String(Math.min(...all));
+  $('year').max = String(YEAR_MAX);
+  setYear(YEAR_MAX, false);
 }
-for (const button of document.querySelectorAll('[data-era]')) button.addEventListener('click', () => setEra(button.dataset.era));
+$('year').addEventListener('input', (event) => setYear(Number(event.target.value)));
+$('year-play').addEventListener('click', toggleYearPlay);
 
 // ---------- status filter: operating vs still to build ----------
-const pumpMarkers = [];                      // { house, element }
-const wipMarkers = [];                       // link cones: { status, element }
+function applyWorkFilters() {
+  if (map.getLayer('dam-labels')) map.setFilter('dam-labels', damFilter());
+  if (map.getLayer('pump-labels')) map.setFilter('pump-labels', withDeclutter(['all', linkStatusFilter(), yearFilter()]));
+  if (map.getLayer('wip-labels')) map.setFilter('wip-labels', linkFilter());
+  for (const id of ['links-line', 'links-guide', 'links-hit']) if (map.getLayer(id)) map.setFilter(id, linkFilter());
+  if (map.getLayer('links-pulse')) map.setFilter('links-pulse', ['all', ['==', ['get', 'status'], 'operational'], linkFilter()]);
+  if (map.getLayer('links-arrows')) map.setFilter('links-arrows', ['all', ['!=', ['get', 'status'], 'operational'], linkFilter()]);
+  applyCanalFilters();
+}
 function setStatusMode(mode) {
   statusMode = mode;
   for (const button of document.querySelectorAll('[data-status]')) button.setAttribute('aria-pressed', String(button.dataset.status === mode));
-  for (const { dam, element } of damMarkers) element.classList.toggle('status-hidden', !statusShown(dam.status));
-  for (const { house, element } of pumpMarkers) element.classList.toggle('status-hidden', !statusShown(house.status));
-  for (const { status, element } of wipMarkers) element.classList.toggle('status-hidden', !statusShown(status));
-  for (const id of ['links-casing', 'links-line', 'links-hit']) if (map.getLayer(id)) map.setFilter(id, linkStatusFilter());
-  if (map.getLayer('links-arrows')) map.setFilter('links-arrows', ['all', ['!=', ['get', 'status'], 'operational'], linkStatusFilter()]);
+  applyWorkFilters();
   applyTankVisibility();
   applyGwMode();
-  applyCanalFilters();
   if (mode !== 'all') { damPopup.remove(); linkPopup.remove(); canalPopup.remove(); }
-}
-function renderStatusCounts(dams, links) {
-  const linkGroups = groupLinks(links);
-  for (const button of document.querySelectorAll('[data-status]')) {
-    const mode = button.dataset.status;
-    const shown = (status) => mode === 'all' || (mode === 'pending') === isPending(status);
-    const count = dams.filter((dam) => shown(dam.status)).length + [...linkGroups.values()].filter((group) => shown(group.status)).length;
-    const badge = button.querySelector('b') || button.appendChild(textEl('b', '', ''));
-    badge.textContent = String(count);
-  }
 }
 for (const button of document.querySelectorAll('[data-status]')) button.addEventListener('click', () => setStatusMode(button.dataset.status));
 
@@ -995,52 +1452,25 @@ function pendingYears(item) {
   if (item.target) parts.push(`target ${item.target}`);
   return parts.length ? parts.join(' · ') : null;
 }
-function statusBadge() {
-  const badge = document.createElement('span'); badge.className = 'badge'; badge.title = 'under construction or proposed';
-  const svg = document.createElementNS(SVG_NS, 'svg'); svg.setAttribute('viewBox', '0 0 16 16'); svg.setAttribute('aria-hidden', 'true');
-  const use = document.createElementNS(SVG_NS, 'use'); use.setAttribute('href', '#ic-wip'); svg.appendChild(use); badge.appendChild(svg);
-  return badge;
-}
-
-// The label carries name and capacity; while a dam's popup is open it shrinks to the name.
-const damPopup = new maplibregl.Popup({ closeButton: true, closeOnClick: true, offset: 16, className: 'dam-popup', maxWidth: '320px' });
-let openDamNode = null;
-damPopup.on('close', () => { if (openDamNode) openDamNode.classList.remove('open'); openDamNode = null; });
+const damPopup = new mapboxgl.Popup({ closeButton: true, closeOnClick: true, offset: 16, className: 'dam-popup', maxWidth: '320px' });
 
 const damKindLabel = (dam) => (dam.kind === 'barrage' ? 'Barrage' : dam.river && dam.river.includes('off-river') ? 'Reservoir' : 'Dam');
-function addDamMarker(dam) {
-  const node = document.createElement('div');
-  node.className = `mk-dam ${dam.kind}${isPending(dam.status) ? ` pending ${dam.status === 'proposed' ? 'proposed' : 'uc'}` : ''}${dam.approx ? ' approx' : ''}`;
-  damMarkers.push({ dam, element: node });
-  const icon = document.createElement('span'); icon.className = 'ic';
-  const svg = document.createElementNS(SVG_NS, 'svg'); svg.setAttribute('viewBox', '0 0 16 16'); svg.setAttribute('aria-hidden', 'true');
-  const use = document.createElementNS(SVG_NS, 'use'); use.setAttribute('href', `#ic-${dam.kind}`); svg.appendChild(use); icon.appendChild(svg);
-  if (isPending(dam.status)) icon.appendChild(statusBadge());
-  const label = textEl('span', 'lbl', dam.name);
-  if (dam.capacity_tmcft) label.appendChild(textEl('span', 'e', formatTmcft(dam.capacity_tmcft)));
-  if (isPending(dam.status)) label.appendChild(textEl('span', 'st', STATUS_LABEL[dam.status]));
-  node.append(icon, label);
-  node.title = `${damKindLabel(dam)}${dam.river && !dam.river.includes('off-river') ? ` on the ${dam.river}` : ''}${isPending(dam.status) ? ` · ${STATUS_LABEL[dam.status]}` : ''}`
-             + `${dam.approx ? ` · position approximate (${dam.approx})` : ''} · click for details`;
-  node.addEventListener('click', (event) => { event.stopPropagation(); openDamPopup(dam, node); flyToPoint(dam.lon, dam.lat, 11.5); });
-  new maplibregl.Marker({ element: node, anchor: 'left', offset: [-11, 0] }).setLngLat([dam.lon, dam.lat]).addTo(map);
+const iconFlags = (item) => `${isPending(item.status) ? 'p' : ''}${item.approx ? 'a' : ''}`;
+function buildDamLabels(dams) {
+  damsData = dams;
+  labelData.dams = collection(dams.map((dam, i) => pointFeature(dam.lon, dam.lat, {
+    i, name: dam.name, status: dam.status, ...(damYear(dam) !== null ? { year: damYear(dam) } : {}),
+    icon: `ic|${dam.kind}|${dam.kind}Icon|${iconFlags(dam)}`, sort: -(dam.capacity_tmcft || 0),
+    capn: dam.capacity_tmcft || 0, cap: dam.capacity_tmcft ? ` ${formatTmcft(dam.capacity_tmcft)}` : '', st: isPending(dam.status) ? ` · ${STATUS_LABEL[dam.status]}` : '' })));
 }
 
 // ---------- Kaleshwaram links: pump houses, tunnel portals and the link list ----------
-function addPumpMarker(house) {
-  const node = document.createElement('div');
-  node.className = `mk-pump${isPending(house.status) ? ' pending' : ''}${house.approx ? ' approx' : ''}`;
-  pumpMarkers.push({ house, element: node });
-  const icon = document.createElement('span'); icon.className = 'ic';
-  const svg = document.createElementNS(SVG_NS, 'svg'); svg.setAttribute('viewBox', '0 0 16 16'); svg.setAttribute('aria-hidden', 'true');
-  const use = document.createElementNS(SVG_NS, 'use'); use.setAttribute('href', house.kind === 'tunnel' ? '#ic-tunnel' : '#ic-pump'); svg.appendChild(use); icon.appendChild(svg);
-  if (isPending(house.status)) icon.appendChild(statusBadge());
-  const label = textEl('span', 'lbl', `${house.name}${house.power ? ` · ${house.power.replace('MW', ' MW')}` : ''}`);
-  if (isPending(house.status)) label.appendChild(textEl('span', 'st', STATUS_LABEL[house.status]));
-  node.append(icon, label);
-  node.title = `${house.name}${house.elev_m ? ` · terrain ${house.elev_m} m` : ''}${house.since ? ` · pumping since ${house.since}` : ''}`
-             + `${house.approx ? ` · position approximate (${house.approx})` : ''} · ${house.source === 'OpenStreetMap' ? 'OpenStreetMap' : 'see the link popup for the source'}`;
-  new maplibregl.Marker({ element: node, anchor: 'left', offset: [-10, 0] }).setLngLat([house.lon, house.lat]).addTo(map);
+function buildPumpLabels(houses) {
+  labelData.pumphouses = collection(houses.map((house) => pointFeature(house.lon, house.lat, {
+    name: `${house.name}${house.power ? ` · ${house.power.replace('MW', ' MW')}` : ''}`, status: house.status, ...(house.since ? { year: Number(house.since) } : {}),
+    icon: `ic|${house.kind === 'tunnel' ? 'tunnel' : 'pump'}|link|${iconFlags(house)}`, st: isPending(house.status) ? ` · ${STATUS_LABEL[house.status]}` : '',
+    title: `${house.name}${house.elev_m ? ` · terrain ${house.elev_m} m` : ''}${house.since ? ` · pumping since ${house.since}` : ''}`
+         + `${house.approx ? ` · position approximate (${house.approx})` : ''} · ${house.source === 'OpenStreetMap' ? 'OpenStreetMap' : 'see the link popup for the source'}` })));
 }
 
 // ---------- cropland panel and mode ----------
@@ -1050,13 +1480,36 @@ let cropData = null;
 function setCropMode(mode) {
   cropMode = mode;
   for (const button of document.querySelectorAll('[data-crop]')) button.setAttribute('aria-pressed', String(button.dataset.crop === mode));
-  for (const m of ['before', 'after', 'change']) if (map.getLayer(`crop-${m}`)) map.setLayoutProperty(`crop-${m}`, 'visibility', m === mode ? 'visible' : 'none');
-  $('crop-mode-label').textContent = CROP_MODE_LABEL[mode];
+  if (mode === 'before') cropBlend = 0;
+  if (mode === 'after') cropBlend = 100;
+  syncCrop();
   document.body.classList.toggle('crop-off', mode === 'off');   // the Cropland card shows only with a layer
+}
+/** Pushes cropMode and cropBlend to the rasters, the Blend control, the label and the legend. */
+function syncCrop() {
+  const theme = MAP_THEMES[currentTheme()];
+  for (const m of ['before', 'after', 'change']) {
+    if (!map.getLayer(`crop-${m}`)) continue;
+    map.setLayoutProperty(`crop-${m}`, 'visibility', cropVisible(m) ? 'visible' : 'none');
+    map.setPaintProperty(`crop-${m}`, 'raster-opacity', cropOpacityFor(m, theme));
+  }
+  const blending = cropMode === 'before' || cropMode === 'after';
+  $('crop-blend-row').hidden = !blending;
+  $('crop-blend').value = String(cropBlend);
+  $('crop-blend-out').textContent = `${100 - cropBlend} / ${cropBlend}`;
+  $('crop-mode-label').textContent = blending && cropBlend > 0 && cropBlend < 100
+    ? `blend ${100 - cropBlend} % 2008–2011 · ${cropBlend} % 2016–2019` : CROP_MODE_LABEL[cropMode];
   renderCropLegend();
 }
+$('crop-blend').addEventListener('input', (event) => {
+  cropBlend = Number(event.target.value);
+  if (cropMode === 'before' || cropMode === 'after') {
+    cropMode = cropBlend >= 50 ? 'after' : 'before';
+    for (const button of document.querySelectorAll('[data-crop]')) button.setAttribute('aria-pressed', String(button.dataset.crop === cropMode));
+  }
+  syncCrop();
+});
 for (const button of document.querySelectorAll('[data-crop]')) button.addEventListener('click', () => setCropMode(button.dataset.crop));
-$('crop-close').addEventListener('click', () => setCropMode('off'));
 document.body.classList.add('crop-off');
 
 const rgb = (c) => `rgb(${c[0]},${c[1]},${c[2]})`;
@@ -1073,6 +1526,13 @@ function renderCropLegend() {
   } else {
     bar.style.background = `linear-gradient(90deg, ${cropData.legend.ramp.map(([v, c]) => `rgba(${c.join(',')},${0.25 + 0.65 * v / 100}) ${v}%`).join(', ')})`;
     for (const text of ['0 %', '25', '50', '75', '100 % of cell under crops']) ticks.appendChild(textEl('span', '', text));
+    legend.append(bar, ticks);
+    const mix = document.createElement('div'); mix.className = 'blend-bar';
+    const knob = document.createElement('i'); knob.style.left = `${cropBlend}%`; mix.appendChild(knob);
+    const blendTicks = document.createElement('div'); blendTicks.className = 'ticks';
+    for (const text of ['2008–11', `blend ${100 - cropBlend} / ${cropBlend}`, '2016–19']) blendTicks.appendChild(textEl('span', '', text));
+    legend.append(mix, blendTicks);
+    return;
   }
   legend.append(bar, ticks);
 }
@@ -1162,7 +1622,7 @@ function renderCanalNetwork(summary) {
 }
 
 // ---------- canal popup ----------
-const canalPopup = new maplibregl.Popup({ closeButton: true, closeOnClick: true, offset: 8, className: 'dam-popup canal-popup', maxWidth: '300px' });
+const canalPopup = new mapboxgl.Popup({ closeButton: true, closeOnClick: true, offset: 8, className: 'dam-popup canal-popup', maxWidth: '300px' });
 function openCanalPopup(p, lngLat) {
   const content = document.createElement('div');
   const head = textEl('div', 'head', '');
@@ -1181,12 +1641,12 @@ function openCanalPopup(p, lngLat) {
   content.appendChild(link);
   canalPopup.setLngLat(lngLat).setDOMContent(content).addTo(map);
 }
-map.on('click', 'canals-hit', (event) => { event.originalEvent.stopPropagation(); openCanalPopup(event.features[0].properties, event.lngLat); });
+map.on('click', 'canals-hit', (event) => { if (sketching()) return; event.originalEvent.stopPropagation(); openCanalPopup(event.features[0].properties, event.lngLat); });
 map.on('mouseenter', 'canals-hit', () => { map.getCanvas().style.cursor = 'pointer'; });
 map.on('mouseleave', 'canals-hit', () => { map.getCanvas().style.cursor = ''; });
 
 // ---------- tank popup and the Tanks card ----------
-const tankPopup = new maplibregl.Popup({ closeButton: true, closeOnClick: true, offset: 8, className: 'dam-popup tank-popup', maxWidth: '300px' });
+const tankPopup = new mapboxgl.Popup({ closeButton: true, closeOnClick: true, offset: 8, className: 'dam-popup tank-popup', maxWidth: '300px' });
 const indian = (value) => Number(value).toLocaleString('en-IN');
 function openTankPopup(p, lngLat) {
   const content = document.createElement('div');
@@ -1206,8 +1666,11 @@ function openTankPopup(p, lngLat) {
   content.appendChild(link);
   tankPopup.setLngLat(lngLat).setDOMContent(content).addTo(map);
 }
+// A dam or pump label over a reservoir takes the click alone (its own handler opens the popup): one popup per click.
+const LABELS_OVER_TANKS = ['dam-labels', 'pump-labels'];
+const labelUnderClick = (point) => { const layers = LABELS_OVER_TANKS.filter((id) => map.getLayer(id)); return layers.length > 0 && map.queryRenderedFeatures(point, { layers }).length > 0; };
 for (const id of ['tanks-fill', 'tanks-dots']) {
-  map.on('click', id, (event) => { event.originalEvent.stopPropagation(); openTankPopup(event.features[0].properties, event.lngLat); });
+  map.on('click', id, (event) => { if (sketching() || labelUnderClick(event.point)) return; event.originalEvent.stopPropagation(); openTankPopup(event.features[0].properties, event.lngLat); });
   map.on('mouseenter', id, () => { map.getCanvas().style.cursor = 'pointer'; });
   map.on('mouseleave', id, () => { map.getCanvas().style.cursor = ''; });
 }
@@ -1250,15 +1713,16 @@ function renderTanks(data) {
     tbody.appendChild(tr);
   }
   for (const d of data.districts) {
-    const label = districtLabels.get(d.district);
-    if (!label) continue;
+    const feature = districtFeatures.get(d.district);
+    if (!feature) continue;
     const total = kakatiyaTotal(d);
-    label.querySelector('.cnt').textContent = d.mk_counted_in ? `in ${d.mk_counted_in}` : total ? `${indian(total)} tanks` : '';
+    feature.properties.mk = d.mk_counted_in ? `in ${d.mk_counted_in}` : total ? `${indian(total)} tanks` : '';
   }
+  if (map.getSource('district-points')) map.getSource('district-points').setData(labelData['district-points']);
 }
 
 // ---------- groundwater: well and district popups, legend, year curve and the Groundwater card ----------
-const gwPopup = new maplibregl.Popup({ closeButton: true, closeOnClick: true, offset: 8, className: 'dam-popup gw-popup', maxWidth: '320px' });
+const gwPopup = new mapboxgl.Popup({ closeButton: true, closeOnClick: true, offset: 8, className: 'dam-popup gw-popup', maxWidth: '320px' });
 const metres = (value) => `${Number(value).toFixed(1)} m`;
 const signedMetres = (value) => `${value > 0 ? '+' : value < 0 ? '−' : ''}${Math.abs(value).toFixed(1)} m`;
 const gwYears = (window) => `${window.years[0]}–${String(window.years[1]).slice(2)}`;
@@ -1340,10 +1804,10 @@ function openGwDistrictPopup(d, lngLat) {
   content.append(head, dl, textEl('p', 'fine', 'Click a well for its own readings.'), gwSourceLink());
   gwPopup.setLngLat(lngLat).setDOMContent(content).addTo(map);
 }
-map.on('click', 'gw-wells', (event) => { event.originalEvent.stopPropagation(); openGwPopup(event.features[0].properties, event.lngLat); });
+map.on('click', 'gw-wells', (event) => { if (sketching()) return; event.originalEvent.stopPropagation(); openGwPopup(event.features[0].properties, event.lngLat); });
 map.on('mouseenter', 'gw-wells', () => { map.getCanvas().style.cursor = 'pointer'; });
 map.on('mouseleave', 'gw-wells', () => { map.getCanvas().style.cursor = ''; });
-map.on('click', 'gw-districts', (event) => {
+map.on('click', 'gw-districts', (event) => { if (sketching()) return;
   const above = ['gw-wells', 'tanks-fill', 'tanks-dots'].filter((id) => map.getLayer(id));
   if (map.queryRenderedFeatures(event.point, { layers: above }).length) return;           // the well or tank popup takes the click
   const d = gwData && gwData.districts.find((row) => row.district === event.features[0].properties.shapeName);
@@ -1407,11 +1871,11 @@ function renderGroundwater(data) {
 }
 
 // ---------- proposal: popups, map labels and the Proposal card ----------
-const proposalPopup = new maplibregl.Popup({ closeButton: true, closeOnClick: true, offset: 8, className: 'dam-popup prop-popup', maxWidth: '330px' });
+const proposalPopup = new mapboxgl.Popup({ closeButton: true, closeOnClick: true, offset: 8, className: 'dam-popup prop-popup', maxWidth: '330px' });
 const crore = (value) => `₹${indian(Math.round(value))} crore`;
 const proposalWork = (id) => proposalData && proposalData.works.find((w) => w.id === id);
 const PROP_KIND_LABEL = { pool: 'proposed reservoir', delivery: 'proposed lift delivery', tunnel: 'proposed tunnel', canal: 'proposed canal', cut: 'proposed deep cut', aqueduct: 'proposed aqueduct or siphon', 'pressure main': 'proposed pressure main' };
-const TUNNEL_ABOVE_M = 25;
+const TUNNEL_ABOVE_M = 30;
 function openTrunkPopup(p, lngLat) {
   const system = proposalData.systems.find((s) => s.name === p.system);
   const content = document.createElement('div');
@@ -1466,29 +1930,20 @@ function openProposalPopup(p, lngLat) {
     if (work.over_cap) row('Water', 'No intake had this much to spare under the surplus rule; the cheapest route is shown anyway.');
   }
   content.append(head, dl, textEl('p', 'fine', 'Computed from the 200 m terrain model under planning norms; routes are straight lines, not alignments. Method and norms in the Proposal card.'));
+  if (p.kind === 'pool') content.appendChild(orbitButton(work.lon === undefined ? lngLat.lng : work.lon, work.lat === undefined ? lngLat.lat : work.lat));
   proposalPopup.setLngLat(lngLat).setDOMContent(content).addTo(map);
 }
 for (const id of ['prop-pool', 'prop-canal', 'prop-tunnel', 'prop-delivery', 'prop-pump', 'prop-trunk-new', 'prop-trunk-existing']) {
-  map.on('click', id, (event) => { event.originalEvent.stopPropagation(); openProposalPopup(event.features[0].properties, event.lngLat); });
+  map.on('click', id, (event) => { if (sketching()) return; event.originalEvent.stopPropagation(); openProposalPopup(event.features[0].properties, event.lngLat); });
   map.on('mouseenter', id, () => { map.getCanvas().style.cursor = 'pointer'; });
   map.on('mouseleave', id, () => { map.getCanvas().style.cursor = ''; });
 }
-function propIcon(symbol) {
-  const icon = document.createElement('span');
-  icon.className = 'ic';
-  const svg = document.createElementNS(SVG_NS, 'svg'); svg.setAttribute('viewBox', '0 0 16 16'); svg.setAttribute('aria-hidden', 'true');
-  const use = document.createElementNS(SVG_NS, 'use'); use.setAttribute('href', `#ic-${symbol}`); svg.appendChild(use); icon.appendChild(svg);
-  return icon;
-}
 /** A proposed work on the map: icon, name, figure (TMC, MW, km) and a "new" tag; clicking opens its popup. */
+const PROP_ICON_COLOUR = { reservoir: 'propPool', delivery: 'prop', canal: 'prop', tunnel: 'prop', pump: 'propPump', main: 'propPump', trunk: 'propTrunk' };
 function propMarker(kind, symbol, lngLat, title, detail, onClick) {
-  const node = textEl('div', `mk-new ${kind}`, '');
-  const label = textEl('span', 'lbl', title);
-  label.append(textEl('span', 'e', detail), textEl('span', 'st', 'new'));
-  node.append(propIcon(symbol), label);
-  node.title = `${title} · proposed, not built · click for details`;
-  node.addEventListener('click', (event) => { event.stopPropagation(); onClick(); });
-  proposalMarkers.push(new maplibregl.Marker({ element: node, anchor: 'left', offset: [-11, 0] }).setLngLat(lngLat).addTo(map));
+  if (!labelData['prop-labels']) labelData['prop-labels'] = collection([]);
+  const i = labelActions['prop-labels'].push(onClick) - 1;
+  labelData['prop-labels'].features.push(pointFeature(lngLat[0], lngLat[1], { i, kind, title, detail: ` ${detail}`, icon: `ic|${symbol}|${PROP_ICON_COLOUR[kind]}|n`, sort: kind === 'reservoir' ? 1 : 3 }));
 }
 /** Midpoint of a lon/lat polyline, for the canal and tunnel labels. */
 function lineMidpoint(coords) {
@@ -1535,6 +1990,11 @@ function renderProposal(data) {
   const t = data.totals;
   const n = data.norms;
   $('prop-count').textContent = `${t.reservoirs + t.deliveries} works · ${indian(t.annual_tmc)} TMC`;
+  // Headline numbers of the proposal lens (ids exist once the new shell is merged).
+  const headline = (id, text) => { const el = document.getElementById(id); if (el) el.textContent = text; };
+  headline('hl-proposal-1', `₹${(t.capex_cr / 1e5).toFixed(2)} lakh crore`);
+  headline('hl-proposal-2', `+ ₹${(t.systems_capex_new_cr / 1e5).toFixed(2)} lakh crore`);
+  headline('hl-proposal-3', `${Math.round(t.annual_tmc)} TMC`);
   const summary = $('prop-summary');
   summary.textContent = '';
   summary.append(`Land cover says ${s.cultivable_pct} % of Telangana is cultivable (the rest is forest, towns, water and steep ground) and `, bold(`${s.cropland_pct} %`),
@@ -1640,7 +2100,7 @@ function renderProposal(data) {
 }
 
 // ---------- link popup ----------
-const linkPopup = new maplibregl.Popup({ closeButton: true, closeOnClick: true, offset: 10, className: 'dam-popup link-popup', maxWidth: '340px' });
+const linkPopup = new mapboxgl.Popup({ closeButton: true, closeOnClick: true, offset: 10, className: 'dam-popup link-popup', maxWidth: '340px' });
 linkPopup.on('close', () => map.setFilter('links-highlight', ['==', ['get', 'link'], '']));
 const linkKey = (p) => `${p.scheme} · ${p.link}`;
 
@@ -1685,25 +2145,19 @@ function openLinkPopup(p, lngLat) {
   content.appendChild(link);
   linkPopup.setLngLat(lngLat).setDOMContent(content).addTo(map);
 }
-map.on('click', 'links-hit', (event) => { event.originalEvent.stopPropagation(); openLinkPopup(event.features[0].properties, event.lngLat); });
+map.on('click', 'links-hit', (event) => { if (sketching()) return; event.originalEvent.stopPropagation(); openLinkPopup(event.features[0].properties, event.lngLat); });
 map.on('mouseenter', 'links-hit', () => { map.getCanvas().style.cursor = 'pointer'; });
 map.on('mouseleave', 'links-hit', () => { map.getCanvas().style.cursor = ''; });
 
-function addWorkInProgressMarkers(links) {
+function buildWorkInProgressLabels(links) {
   const seen = new Set();
+  labelData.wip = collection([]);
   for (const feature of links.features) {
     const p = feature.properties;
     if (p.status === 'operational' || seen.has(linkKey(p))) continue;
     seen.add(linkKey(p));
     const coords = feature.geometry.coordinates, mid = coords[Math.floor(coords.length / 2)];
-    const node = document.createElement('div'); node.className = 'mk-wip';
-    const icon = document.createElement('span'); icon.className = 'ic';
-    const svg = document.createElementNS(SVG_NS, 'svg'); svg.setAttribute('viewBox', '0 0 16 16'); svg.setAttribute('aria-hidden', 'true');
-    const use = document.createElementNS(SVG_NS, 'use'); use.setAttribute('href', '#ic-wip'); svg.appendChild(use); icon.appendChild(svg);
-    node.append(icon, textEl('span', 'lbl', `${p.link} · ${STATUS_LABEL[p.status] || p.status}`));
-    node.title = `${p.link}: ${p.from} → ${p.to} · ${p.note}`;
-    wipMarkers.push({ status: p.status, element: node });
-    new maplibregl.Marker({ element: node, anchor: 'left', offset: [-11, 0] }).setLngLat(mid).addTo(map);
+    labelData.wip.features.push(pointFeature(mid[0], mid[1], { name: `${p.link} · ${STATUS_LABEL[p.status] || p.status}`, status: p.status, ...(p.year !== undefined ? { year: p.year } : {}), title: `${p.link}: ${p.from} → ${p.to} · ${p.note}` }));
   }
 }
 
@@ -1722,7 +2176,7 @@ function groupLinks(links) {
 }
 function focusLinkGroup(group, button) {
   for (const other of document.querySelectorAll('.link-list .row')) other.classList.toggle('active', other === button);
-  const bounds = new maplibregl.LngLatBounds();
+  const bounds = new mapboxgl.LngLatBounds();
   for (const feature of group.features) for (const coord of feature.geometry.coordinates) bounds.extend(coord);
   map.fitBounds(bounds, { padding: { top: 80, bottom: 80, left: 400, right: 340 }, pitch: 50, bearing: -15, duration: 1800, maxZoom: 10.5 });
   const first = group.features[0], mid = first.geometry.coordinates[Math.floor(first.geometry.coordinates.length / 2)];
@@ -1759,13 +2213,12 @@ function renderLinkList(links) {
 function renderPendingList(dams, links, notes) {
   const bySchemes = new Map();                 // scheme -> [{ kind, label, status, years, onClick, note }]
   const add = (scheme, row) => { if (!bySchemes.has(scheme)) bySchemes.set(scheme, []); bySchemes.get(scheme).push(row); };
-  for (const entry of damMarkers) {
-    const { dam, element } = entry;
+  for (const dam of damsData) {
     if (!isPending(dam.status)) continue;
     add(dam.scheme || 'Other projects', {
       kind: damKindLabel(dam).toLowerCase(), label: dam.name, status: dam.status, years: pendingYears(dam),
       extra: [dam.capacity_tmcft ? formatTmcft(dam.capacity_tmcft) : null, dam.approx ? 'position approximate' : null].filter(Boolean).join(' · '),
-      onClick: (button) => { for (const other of document.querySelectorAll('.link-list .row')) other.classList.toggle('active', other === button); openDamPopup(dam, element); flyToPoint(dam.lon, dam.lat, 11); },
+      onClick: (button) => { for (const other of document.querySelectorAll('.link-list .row')) other.classList.toggle('active', other === button); openDamPopup(dam); flyToWork(dam.lon, dam.lat); },
     });
   }
   for (const group of groupLinks(links).values()) {
@@ -1806,8 +2259,8 @@ function renderPendingList(dams, links, notes) {
   return { structures, links: linkCount, unlocated };
 }
 
-function openDamPopup(dam, node) {
-  damPopup.remove();                                   // closes any other dam's popup (restoring its label)
+function openDamPopup(dam) {
+  damPopup.remove();
   linkPopup.remove();
   const content = document.createElement('div');
   const head = textEl('div', 'head', '');
@@ -1818,7 +2271,7 @@ function openDamPopup(dam, node) {
   const rows = [
     ['Status', pending ? `${STATUS_LABEL[dam.status]}${dam.target ? `, target ${dam.target}` : ''}` : null],
     ['Scheme', dam.scheme],
-    ['Height', dam.height ? `${dam.height} m` : null],
+    ['Height', dam.height ? `${dam.height} m` : (damsWithAssumedWall.has(damsData.indexOf(dam)) ? 'height unknown, drawn 15 m' : null)],
     ['Terrain', dam.elev_m ? `${dam.elev_m} m above sea level` : null],
     [pending ? 'Years' : 'Built', pending ? pendingYears(dam) : damYears(dam)],
     ['Average inflow', dam.inflow_q ? `${dam.inflow_q.toLocaleString('en-IN')} m³/s${dam.inflow_name ? ` · ${dam.inflow_name}` : ''}` : null],
@@ -1837,12 +2290,12 @@ function openDamPopup(dam, node) {
   link.href = dam.url; link.target = '_blank'; link.rel = 'noopener';
   link.textContent = dam.url.includes('wikipedia.org') ? 'Source: Wikipedia ↗' : dam.url.includes('wikidata.org') ? 'Source: Wikidata ↗' : 'Source ↗';
   content.appendChild(link);
-  node.classList.add('open');
-  openDamNode = node;
+  content.appendChild(orbitButton(dam.lon, dam.lat));
   damPopup.setLngLat([dam.lon, dam.lat]).setDOMContent(content).addTo(map);
 }
 function flyToCity(city) {
-  for (const [name, marker] of cityMarkers) marker.getElement().classList.toggle('active', name === city.name);
+  if (!city) return;
+  for (const [name, id] of cityIndex) map.setFeatureState({ source: 'cities', id }, { active: name === city.name });
   for (const row of document.querySelectorAll('#city-list .row')) row.classList.toggle('active', row.dataset.city === city.name);
   map.flyTo({ center: [city.lon, city.lat], zoom: 10.6, pitch: 64, bearing: -28, duration: 2400, essential: true });
 }
@@ -1891,6 +2344,31 @@ function niceStep(range, target) {
   return [1, 2, 5, 10].map((m) => m * magnitude).find((step) => step >= raw);
 }
 
+/** line-gradient along the river: the relief colour of the bed at up to PROFILE_STOPS points, by distance along the line. */
+const PROFILE_STOPS = 60;
+function profileGradientFor(profile) {
+  const points = profile.points, total = points[points.length - 1].d;
+  const step = Math.max(1, Math.ceil((points.length - 1) / (PROFILE_STOPS - 1)));
+  const stops = [];
+  for (let i = 0; i < points.length; i += step) stops.push(points[i]);
+  if (stops[stops.length - 1] !== points[points.length - 1]) stops.push(points[points.length - 1]);
+  const expression = ['interpolate', ['linear'], ['line-progress']];
+  let last = -1;
+  for (const p of stops) {
+    const progress = Math.min(1, p.d / total);
+    if (progress <= last) continue;                       // line-progress stops must rise strictly
+    expression.push(progress, rampColour(RELIEF_STOPS, p.elev));
+    last = progress;
+  }
+  return expression;
+}
+function updateProfileLine() {
+  const profile = profileState.profiles[profileState.river];
+  profileGradient = profileGradientFor(profile);
+  profileLine = collection([{ type: 'Feature', properties: { river: profileState.river }, geometry: { type: 'LineString', coordinates: profile.points.map((p) => [p.lon, p.lat]) } }]);
+  if (map.getSource('profile')) map.getSource('profile').setData(profileLine);
+  if (map.getLayer('profile-line')) map.setPaintProperty('profile-line', 'line-gradient', profileGradient);
+}
 function renderProfile() {
   const profile = profileState.profiles[profileState.river];
   const svg = $('profile');
@@ -1953,6 +2431,7 @@ function renderProfile() {
     tbody.appendChild(tr);
   }
   $('scrub').max = String(points.length - 1);
+  updateProfileLine();
   highlightProfile(Math.min(profileState.index, points.length - 1), false);
 }
 const FLOW_CHART = { w: 328, h: 110, l: 38, r: 10, t: 10, b: 22 };
@@ -2021,18 +2500,125 @@ function highlightProfile(index, showTip) {
     tip.style.top = `${y(point.elev) / CHART.h * box.height}px`;
     tip.hidden = false;
   }
-  if (!profileState.marker) {
-    const el = document.createElement('div'); el.className = 'mk-scrub';
-    profileState.marker = new maplibregl.Marker({ element: el }).setLngLat([point.lon, point.lat]).addTo(map);
-  } else {
-    profileState.marker.setLngLat([point.lon, point.lat]);
-  }
+  scrubPoint = collection([pointFeature(point.lon, point.lat, {})]);
+  if (map.getSource('scrub')) map.getSource('scrub').setData(scrubPoint);
 }
 function spanText(text) { const el = document.createElement('span'); el.textContent = text; return el; }
+
+// ---------- orbit around a structure: the free camera circles a dam or reservoir from its popup ----------
+// A free camera that low is further in than MAX_ZOOM allows (zoom follows the distance to the look-at point and Mapbox pulls the camera back),
+// so the orbit raises the limit while it runs and eases back under MAX_ZOOM when it stops.
+const STRUCTURE_ORBIT = { radiusM: 4000, aboveGroundM: 2500, seconds: 24, maxZoom: 17 };
+let structureOrbit = null;                  // { lon, lat, angle, last, button }
+function startStructureOrbit(lon, lat, button) {
+  stopFlight();
+  stopOrbit();
+  map.stop();
+  map.setMaxZoom(STRUCTURE_ORBIT.maxZoom);
+  structureOrbit = { lon, lat, angle: (map.getBearing() + 180) % 360, last: 0, button };   // begin on the side the camera already looks from
+  button.textContent = 'Stop orbit';
+  requestAnimationFrame(structureOrbitStep);
+}
+function stopStructureOrbit() {
+  if (!structureOrbit) return;
+  structureOrbit.button.textContent = 'Orbit';
+  structureOrbit = null;
+  map.easeTo({ zoom: Math.min(map.getZoom(), MAX_ZOOM), duration: 600, essential: true });
+  map.once('moveend', () => { if (!structureOrbit) map.setMaxZoom(MAX_ZOOM); });
+}
+function structureOrbitStep(now) {
+  if (!structureOrbit) return;
+  const o = structureOrbit;
+  if (o.last) o.angle = (o.angle + 360 * Math.min((now - o.last) / 1000, 0.1) / STRUCTURE_ORBIT.seconds) % 360;
+  o.last = now;
+  const radians = (o.angle * Math.PI) / 180;
+  const metresPerDegree = 111320;
+  const lon = o.lon + (STRUCTURE_ORBIT.radiusM * Math.sin(radians)) / (metresPerDegree * Math.cos((o.lat * Math.PI) / 180));
+  const lat = o.lat + (STRUCTURE_ORBIT.radiusM * Math.cos(radians)) / metresPerDegree;
+  const centreGround = map.queryTerrainElevation([o.lon, o.lat], { exaggerated: true }) || 0;
+  const cameraGround = map.queryTerrainElevation([lon, lat], { exaggerated: true }) || 0;
+  const altitude = Math.max(centreGround, cameraGround) + STRUCTURE_ORBIT.aboveGroundM;
+  const camera = map.getFreeCameraOptions();
+  camera.position = mapboxgl.MercatorCoordinate.fromLngLat([lon, lat], altitude);
+  const pitch = (Math.atan2(STRUCTURE_ORBIT.radiusM, altitude - centreGround) * 180) / Math.PI;   // aim at the structure's own height
+  camera.setPitchBearing(Math.min(pitch, map.getMaxPitch()), (o.angle + 180) % 360);
+  map.setFreeCameraOptions(camera);
+  requestAnimationFrame(structureOrbitStep);
+}
+function orbitButton(lon, lat) {
+  const button = textEl('button', 'chip orbit-btn', 'Orbit');
+  button.type = 'button';
+  button.title = 'Circle this structure with the camera. Drag, scroll or Esc to stop.';
+  button.addEventListener('click', () => (structureOrbit && structureOrbit.button === button ? stopStructureOrbit() : startStructureOrbit(lon, lat, button)));
+  return button;
+}
+
+// ---------- flight along a river: a free camera follows the river bed downstream, the chart and readout follow the camera ----------
+const FLIGHT = { kmPerSecond: 9, aboveGroundM: 2600, behindKm: 5, aheadKm: 7, pitch: 62 };
+let flight = null;                          // { points, total, d, last, fov }
+const FLIGHT_FOV = 28;                      // degrees: a longer lens flattens the perspective while flying low (camera `fov` option, experimental since v3.28)
+function pointAtKm(points, d) {
+  let lo = 0, hi = points.length - 1;
+  while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (points[mid].d <= d) lo = mid; else hi = mid; }
+  const a = points[lo], b = points[hi], f = (d - a.d) / ((b.d - a.d) || 1);
+  return { lon: a.lon + (b.lon - a.lon) * f, lat: a.lat + (b.lat - a.lat) * f, elev: a.elev + (b.elev - a.elev) * f, q: a.q + (b.q - a.q) * f };
+}
+const bedChip = document.querySelector('.chip[data-toggle="bed"]');
+function setBedLine(on) {
+  bedChip.setAttribute('aria-pressed', String(on));
+  toggles.bed(on);
+}
+function startFlight() {
+  stopOrbit();
+  stopStructureOrbit();
+  const points = profileState.profiles[profileState.river].points;
+  flight = { points, total: points[points.length - 1].d, d: Math.max(0, points[profileState.index].d), last: 0, fov: map.transform.fov, bed: bedChip.getAttribute('aria-pressed') === 'true' };
+  setBedLine(true);                          // the bed height line shows during the flight
+  map.easeTo({ fov: FLIGHT_FOV, duration: 600, essential: true });
+  $('fly').textContent = 'Stop';
+  $('fly').setAttribute('aria-pressed', 'true');
+  document.body.classList.add('flying');
+  requestAnimationFrame(flightStep);
+}
+function stopFlight() {
+  stopStructureOrbit();                      // one stop handler (drag, wheel, touch, Esc, 2D button) ends either kind of camera animation
+  if (!flight) return;
+  map.easeTo({ fov: flight.fov, duration: 600, essential: true });
+  setBedLine(flight.bed);                    // back to what the chip showed before the flight
+  flight = null;
+  $('fly').textContent = 'Fly the river';
+  $('fly').setAttribute('aria-pressed', 'false');
+  document.body.classList.remove('flying');
+  clearCursor();
+}
+function flightStep(now) {
+  if (!flight) return;
+  if (flight.last) flight.d += FLIGHT.kmPerSecond * Math.min((now - flight.last) / 1000, 0.1);
+  flight.last = now;
+  if (flight.d >= flight.total) { stopFlight(); return; }
+  const here = pointAtKm(flight.points, flight.d);
+  const behind = pointAtKm(flight.points, Math.max(0, flight.d - FLIGHT.behindKm));
+  const ahead = pointAtKm(flight.points, Math.min(flight.total, flight.d + FLIGHT.aheadKm));
+  const ground = map.queryTerrainElevation([behind.lon, behind.lat], { exaggerated: true });
+  const camera = map.getFreeCameraOptions();
+  camera.position = mapboxgl.MercatorCoordinate.fromLngLat([behind.lon, behind.lat], (ground === null ? here.elev * Number($('exag').value) * 1.6 : ground) + FLIGHT.aboveGroundM);
+  const dx = (ahead.lon - behind.lon) * Math.cos((behind.lat * Math.PI) / 180), dy = ahead.lat - behind.lat;
+  camera.setPitchBearing(FLIGHT.pitch, (Math.atan2(dx, dy) * 180) / Math.PI);   // a fixed tilt, heading downstream
+  map.setFreeCameraOptions(camera);
+  highlightProfile(nearestIndex(flight.points, flight.d), false);
+  cursorElev.textContent = Math.round(here.elev).toLocaleString('en-IN');
+  cursorPos.textContent = `${profileState.river} · river bed · ${Math.round(here.q).toLocaleString('en-IN')} m³/s · ${Math.round(flight.d)} km`;
+  showComparison(here.elev);
+  requestAnimationFrame(flightStep);
+}
+$('fly').addEventListener('click', () => (flight ? stopFlight() : startFlight()));
+for (const event of ['mousedown', 'wheel', 'touchstart']) map.getCanvasContainer().addEventListener(event, stopFlight, { passive: true });
+window.addEventListener('keydown', (event) => { if (event.key === 'Escape') stopFlight(); });
 $('scrub').addEventListener('input', (event) => highlightProfile(Number(event.target.value), true));
-for (const tab of document.querySelectorAll('[role="tab"]')) {
+for (const tab of document.querySelectorAll('[role="tab"][data-river]')) {
   tab.addEventListener('click', () => {
-    for (const other of document.querySelectorAll('[role="tab"]')) other.setAttribute('aria-selected', String(other === tab));
+    for (const other of document.querySelectorAll('[role="tab"][data-river]')) other.setAttribute('aria-selected', String(other === tab));
+    stopFlight();
     profileState.river = tab.dataset.river;
     profileState.index = 0;
     renderProfile();
@@ -2040,116 +2626,485 @@ for (const tab of document.querySelectorAll('[role="tab"]')) {
 }
 
 // ---------- data + boot ----------
+// ---------- sketch a canal (mapbox-gl-draw) ----------
+// A drawn line is measured (haversine), its ground read from the Terrain-DEM every 500 m, and judged against the proposal model's
+// norms: gravity works when the end sits below the start by the canal fall plus the stage loss and no ground climbs more than
+// tunnel_cover above the falling water line; otherwise the lift and the stretches that need a tunnel or deep cut are reported.
+const SKETCH_STEP_KM = 0.5, SKETCH_TANK_KM = 2, SKETCH_RETRIES = 15, SKETCH_LIST_MAX = 6;
+let sketchDraw = null;                     // the MapboxDraw control, only while the tool is on
+let sketchData = null;                     // { tanks, districts } read once, the first time the tool opens
+let sketchRun = 0;                         // a newer measurement makes older retries stop
+
+function haversineKm(a, b) {
+  const rad = Math.PI / 180, dLat = (b[1] - a[1]) * rad, dLng = (b[0] - a[0]) * rad;
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(a[1] * rad) * Math.cos(b[1] * rad) * Math.sin(dLng / 2) ** 2;
+  return 2 * 6371.0088 * Math.asin(Math.sqrt(h));
+}
+function lineLengthKm(coords) {
+  let total = 0;
+  for (let i = 1; i < coords.length; i++) total += haversineKm(coords[i - 1], coords[i]);
+  return total;
+}
+/** Points every `stepKm` along the line, from its start to its end: [{ d (km along), lng, lat }]. */
+function sketchSamples(coords, stepKm) {
+  const samples = [];
+  let before = 0, next = 0;
+  for (let i = 1; i < coords.length; i++) {
+    const a = coords[i - 1], b = coords[i], length = haversineKm(a, b);
+    for (; next <= before + length && length > 0; next += stepKm) {
+      const f = (next - before) / length;
+      samples.push({ d: next, lng: a[0] + (b[0] - a[0]) * f, lat: a[1] + (b[1] - a[1]) * f });
+    }
+    before += length;
+  }
+  const end = coords[coords.length - 1];
+  if (!samples.length || before - samples[samples.length - 1].d > 1e-6) samples.push({ d: before, lng: end[0], lat: end[1] });
+  return samples;
+}
+/** The gravity check on samples [{ d, elev }] under the proposal's norms; pure, so it can be tested with made-up ground. */
+function sketchAssess(samples, norms) {
+  const length = samples[samples.length - 1].d;
+  const start = samples[0].elev, end = samples[samples.length - 1].elev;
+  const needed = norms.canal_fall_m_per_km * length + norms.stage_loss_m;     // fall the water line spends on the way
+  const water = (d) => start - norms.canal_fall_m_per_km * d - (length ? norms.stage_loss_m * d / length : 0);
+  const high = samples.reduce((best, s) => (s.elev > best.elev ? s : best), samples[0]);
+  const excess = samples.map((s) => s.elev - water(s.d));                       // ground above the water line
+  const stretches = [];
+  let run = null;
+  samples.forEach((s, i) => {
+    const kind = excess[i] > norms.tunnel_cover_m ? 'tunnel' : excess[i] > norms.cut_cover_m ? 'cut' : null;
+    if (!kind) { run = null; return; }
+    if (!run || run.kind !== kind) { run = { kind, from: s.d, to: s.d, peak: 0 }; stretches.push(run); }
+    run.to = s.d; run.peak = Math.max(run.peak, excess[i]);
+  });
+  const fall = start - end, worst = Math.max(...excess);
+  return { length, start, end, fall, needed, high, water, stretches, worst,
+           gravity: fall >= needed && worst <= norms.tunnel_cover_m,
+           lift: Math.max(0, high.elev - start + needed) };
+}
+/** Distance in km from a point to a polyline, on a local flat projection (fine at 2 km). */
+function pointToLineKm(p, coords) {
+  const kmLat = 110.574, kmLng = 111.32 * Math.cos(p[1] * Math.PI / 180);
+  const at = (c) => [(c[0] - p[0]) * kmLng, (c[1] - p[1]) * kmLat];
+  let best = Infinity;
+  for (let i = 1; i < coords.length; i++) {
+    const [ax, ay] = at(coords[i - 1]), [bx, by] = at(coords[i]);
+    const dx = bx - ax, dy = by - ay, len2 = dx * dx + dy * dy;
+    const t = len2 ? Math.max(0, Math.min(1, -(ax * dx + ay * dy) / len2)) : 0;
+    best = Math.min(best, Math.hypot(ax + t * dx, ay + t * dy));
+  }
+  return best;
+}
+function inRing(point, ring) {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const [xi, yi] = ring[i], [xj, yj] = ring[j];
+    if ((yi > point[1]) !== (yj > point[1]) && point[0] < (xj - xi) * (point[1] - yi) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+function inDistrict(point, geometry) {
+  const polygons = geometry.type === 'Polygon' ? [geometry.coordinates] : geometry.coordinates;
+  return polygons.some((rings) => inRing(point, rings[0]) && !rings.slice(1).some((hole) => inRing(point, hole)));
+}
+
+function sketchStyles(t) {
+  const line = ['all', ['==', '$type', 'LineString'], ['!=', 'mode', 'static']];
+  const vertex = ['all', ['==', '$type', 'Point'], ['==', 'meta', 'vertex']];
+  const midpoint = ['all', ['==', '$type', 'Point'], ['==', 'meta', 'midpoint']];
+  const cap = { 'line-cap': 'round', 'line-join': 'round' };
+  return [
+    { id: 'gl-draw-line-halo', type: 'line', filter: line, layout: cap, paint: { 'line-color': t.sketchHalo, 'line-width': 6, 'line-emissive-strength': 1 } },
+    { id: 'gl-draw-line', type: 'line', filter: line, layout: cap, paint: { 'line-color': t.sketch, 'line-width': 3, 'line-dasharray': [2, 1.5], 'line-emissive-strength': 1 } },
+    { id: 'gl-draw-vertex-halo', type: 'circle', filter: vertex, paint: { 'circle-radius': 7, 'circle-color': t.sketchHalo, 'circle-emissive-strength': 1 } },
+    { id: 'gl-draw-vertex', type: 'circle', filter: vertex, paint: { 'circle-radius': 4.5, 'circle-color': t.sketch, 'circle-emissive-strength': 1 } },
+    { id: 'gl-draw-midpoint', type: 'circle', filter: midpoint, paint: { 'circle-radius': 3, 'circle-color': t.sketch, 'circle-emissive-strength': 1 } },
+  ].map((layer) => ({ ...layer, slot: 'top' }));
+}
+
+/** Adds the draw control (line and bin only) and puts back any kept features once Draw's own source exists. */
+function startSketchControl(kept, mode) {
+  const draw = new MapboxDraw({ displayControlsDefault: false, controls: { line_string: true, trash: true }, styles: sketchStyles(MAP_THEMES[currentTheme()]) });
+  sketchDraw = draw;
+  // Draw adds its layers only once map.loaded() is true, then never again; the flow animation keeps that false for good,
+  // so the map reports itself loaded for the instant it takes the control to attach (the style is ready by now).
+  const loaded = map.loaded;
+  map.loaded = () => true;
+  map.addControl(draw, 'bottom-right');
+  map.loaded = loaded;
+  // The right-hand cards sit over the map's control corners, so the two buttons live in the Sketch card instead.
+  const bar = document.querySelector('.mapboxgl-ctrl-group .mapbox-gl-draw_ctrl-draw-btn').parentElement;
+  bar.className = 'sketch-bar';
+  $('sketch-tools').appendChild(bar);
+  const wait = setInterval(() => {
+    if (sketchDraw !== draw) { clearInterval(wait); return; }
+    if (!map.getSource('mapbox-gl-draw-cold')) return;
+    clearInterval(wait);
+    if (kept && kept.features.length) draw.set(kept);
+    if (mode) draw.changeMode(mode);
+    refreshSketch();
+  }, 50);
+}
+function stopSketchControl() {
+  sketchRun++;
+  const draw = sketchDraw;
+  sketchDraw = null;
+  if (draw) map.removeControl(draw);
+}
+function sketchSuspend() {
+  if (!sketchDraw) return null;
+  const kept = sketchDraw.getAll();
+  stopSketchControl();
+  return kept;
+}
+function sketchResume(kept) { if (kept) startSketchControl(kept); }
+function sketchRestyle() { sketchResume(sketchSuspend()); }
+
+async function loadSketchData() {
+  if (sketchData) return;
+  const [tanks, districts] = await Promise.all([
+    tanksLoaded ? loadJson('data/tank_points.geojson').catch(() => null) : null,
+    loadJson('data/districts.geojson').catch(() => null)]);
+  sketchData = { tanks: tanks ? tanks.features.map((f) => f.properties) : null, districts: districts ? districts.features : null };
+  refreshSketch();
+}
+function setSketch(on) {
+  if (on && typeof MapboxDraw === 'undefined') {                    // the plugin script (Mapbox CDN) did not load
+    document.querySelector('.chip[data-toggle="sketch"]').setAttribute('aria-pressed', 'false');
+    document.body.classList.add('sketch-failed');
+    if (typeof showToolPanel === 'function') showToolPanel(true);   // the drawer shows the notice in the tool panel
+    renderSketchCard(null);
+    $('sketch-summary').textContent = 'The Sketch tool could not start: the mapbox-gl-draw script did not load (offline, or api.mapbox.com plugins blocked). Reload the page to try again.';
+    return;
+  }
+  document.body.classList.toggle('sketch-off', !on);
+  if (on && !sketchDraw) {
+    startSketchControl(null, 'draw_line_string');
+    loadSketchData();
+    if (typeof showToolPanel === 'function') showToolPanel(true);   // ui.js: the tool panel takes the drawer while the tool is on
+  }
+  if (!on) {
+    stopSketchControl(); renderSketchCard(null);
+    for (const popup of [damPopup, linkPopup, canalPopup, tankPopup, gwPopup, proposalPopup, notePopup]) popup.remove();
+    if (typeof showToolPanel === 'function') showToolPanel(false);  // the drawer goes back to how it was before the tool
+  }
+}
+function sketchLine() {
+  const line = sketchDraw && sketchDraw.getAll().features.find((f) => f.geometry.type === 'LineString' && f.geometry.coordinates.length >= 2);
+  return line ? line.geometry.coordinates : null;
+}
+function refreshSketch() { sketchRun++; measureSketch(sketchRun, 0); }
+function measureSketch(run, attempt) {
+  if (run !== sketchRun) return;
+  const coords = sketchLine();
+  if (!coords) { renderSketchCard(null); return; }
+  const samples = sketchSamples(coords, SKETCH_STEP_KM);
+  for (const s of samples) s.elev = elevationAt([s.lng, s.lat]);
+  if (samples.some((s) => s.elev === null)) {
+    renderSketchCard({ coords, loading: attempt < SKETCH_RETRIES });
+    if (attempt >= SKETCH_RETRIES) return;
+    if (attempt === 0) {       // the terrain tiles load for what is in view, so bring the whole line into it
+      const bounds = coords.reduce((b, c) => b.extend(c), new mapboxgl.LngLatBounds(coords[0], coords[0]));
+      map.fitBounds(bounds, { padding: 80, maxZoom: 11, duration: 600, essential: true });
+    }
+    let waiting = true;
+    const retry = () => { if (!waiting) return; waiting = false; map.off('idle', retry); clearTimeout(timer); measureSketch(run, attempt + 1); };
+    const timer = setTimeout(retry, 700);   // the flow animation can keep the map from ever going idle
+    map.once('idle', retry);
+    return;
+  }
+  const norms = proposalData && proposalData.norms;
+  renderSketchCard({ coords, samples, assessment: norms ? sketchAssess(samples, norms) : null, norms });
+}
+
+const fmtKm = (km) => km.toFixed(km < 10 ? 2 : 1);
+function sketchCrossings(coords, samples) {
+  const out = { tanks: null, districts: null };
+  if (!sketchData) return out;
+  if (sketchData.tanks) {
+    const lons = coords.map((c) => c[0]), lats = coords.map((c) => c[1]), pad = 0.03;
+    const near = sketchData.tanks.filter((t) => t.lon > Math.min(...lons) - pad && t.lon < Math.max(...lons) + pad && t.lat > Math.min(...lats) - pad && t.lat < Math.max(...lats) + pad
+                                                  && pointToLineKm([t.lon, t.lat], coords) <= SKETCH_TANK_KM);
+    out.tanks = near.sort((a, b) => b.area_ha - a.area_ha);
+  }
+  if (sketchData.districts) {
+    const seen = [];
+    for (const point of [...coords, ...samples.map((s) => [s.lng, s.lat])]) {
+      const district = sketchData.districts.find((f) => inDistrict(point, f.geometry));
+      if (district && !seen.includes(district.properties.shapeName)) seen.push(district.properties.shapeName);
+    }
+    out.districts = seen;
+  }
+  return out;
+}
+
+function renderSketchCard(state) {
+  const summary = $('sketch-summary'), svg = $('sketch-profile'), facts = $('sketch-facts'), verdict = $('sketch-verdict'), crossings = $('sketch-crossings');
+  $('sketch-stretches').textContent = '';
+  for (const el of [facts, verdict, crossings]) el.hidden = true;
+  svg.setAttribute('hidden', '');                                   // an SVG element has no .hidden property
+  $('sketch-count').textContent = '';
+  verdict.className = 'summary';
+  if (!state) {
+    summary.textContent = "Click the map to place the canal's vertices, double-click to finish. Drag a vertex to edit; the bin deletes the selected line.";
+    return;
+  }
+  const length = lineLengthKm(state.coords);
+  $('sketch-count').textContent = `${fmtKm(length)} km`;
+  summary.textContent = '';
+  summary.append('Line of ', bold(`${fmtKm(length)} km`), ` over ${state.coords.length} vertices`);
+  if (!state.samples) {
+    summary.append(state.loading ? ' · terrain still loading' : ' · no terrain could be read here; zoom in on the line');
+    return;
+  }
+  const a = state.assessment;
+  if (!a) { summary.append(' · proposal norms are not loaded, so there is no verdict'); }
+  renderSketchChart(svg, state.samples, a, state.norms);
+  svg.removeAttribute('hidden');
+  const tbody = facts.tBodies[0];
+  tbody.textContent = '';
+  const row = (label, value) => {
+    const tr = document.createElement('tr'), th = document.createElement('td'), td = document.createElement('td');
+    th.textContent = label; td.textContent = value; tr.append(th, td); tbody.appendChild(tr);
+  };
+  const first = state.samples[0].elev, last = state.samples[state.samples.length - 1].elev;
+  const high = state.samples.reduce((best, s) => (s.elev > best.elev ? s : best), state.samples[0]);
+  row('Length', `${fmtKm(length)} km`);
+  row('Start elevation', `${Math.round(first)} m`);
+  row('End elevation', `${Math.round(last)} m`);
+  row('Net fall', first >= last ? `${Math.round(first - last)} m` : `rises ${Math.round(last - first)} m`);
+  row('Highest point', `${Math.round(high.elev)} m at km ${high.d.toFixed(1)}`);
+  if (a) row('Fall needed', `${a.needed.toFixed(1)} m (${state.norms.canal_fall_m_per_km} m/km canal fall + ${state.norms.stage_loss_m} m stage loss)`);
+  facts.hidden = false;
+  if (a) {
+    verdict.textContent = '';
+    if (a.gravity) {
+      verdict.classList.add('ok');
+      verdict.append(bold('Gravity is feasible.'), ` The end is ${Math.round(a.fall)} m below the start against ${a.needed.toFixed(1)} m needed, and the ground never stands more than ${Math.round(Math.max(0, a.worst))} m above the water line (limit ${state.norms.tunnel_cover_m} m).`);
+    } else {
+      verdict.classList.add('lift');
+      const why = [];
+      if (a.fall < a.needed) why.push(`the end is only ${Math.round(a.fall)} m below the start, ${a.needed.toFixed(1)} m are needed`);
+      if (a.worst > state.norms.tunnel_cover_m) why.push(`ground stands ${Math.round(a.worst)} m above the water line, more than ${state.norms.tunnel_cover_m} m of tunnel cover`);
+      verdict.append(bold(`Needs a lift of about ${Math.round(a.lift)} m.`), ` Highest point ${Math.round(a.high.elev)} m, ${Math.round(a.high.elev - a.start)} m above the start, plus ${a.needed.toFixed(1)} m of canal fall and stage loss; ${why.join(' and ')}.`);
+    }
+    verdict.hidden = false;
+    const list = $('sketch-stretches');
+    for (const s of a.stretches.slice(0, SKETCH_LIST_MAX)) {
+      const li = document.createElement('li');
+      const span = s.from === s.to ? `km ${s.from.toFixed(1)}` : `km ${s.from.toFixed(1)}–${s.to.toFixed(1)}`;
+      li.textContent = s.kind === 'tunnel'
+        ? `Tunnel, ${span}: ground up to ${Math.round(s.peak)} m above the water line (more than ${state.norms.tunnel_cover_m} m)`
+        : `Deep cut, ${span}: ground up to ${Math.round(s.peak)} m above the water line (more than ${state.norms.cut_cover_m} m)`;
+      list.appendChild(li);
+    }
+    if (a.stretches.length > SKETCH_LIST_MAX) {
+      const li = document.createElement('li');
+      li.textContent = `and ${a.stretches.length - SKETCH_LIST_MAX} more stretches`;
+      list.appendChild(li);
+    }
+  }
+  const cross = sketchCrossings(state.coords, state.samples);
+  crossings.textContent = '';
+  if (cross.tanks) {
+    const largest = cross.tanks.slice(0, 3).map((t) => `${t.name || 'unnamed tank'} (${Math.round(t.area_ha)} ha)`);
+    crossings.append(bold(`${cross.tanks.length} tanks`), ` within ${SKETCH_TANK_KM} km${largest.length ? `, largest: ${largest.join(', ')}` : ''}. `);
+  }
+  if (cross.districts) crossings.append('Crosses ', bold(cross.districts.length ? cross.districts.join(', ') : 'no district'), '.');
+  crossings.hidden = !(cross.tanks || cross.districts);
+}
+
+/** The elevation profile, drawn with the river profile's helpers and classes: ground (blue), the falling water line (dashed), digs shaded. */
+function renderSketchChart(svg, samples, a, norms) {
+  while (svg.lastChild && svg.lastChild.tagName !== 'title') svg.removeChild(svg.lastChild);
+  const { w, h, l, r, t, b } = CHART;
+  const maxD = samples[samples.length - 1].d || SKETCH_STEP_KM;
+  const lows = samples.map((s) => s.elev), highs = samples.map((s) => s.elev);
+  if (a) lows.push(a.water(maxD));
+  const lo = Math.min(...lows), hi = Math.max(...highs);
+  const yStep = Math.max(1, niceStep(hi - lo || 1, 3));
+  const yMin = Math.floor(lo / yStep) * yStep, yMax = Math.ceil(hi / yStep) * yStep;
+  const x = (d) => l + d / maxD * (w - l - r);
+  const y = (e) => t + (1 - (e - yMin) / (yMax - yMin || 1)) * (h - t - b);
+  for (let e = yMin; e <= yMax; e += yStep) {
+    svg.appendChild(svgEl('line', { class: 'grid', x1: l, x2: w - r, y1: y(e), y2: y(e) }));
+    svg.appendChild(svgEl('text', { class: 'tick', x: l - 5, y: y(e) + 3, 'text-anchor': 'end' }, String(Math.round(e))));
+  }
+  const xStep = niceStep(maxD, 4);
+  for (let i = 0; i * xStep <= maxD + 1e-9; i++) {
+    const d = i * xStep;
+    svg.appendChild(svgEl('text', { class: 'tick', x: x(d), y: h - 8, 'text-anchor': i === 0 ? 'start' : 'middle' }, i === 0 ? '0 km' : String(+d.toFixed(2))));
+  }
+  svg.appendChild(svgEl('line', { class: 'axis', x1: l, x2: w - r, y1: y(yMin), y2: y(yMin) }));
+  if (a) {
+    for (const s of a.stretches) {
+      const x1 = x(Math.max(0, s.from - SKETCH_STEP_KM / 2)), x2 = x(Math.min(maxD, s.to + SKETCH_STEP_KM / 2));
+      svg.appendChild(svgEl('rect', { class: `dig ${s.kind}`, x: x1, y: t, width: Math.max(2, x2 - x1), height: y(yMin) - t }));
+    }
+  }
+  const path = samples.map((s, i) => `${i ? 'L' : 'M'}${x(s.d).toFixed(1)} ${y(s.elev).toFixed(1)}`).join(' ');
+  svg.appendChild(svgEl('path', { class: 'area', d: `${path} L${x(maxD).toFixed(1)} ${y(yMin)} L${l} ${y(yMin)} Z` }));
+  svg.appendChild(svgEl('path', { class: 'line', d: path }));
+  if (a) svg.appendChild(svgEl('path', { class: 'water', d: `M${x(0).toFixed(1)} ${y(a.start).toFixed(1)} L${x(maxD).toFixed(1)} ${y(a.water(maxD)).toFixed(1)}` }));
+  const top = samples.reduce((best, s) => (s.elev > best.elev ? s : best), samples[0]);
+  const anchor = x(top.d) < l + 40 ? 'start' : x(top.d) > w - r - 40 ? 'end' : 'middle';
+  svg.appendChild(svgEl('circle', { class: 'lm', cx: x(top.d), cy: y(top.elev), r: 4 }));
+  svg.appendChild(svgEl('text', { class: 'lm-text', x: x(top.d), y: y(top.elev) - 9, 'text-anchor': anchor }, `${Math.round(top.elev)} m`));
+}
+
+$('sketch-clear').addEventListener('click', () => {
+  if (!sketchDraw) return;
+  sketchDraw.deleteAll();
+  sketchDraw.changeMode('draw_line_string');
+  refreshSketch();
+});
+map.on('draw.create', (event) => {
+  const keep = event.features[0].id, older = sketchDraw.getAll().features.filter((f) => f.id !== keep).map((f) => f.id);
+  if (older.length) sketchDraw.delete(older);   // one canal at a time
+  refreshSketch();
+});
+map.on('draw.update', refreshSketch);
+map.on('draw.delete', refreshSketch);
+document.body.classList.add('sketch-off');
+
+// ---------- 3D works (three3d.js) ----------
+function exaggerationNow() { return Math.max(0.01, Number($('exag').value) * exaggerationFactorAt(map.getZoom()) * terrainRise); }
+function whenAtlas3D(fn) { if (window.Atlas3D) fn(window.Atlas3D); else window.addEventListener('atlas3d:ready', () => fn(window.Atlas3D), { once: true }); }
+map.on('load', () => whenAtlas3D((atlas) => atlas.init(map, { exaggeration: exaggerationNow, theme: mapTheme })
+  .then(() => {
+    if (proposalGeo && proposalData) atlas.setData('proposal', { data: proposalData, geo: proposalGeo });
+    document.dispatchEvent(new CustomEvent('atlas3d:init'));   // ui.js: the lens's groups, set before the module existed
+    debug.notes.atlas3d = atlas.stats(); writeDebug();
+  })
+  .catch((error) => { debug.errors.push(`3D: ${error.message}`); writeDebug(); })));
+
 async function loadJson(url) { const response = await fetch(url); if (!response.ok) throw new Error(`${url}: ${response.status}`); return response.json(); }
 
+// The bubbles need only the big reaches (flow_bubbles.geojson); the full flow.geojson is the fallback for data built before that file existed.
+const loadBubbleReaches = () => loadJson('data/flow_bubbles.geojson').catch(() => loadJson('data/flow.geojson'));
 map.on('load', async () => {
   debug.phase = 'style-loaded'; writeDebug();
+  const fonts = await fontsInfo;           // before any label layer is added (addLabelSources runs after the data)
+  if (fonts && fonts.inter) {
+    LABEL_FONT = INTER_FONT;
+    map.setLayoutProperty('contour-labels', 'text-font', LABEL_FONT);   // the one label layer buildStyle already added
+  }
+  debug.notes.labelFont = LABEL_FONT[0];
   try {
     const [cities, profiles, districtPoints, flowSummary, flowReaches, dams, links, pumphouses, cropland, pendingNotes] = await Promise.all([
       loadJson('data/cities.json'), loadJson('data/rivers.json'), loadJson('data/district_points.geojson'),
-      loadJson('data/flow_summary.json'), loadJson('data/flow.geojson'), loadJson('data/dams.json'),
+      loadJson('data/flow_summary.json'), loadBubbleReaches(), loadJson('data/dams.json'),
       loadJson('data/links.geojson'), loadJson('data/pumphouses.json'), loadJson('data/cropland.json'),
       loadJson('data/pending.json').catch(() => [])]);
+    for (const feature of links.features) setYearProperty(feature.properties, linkYear(feature.properties));
+    linksData = links;
+    map.getSource('links').setData(links);
     cropBounds = cropland.bounds;
     for (const [id, source] of Object.entries(cropSources())) map.addSource(id, source);
-    for (const layer of cropLayers(MAP_THEMES[currentTheme()])) map.addLayer(layer, 'mask');
+    addLayers(cropLayers(MAP_THEMES[currentTheme()]), 'mask');
     renderCropland(cropland);
-    const canals = await loadJson('data/canals.geojson').catch(() => null);   // absent until fetch_data.py gets OSM canals
-    if (canals) {
+    // Absent until fetch_data.py gets OSM canals. With hosted tiles the GeoJSON is not fetched: the summary says they exist.
+    const canals = tilesetFor('canals') ? null : await loadJson('data/canals.geojson').catch(() => null);
+    const canalSummary = await loadJson('data/canals_summary.json').catch(() => null);
+    if (canals || (tilesetFor('canals') && canalSummary)) {
       canalsLoaded = true;
-      map.addSource('canals', { type: 'geojson', data: canals });
-      for (const layer of canalLayers(MAP_THEMES[currentTheme()])) map.addLayer(layer, 'links-highlight');
-      debug.notes.canals = canals.features.length;
-      const canalSummary = await loadJson('data/canals_summary.json').catch(() => null);
+      if (canals) { for (const feature of canals.features) setYearProperty(feature.properties, canalYear(feature.properties)); canalsData = canals; }
+      map.addSource('canals', canals ? { type: 'geojson', data: canals } : staticSource('canals', 'canals.geojson'));
+      addLayers(canalLayers(MAP_THEMES[currentTheme()]), 'links-highlight');
+      debug.notes.canals = canals ? canals.features.length : canalSummary.osm_ways;
       if (canalSummary) renderCanalNetwork(canalSummary);
     } else {
-      document.querySelector('[data-canal]').closest('.fgroup').hidden = true;
+      document.querySelectorAll('[data-group="canal"]').forEach((el) => { el.hidden = true; });
     }
     debug.notes.cropDistricts = cropland.districts.length;
     prepareBubbles(flowReaches);
-    dams.forEach(addDamMarker);
-    renderEraCounts(dams);
-    pumphouses.forEach(addPumpMarker);
+    buildDamLabels(dams);
+    setupYears(dams, links, canals);
+    pumphousesData = pumphouses;
+    buildPumpLabels(pumphouses);
     renderLinkList(links);
-    prepareLinkParticles(links);
-    addWorkInProgressMarkers(links);
-    renderStatusCounts(dams, links);
+    buildWorkInProgressLabels(links);
     debug.notes.pending = renderPendingList(dams, links, pendingNotes);
     debug.notes.dams = dams.length;
     debug.notes.links = links.features.length;
     debug.notes.bubbles = bubbleReaches.reduce((n, reach) => n + reach.particles.length, 0);
     profileState.profiles = profiles;
-    cities.forEach(addCityMarker);
-    addDistrictLabels(districtPoints, new Set(cities.map((c) => c.name.toLowerCase())));
+    citiesData = cities;
+    buildCityLabels(cities);
+    buildDistrictLabels(districtPoints, new Set(cities.map((c) => c.name.toLowerCase())));
     const tanks = await loadJson('data/tanks_summary.json').catch(() => null);   // absent until fetch_data.py gets OSM water bodies
     if (tanks) {
       tanksLoaded = true;
       tankSummary = tanks;
-      map.addSource('tanks', { type: 'geojson', data: 'data/tanks.geojson' });
-      map.addSource('tank-points', { type: 'geojson', data: 'data/tank_points.geojson' });
-      for (const layer of tankLayers(MAP_THEMES[currentTheme()])) map.addLayer(layer, 'districts');
+      map.addSource('tanks', staticSource('tanks', 'tanks.geojson'));
+      map.addSource('tank-points', staticSource('tank-points', 'tank_points.geojson'));
+      addLayers(tankLayers(MAP_THEMES[currentTheme()]), 'districts');
       renderTanks(tanks);
       debug.notes.tanks = tanks.osm_tanks;
     } else {
-      document.querySelector('[data-tank]').closest('.fgroup').hidden = true;
+      document.querySelectorAll('[data-group="tank"]').forEach((el) => { el.hidden = true; });
       $('tank-card').hidden = true;
     }
     const groundwater = await loadJson('data/groundwater_summary.json').catch(() => null);   // absent until fetch_data.py gets the WRIS export
     if (groundwater) {
       gwLoaded = true;
       gwData = groundwater;
-      map.addSource('groundwater', { type: 'geojson', data: 'data/groundwater.geojson' });
-      for (const layer of gwLayers(MAP_THEMES[currentTheme()])) map.addLayer(layer, 'districts');
+      map.addSource('groundwater', staticSource('groundwater', 'groundwater.geojson'));
+      addLayers(gwLayers(MAP_THEMES[currentTheme()]), 'districts');
       renderGroundwater(groundwater);
       debug.notes.groundwater = groundwater.state.wells;
     } else {
-      document.querySelector('[data-gw]').closest('.fgroup').hidden = true;
+      document.querySelectorAll('[data-group="gw"]').forEach((el) => { el.hidden = true; });
       $('gw-card').hidden = true;
+    }
+    const damLines = await loadJson('data/dam_lines.geojson').catch(() => null);   // absent until build_web_data.py has written it
+    if (damLines) {
+      for (const f of damLines.features) if (f.properties.height_known === false) damsWithAssumedWall.add(f.properties.i);
     }
     const proposal = await loadJson('data/proposal.json').catch(() => null);   // absent until propose_water.py has run
     if (proposal) {
-      proposalLoaded = true;
-      proposalGeo = await loadJson('data/proposal.geojson');
-      map.addSource('proposal', { type: 'geojson', data: proposalGeo });
-      for (const layer of proposalLayers(MAP_THEMES[currentTheme()])) map.addLayer(layer, 'districts');
-      renderProposal(proposal);
-      addProposalMarkers(proposal, proposalGeo);
+      renderProposal(proposal);                       // proposal.geojson waits for ensureProposal()
       debug.notes.proposal = proposal.works.length;
     } else {
-      document.querySelector('[data-proposal]').closest('.fgroup').hidden = true;
+      document.querySelectorAll('[data-group="proposal"]').forEach((el) => { el.hidden = true; });
       $('proposal-card').hidden = true;
     }
     renderCities(cities, profiles);
     renderProfile();
     renderFlowLegend();
     renderPeaks(flowSummary);
+    flowSummaryData = flowSummary;
     renderDistrictFlow(flowSummary);
+    await addLabelSources();                // every label source is built by now: cities, districts, dams, pump houses, cones, peaks, proposal
     debug.notes.flowDistricts = flowSummary.districts.length;
     debug.phase = 'data-loaded'; writeDebug();
+    document.dispatchEvent(new CustomEvent('atlas:data'));   // ui.js fills the headline numbers
     if (DEBUG) {
-      const hyderabad = cities.find((c) => c.name === 'Hyderabad');
-      await loadTilePixels(tileKeyFor(hyderabad.lon, hyderabad.lat));
-      debug.notes.hyderabad = { listed: hyderabad.elev, decoded: Math.round(elevationAt(hyderabad.lon, hyderabad.lat)) };
       debug.notes.cities = cities.length;
       debug.notes.profiles = Object.fromEntries(Object.entries(profiles).map(([k, v]) => [k, v.points.length]));
+      debug.hyderabad = cities.find((c) => c.name === 'Hyderabad');
     }
   } catch (error) {
     debug.errors.push(String(error));
     $('toast').textContent = `Data failed to load: ${error.message}`;
     return;
   }
-  // 'idle' never fires while DOM markers sit on 3D terrain, so wait for the tiles instead.
   // The flow animation starts only now: its paint updates keep map.loaded() false.
   const settle = () => {
     if (!map.loaded()) { map.once('render', settle); return; }
     $('toast').classList.add('gone');
+    if (playIntro) {
+      // The intro stays on mercator; a globe projection was tried earlier and dropped.
+      map.once('moveend', () => map.setMinZoom(MIN_ZOOM));
+      map.easeTo({ ...HOME, duration: 5000, easing: (x) => 1 - (1 - x) ** 3, essential: true }); riseTerrain(5000);   // the terrain rises into view
+    }
     if (flowAnimating) requestAnimationFrame(animateFlow);
     debug.phase = 'ready';
-    if (DEBUG) { debug.notes.terrain = Boolean(map.getTerrain()); debug.notes.layers = map.getStyle().layers.map((l) => l.id); writeDebug(); document.title = 'READY ' + document.title; }
+    if (DEBUG) {
+      const h = debug.hyderabad, decoded = elevationAt([h.lon, h.lat]);
+      debug.notes.hyderabad = { listed: h.elev, decoded: decoded === null ? null : Math.round(decoded) };   // listed = Copernicus 1 km median, decoded = Mapbox Terrain-DEM
+      debug.notes.terrain = Boolean(map.getTerrain()); debug.notes.layers = map.getStyle().layers.map((l) => l.id); writeDebug(); document.title = 'READY ' + document.title;
+    }
   };
   settle();
 });
-function tileKeyFor(lng, lat) {
-  const n = 2 ** TILE_MAX_ZOOM, latRad = lat * Math.PI / 180;
-  return `${TILE_MAX_ZOOM}/${Math.floor((lng + 180) / 360 * n)}/${Math.floor((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2 * n)}`;
-}

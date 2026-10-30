@@ -1,0 +1,34 @@
+{
+  "flow": {
+    "url": "mapbox://tecgeor.tg-flow",
+    "sourceLayer": "flow"
+  },
+  "tanks": {
+    "url": "mapbox://tecgeor.tg-tanks",
+    "sourceLayer": "tanks"
+  },
+  "tank_points": {
+    "url": "mapbox://tecgeor.tg-tank_points",
+    "sourceLayer": "tank_points"
+  },
+  "canals": {
+    "url": "mapbox://tecgeor.tg-canals",
+    "sourceLayer": "canals"
+  },
+  "contours": {
+    "url": "mapbox://tecgeor.tg-contours",
+    "sourceLayer": "contours"
+  },
+  "districts": {
+    "url": "mapbox://tecgeor.tg-districts",
+    "sourceLayer": "districts"
+  },
+  "state": {
+    "url": "mapbox://tecgeor.tg-state",
+    "sourceLayer": "state"
+  },
+  "groundwater": {
+    "url": "mapbox://tecgeor.tg-groundwater",
+    "sourceLayer": "groundwater"
+  }
+}
