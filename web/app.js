@@ -492,9 +492,12 @@ function ensureProposal() {
 }
 document.body.classList.add('proposal-off');
 
+// Layer switches without a chip in the UI (relief, hillshade, particles) and the chips' initial state: chipOn never throws for a missing chip.
+const TOGGLE_DEFAULTS = { relief: true, hillshade: true, contours: true, bands: false, districts: true, labels: true, flow: true, dams: true, links: true, bed: false, particles: false, models3d: true, pending: true, orbit: false, sketch: false };
 function chipOn(name) {
   const chip = document.querySelector(`.chip[data-toggle="${name}"]`);
-  return chip.getAttribute('aria-pressed') === 'true' ? 'visible' : 'none';
+  const on = chip ? chip.getAttribute('aria-pressed') === 'true' : Boolean(TOGGLE_DEFAULTS[name]);
+  return on ? 'visible' : 'none';
 }
 
 // Hosted tiles: web/data/tilesets.json (written by publish_tilesets.py) maps a static layer to {url, sourceLayer}.
@@ -821,13 +824,16 @@ function elevationAt(lngLat) {
   return elevation === null || elevation === undefined ? null : elevation;
 }
 
+// ---------- tap/click readout: the height of the spot clicked, with a pin; hidden until the first click ----------
 const cursorElev = $('cursor-elev'), cursorPos = $('cursor-pos');
+const readoutPin = new mapboxgl.Marker({ color: '#c2410c', scale: 0.8 });
 function showCursor(lngLat) {
   const elevation = elevationAt(lngLat);
   if (elevation === null) { clearCursor(); return; }
   cursorElev.textContent = Math.round(elevation).toLocaleString('en-IN');
   cursorPos.textContent = `${Math.abs(lngLat.lat).toFixed(3)}°${lngLat.lat >= 0 ? 'N' : 'S'}  ${Math.abs(lngLat.lng).toFixed(3)}°${lngLat.lng >= 0 ? 'E' : 'W'}`;
   showComparison(elevation);
+  $('readout').hidden = false;
 }
 
 /** Tallest landmark that fits into the elevation at least once (so the count stays small). */
@@ -862,16 +868,22 @@ function showComparison(elevation) {
   text.append('≈ ', bold(`${ratio >= 10 ? Math.round(ratio) : ratio.toFixed(1)} ×`), ` ${landmark.name} (${landmark.height} m)`);
   $('cursor-compare').hidden = false;
 }
-let cursorFrame = 0;
-map.on('mousemove', (event) => {
-  if (cursorFrame || flight) return;
-  cursorFrame = requestAnimationFrame(() => { cursorFrame = 0; showCursor(event.lngLat); });
-});
 function clearCursor() {
-  cursorElev.textContent = '—'; cursorPos.textContent = 'Move the pointer over the terrain';
+  $('readout').hidden = true;
   $('cursor-compare').hidden = true;
+  readoutPin.remove();
 }
-map.on('mouseout', () => { if (!flight) clearCursor(); });
+// Layers whose own popup or action takes the click; a click on bare terrain shows the readout (not while the Sketch tool owns clicks).
+const READOUT_TAKERS = ['city-labels', 'town-labels', 'dam-labels', 'pump-labels', 'wip-labels', 'peak-labels', 'prop-labels-far', 'prop-labels-near',
+  'links-hit', 'canals-hit', 'tanks-fill', 'tanks-dots', 'gw-wells', 'gw-districts', 'prop-pool', 'prop-canal', 'prop-tunnel', 'prop-delivery', 'prop-pump', 'prop-trunk-new', 'prop-trunk-existing'];
+map.on('click', (event) => {
+  if (sketching() || flight) return;
+  const layers = READOUT_TAKERS.filter((id) => map.getLayer(id));
+  if (layers.length && map.queryRenderedFeatures(event.point, { layers }).length) return;
+  readoutPin.setLngLat(event.lngLat).addTo(map);
+  showCursor(event.lngLat);
+});
+$('readout-close').addEventListener('click', clearCursor);
 
 // ---------- legend ----------
 function renderLegend() {
@@ -907,9 +919,7 @@ function orbitStep() {
   requestAnimationFrame(orbitStep);
 }
 const toggles = {
-  relief: (on) => map.setLayoutProperty('relief', 'visibility', on ? 'visible' : 'none'),
   bands: () => { map.setPaintProperty('relief', 'raster-color', reliefExpression(currentTheme())); renderLegend(); },
-  hillshade: (on) => map.setLayoutProperty('hillshade', 'visibility', on ? 'visible' : 'none'),
   contours: (on) => setVisible(['contours', 'contour-labels'], on),
   bed: (on) => setVisible(['profile-casing', 'profile-line'], on),
   sketch: (on) => setSketch(on),
@@ -919,12 +929,20 @@ const toggles = {
     if (!on) { setDistrictHover(null); districtPopup.remove(); }
   },
   labels: (on) => setVisible(LABEL_LAYERS.labels, on),
-  dams: (on) => setVisible(['dam-labels', 'dam-walls'], on),
-  links: (on) => {
-    setVisible(['links-highlight', 'links-casing', 'links-line', 'links-pulse', 'links-arrows', 'links-hit', ...LABEL_LAYERS.links], on);
-    if (!on) linkPopup.remove();
+  dams: (on) => {
+    setVisible(['dam-labels', 'dam-walls'], on);
+    if (window.Atlas3D) { Atlas3D.setVisible('dams', on); Atlas3D.setVisible('reservoirs', on); }
   },
-  particles: (on) => setVisible(['flow-particles'], on),
+  links: (on) => {
+    setVisible(['links-highlight', 'links-casing', 'links-line', 'links-guide', 'links-pulse', 'links-arrows', 'links-hit', ...LABEL_LAYERS.links], on);
+    if (!on) linkPopup.remove();
+    if (window.Atlas3D) { Atlas3D.setVisible('pumps', on); Atlas3D.setVisible('conduits', on); }
+  },
+  models3d: (on) => { if (window.Atlas3D) Atlas3D.setVisible('all', on); },
+  pending: (on) => {                           // on = planned and under-construction works shown beside the operating ones
+    setStatusMode(on ? 'all' : 'built');
+    if (window.Atlas3D) Atlas3D.setStatus(on ? 'all' : 'built');
+  },
   orbit: (on) => { orbiting = on; if (on) { stopStructureOrbit(); orbitStep(); } },
   flow: (on) => {
     flowAnimating = on;
@@ -1186,64 +1204,26 @@ function renderDistrictFlow(summary) {
     item.appendChild(button); list.appendChild(item);
   }
 }
+// A chip can have a copy in more than one lens card (dams, links, pending): every copy shows the same state.
 for (const chip of document.querySelectorAll('.chip[data-toggle]')) {
   chip.addEventListener('click', () => {
     const on = chip.getAttribute('aria-pressed') !== 'true';
-    chip.setAttribute('aria-pressed', String(on));
+    for (const copy of document.querySelectorAll(`.chip[data-toggle="${chip.dataset.toggle}"]`)) copy.setAttribute('aria-pressed', String(on));
     toggles[chip.dataset.toggle](on);
   });
 }
 function stopOrbit() { if (orbiting) document.querySelector('[data-toggle="orbit"]').click(); }
 map.on('dragstart', stopOrbit);
 
-// Left-drag mode: MapLibre only rotates with the right button or Ctrl, so a
-// "rotates" mode turns left-drag into a full 360° orbit with tilt.
-const ROTATE_DEG_PER_PX = 0.35;
-let rotateDrag = null;
-function setDragMode(mode) {
-  for (const button of document.querySelectorAll('[data-drag]')) button.setAttribute('aria-pressed', String(button.dataset.drag === mode));
-  if (mode === 'rotate') map.dragPan.disable(); else map.dragPan.enable();
-  $('map').classList.toggle('rotate-mode', mode === 'rotate');
-}
-for (const button of document.querySelectorAll('[data-drag]')) button.addEventListener('click', () => setDragMode(button.dataset.drag));
-map.getCanvasContainer().addEventListener('mousedown', (event) => {
-  if (!$('map').classList.contains('rotate-mode') || event.button !== 0 || event.ctrlKey) return;
-  stopOrbit();
-  rotateDrag = { x: event.clientX, y: event.clientY, bearing: map.getBearing(), pitch: map.getPitch() };
-  $('map').classList.add('rotating');
-  event.preventDefault();
-});
-window.addEventListener('mousemove', (event) => {
-  if (!rotateDrag) return;
-  const pitch = rotateDrag.pitch - (event.clientY - rotateDrag.y) * ROTATE_DEG_PER_PX;
-  map.jumpTo({ bearing: rotateDrag.bearing + (event.clientX - rotateDrag.x) * ROTATE_DEG_PER_PX,
-               pitch: Math.min(Math.max(pitch, 0), map.getMaxPitch()) });
-});
-window.addEventListener('mouseup', () => { rotateDrag = null; $('map').classList.remove('rotating'); });
-$('reset').addEventListener('click', () => map.flyTo({ ...HOME, duration: 1800, essential: true }));
-$('view-2d').addEventListener('click', () => { stopFlight(); map.easeTo({ pitch: 0, bearing: 0, duration: 1200, essential: true }); });
-$('view-3d').addEventListener('click', () => {
+// 3D / top-down: tilts to the active lens's pitch (ui.js) or lays the map flat; the button reads pressed while tilted.
+$('view-toggle').addEventListener('click', () => {
   stopFlight();
-  if (map.getPitch() < 30) riseTerrain(1800);                       // from top-down: let the relief grow as the view tilts
-  map.easeTo({ pitch: HOME.pitch, bearing: HOME.bearing, duration: 1800, essential: true });
+  if (map.getPitch() >= 30) { map.easeTo({ pitch: 0, duration: 1200, essential: true }); return; }
+  riseTerrain(1800);                                                 // from top-down: let the relief grow as the view tilts
+  map.easeTo({ pitch: typeof lensCamera === 'function' ? lensCamera().pitch : HOME.pitch, duration: 1800, essential: true });
 });
+map.on('pitchend', () => $('view-toggle').setAttribute('aria-pressed', String(map.getPitch() >= 30)));
 $('theme').addEventListener('click', () => setTheme(currentTheme() === 'dark' ? 'light' : 'dark'));
-$('collapse').addEventListener('click', () => { $('panel').classList.add('hidden'); $('expand').hidden = false; });
-$('expand').addEventListener('click', () => { $('panel').classList.remove('hidden'); $('expand').hidden = true; });
-$('filters-collapse').addEventListener('click', () => { $('filters').classList.add('hidden'); $('filters-expand').hidden = false; });
-
-// Phones and tablets (<= 900 px): the side panels are bottom sheets; opening one closes the other. CSS does the rest.
-document.querySelectorAll('.sheet-handle').forEach((handle) => handle.addEventListener('click', () => {
-  const sheet = handle.parentElement;
-  const open = !sheet.classList.contains('sheet-open');
-  document.querySelectorAll('.sheet-open').forEach((s) => {
-    s.classList.remove('sheet-open');
-    s.querySelector('.sheet-handle').setAttribute('aria-expanded', 'false');
-  });
-  sheet.classList.toggle('sheet-open', open);
-  handle.setAttribute('aria-expanded', String(open));
-}));
-$('filters-expand').addEventListener('click', () => { $('filters').classList.remove('hidden'); $('filters-expand').hidden = true; });
 const updateLabelDensity = () => {
   const near = map.getZoom() >= ROAD_LABEL_ZOOM;
   if (near === roadLabelsShown || !styleReady) return;
@@ -1411,11 +1391,12 @@ function setYear(value, active = true) {
   yearActive = active;
   yearValue = Math.min(YEAR_MAX, Math.max(Number($('year').min), value));
   $('year').value = String(yearValue);
-  $('year-out').textContent = yearActive ? String(yearValue) : 'all';
+  $('year-out').textContent = yearActive ? String(yearValue) : 'Now';
   $('year-readout').textContent = yearReadout();
   if (!active) stopYearPlay();
   applyWorkFilters();
   damPopup.remove(); linkPopup.remove(); canalPopup.remove();
+  document.dispatchEvent(new CustomEvent('atlas:year', { detail: { year: yearActive ? yearValue : null } }));   // ui.js: ground lens period, 3D works
 }
 function stopYearPlay() {
   clearInterval(yearTimer); yearTimer = null;
@@ -1446,14 +1427,13 @@ function setupYears(dams, links, canals) {
 }
 $('year').addEventListener('input', (event) => setYear(Number(event.target.value)));
 $('year-play').addEventListener('click', toggleYearPlay);
-$('year-reset').addEventListener('click', () => setYear(YEAR_MAX, false));
 
 // ---------- status filter: operating vs still to build ----------
 function applyWorkFilters() {
   for (const id of ['dam-labels', 'dam-walls']) if (map.getLayer(id)) map.setFilter(id, damFilter());
-  if (map.getLayer('pump-labels')) map.setFilter('pump-labels', withDeclutter(linkStatusFilter()));
+  if (map.getLayer('pump-labels')) map.setFilter('pump-labels', withDeclutter(['all', linkStatusFilter(), yearFilter()]));
   if (map.getLayer('wip-labels')) map.setFilter('wip-labels', linkFilter());
-  for (const id of ['links-casing', 'links-line', 'links-hit']) if (map.getLayer(id)) map.setFilter(id, linkFilter());
+  for (const id of ['links-casing', 'links-line', 'links-guide', 'links-hit']) if (map.getLayer(id)) map.setFilter(id, linkFilter());
   if (map.getLayer('links-pulse')) map.setFilter('links-pulse', ['all', ['==', ['get', 'status'], 'operational'], linkFilter()]);
   if (map.getLayer('links-arrows')) map.setFilter('links-arrows', ['all', ['!=', ['get', 'status'], 'operational'], linkFilter()]);
   applyCanalFilters();
@@ -1503,7 +1483,7 @@ function buildDamLabels(dams) {
 // ---------- Kaleshwaram links: pump houses, tunnel portals and the link list ----------
 function buildPumpLabels(houses) {
   labelData.pumphouses = collection(houses.map((house) => pointFeature(house.lon, house.lat, {
-    name: `${house.name}${house.power ? ` · ${house.power.replace('MW', ' MW')}` : ''}`, status: house.status,
+    name: `${house.name}${house.power ? ` · ${house.power.replace('MW', ' MW')}` : ''}`, status: house.status, ...(house.since ? { year: Number(house.since) } : {}),
     icon: `ic|${house.kind === 'tunnel' ? 'tunnel' : 'pump'}|link|${iconFlags(house)}`, st: isPending(house.status) ? ` · ${STATUS_LABEL[house.status]}` : '',
     title: `${house.name}${house.elev_m ? ` · terrain ${house.elev_m} m` : ''}${house.since ? ` · pumping since ${house.since}` : ''}`
          + `${house.approx ? ` · position approximate (${house.approx})` : ''} · ${house.source === 'OpenStreetMap' ? 'OpenStreetMap' : 'see the link popup for the source'}` })));
@@ -1546,7 +1526,6 @@ $('crop-blend').addEventListener('input', (event) => {
   syncCrop();
 });
 for (const button of document.querySelectorAll('[data-crop]')) button.addEventListener('click', () => setCropMode(button.dataset.crop));
-$('crop-close').addEventListener('click', () => setCropMode('off'));
 document.body.classList.add('crop-off');
 
 const rgb = (c) => `rgb(${c[0]},${c[1]},${c[2]})`;
@@ -2649,9 +2628,9 @@ $('fly').addEventListener('click', () => (flight ? stopFlight() : startFlight())
 for (const event of ['mousedown', 'wheel', 'touchstart']) map.getCanvasContainer().addEventListener(event, stopFlight, { passive: true });
 window.addEventListener('keydown', (event) => { if (event.key === 'Escape') stopFlight(); });
 $('scrub').addEventListener('input', (event) => highlightProfile(Number(event.target.value), true));
-for (const tab of document.querySelectorAll('[role="tab"]')) {
+for (const tab of document.querySelectorAll('[role="tab"][data-river]')) {
   tab.addEventListener('click', () => {
-    for (const other of document.querySelectorAll('[role="tab"]')) other.setAttribute('aria-selected', String(other === tab));
+    for (const other of document.querySelectorAll('[role="tab"][data-river]')) other.setAttribute('aria-selected', String(other === tab));
     stopFlight();
     profileState.river = tab.dataset.river;
     profileState.index = 0;
@@ -2806,7 +2785,7 @@ function setSketch(on) {
   if (on && typeof MapboxDraw === 'undefined') {                    // the plugin script (Mapbox CDN) did not load
     document.querySelector('.chip[data-toggle="sketch"]').setAttribute('aria-pressed', 'false');
     document.body.classList.add('sketch-failed');
-    $('sketch-card').open = true;
+    if (typeof showToolPanel === 'function') showToolPanel(true);   // the drawer shows the notice in the tool panel
     renderSketchCard(null);
     $('sketch-summary').textContent = 'The Sketch tool could not start: the mapbox-gl-draw script did not load (offline, or api.mapbox.com plugins blocked). Reload the page to try again.';
     return;
@@ -2815,10 +2794,13 @@ function setSketch(on) {
   if (on && !sketchDraw) {
     startSketchControl(null, 'draw_line_string');
     loadSketchData();
-    $('sketch-card').open = true;
-    $('sketch-card').scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    if (typeof showToolPanel === 'function') showToolPanel(true);   // ui.js: the tool panel takes the drawer while the tool is on
   }
-  if (!on) { stopSketchControl(); renderSketchCard(null); for (const popup of [damPopup, linkPopup, canalPopup, tankPopup, gwPopup, proposalPopup, notePopup]) popup.remove(); }
+  if (!on) {
+    stopSketchControl(); renderSketchCard(null);
+    for (const popup of [damPopup, linkPopup, canalPopup, tankPopup, gwPopup, proposalPopup, notePopup]) popup.remove();
+    if (typeof showToolPanel === 'function') showToolPanel(false);  // the drawer goes back to how it was before the tool
+  }
 }
 function sketchLine() {
   const line = sketchDraw && sketchDraw.getAll().features.find((f) => f.geometry.type === 'LineString' && f.geometry.coordinates.length >= 2);
@@ -3105,6 +3087,7 @@ map.on('load', async () => {
     await addLabelSources();                // every label source is built by now: cities, districts, dams, pump houses, cones, peaks, proposal
     debug.notes.flowDistricts = flowSummary.districts.length;
     debug.phase = 'data-loaded'; writeDebug();
+    document.dispatchEvent(new CustomEvent('atlas:data'));   // ui.js fills the headline numbers
     if (DEBUG) {
       debug.notes.cities = cities.length;
       debug.notes.profiles = Object.fromEntries(Object.entries(profiles).map(([k, v]) => [k, v.points.length]));
