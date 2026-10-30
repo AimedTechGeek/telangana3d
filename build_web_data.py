@@ -874,7 +874,11 @@ def dam_key(name: str) -> str:
 
 # OSM names of dam ways that differ from the map's dam names beyond the words dam_key drops (checked by eye against the 42 dams).
 DAM_LINE_ALIASES = {"priyadarshinijurala": "jurala", "nagarjunsagar": "nagarjunasagar", "sriranganayakasagar": "ranganayakasagar",
-                    "sammakka": "sammakkasagar"}
+                    "sammakka": "sammakkasagar",
+                    # OSM way 801963324 "Baswapuram Dam" lies 0.8 km from the map's Baswapur position. The other 26 dams without a line
+                    # have only unnamed waterway=dam ways near them (Lower Manair, Kaddam, Komaram Bheem, Sarala Sagar within 0.1 km),
+                    # which a name alias cannot reach; Medigadda's nearest OSM dam way is 22 km away.
+                    "baswapuram": "baswapur"}
 
 
 def build_dam_lines(dams: list[dict]) -> dict:
@@ -1015,6 +1019,31 @@ def build_canals(links: dict) -> tuple[dict, dict]:
     return {"type": "FeatureCollection", "features": features}, summary
 
 
+CONDUIT_SCHEME_PREFIX = "Sitarama"      # the scheme's open canals get 3D troughs; elsewhere only pressure mains and tunnels are drawn
+
+
+def build_conduits(canals: dict) -> dict:
+    """The canal ways that get a 3D body (three3d.js): post-2014 pressure mains and tunnels, plus every Sitarama way.
+
+    The year follows the web map's canal rule (dug after 2014 counts as 2015, older as 1970) so the timeline can filter the bodies.
+    """
+    features = []
+    for feature in canals["features"]:
+        p = feature["properties"]
+        scheme = p["scheme"] or ""
+        if not ((p["era"] == "after" and p["kind"] in ("main", "tunnel")) or scheme.startswith(CONDUIT_SCHEME_PREFIX)):
+            continue
+        features.append({"type": "Feature", "geometry": feature["geometry"], "properties": {
+            "id": p["id"], "kind": p["kind"], "scheme": p["scheme"], "construction": p["construction"], "km": p["km"],
+            "year": 2015 if p["era"] == "after" else 1970}})
+    by_kind = {}
+    for f in features:
+        kind = f["properties"]["kind"]
+        by_kind[kind] = (by_kind.get(kind, (0, 0.0))[0] + 1, by_kind.get(kind, (0, 0.0))[1] + f["properties"]["km"])
+    print(f"conduits: {len(features)} ways for 3D; " + ", ".join(f"{k} {n} ways {km:.0f} km" for k, (n, km) in sorted(by_kind.items())))
+    return {"type": "FeatureCollection", "features": features}
+
+
 # --- tanks (OSM water bodies) and Mission Kakatiya ---------------------------
 
 TANK_MIN_HA = 0.5                                 # smaller ponds are mostly farm pits and village puddles
@@ -1132,6 +1161,79 @@ def build_tanks(state: gpd.GeoDataFrame, districts: gpd.GeoDataFrame) -> tuple[d
     print(f"tanks: {len(tanks)} OSM water bodies >= {TANK_MIN_HA} ha inside the state ({summary['osm_named']} named, "
           f"{summary['osm_area_ha']:,} ha); Mission Kakatiya {summary['mission_kakatiya']['taken_up']:,} tanks taken up in 4 phases")
     return json.loads(polygons.to_json(drop_id=True)), json.loads(points.to_json(drop_id=True)), summary
+
+
+RESERVOIR_SEARCH_M = 3000.0                       # a dam's reservoir touches this buffer of its point or crest line
+RESERVOIR_MIN_HA = 50.0
+RESERVOIR_SIMPLIFY_M = 30.0
+RESERVOIR_LEVEL_MIN_SAMPLES = 16                  # outline points sampled for the water level (interpolated when the ring has fewer)
+RESERVOIR_LEVEL_STEP_M = 200.0
+
+
+def build_reservoirs(dams: list[dict], sampler: DemSampler) -> dict:
+    """One OSM water polygon per dam for the 3D reservoir surfaces (three3d.js).
+
+    Works on the raw OSM elements (through osm_polygon and tank_kind), not build_tanks' state-clipped output, which drops the
+    border reservoirs (Srisailam, Nagarjuna Sagar). The largest polygon part >= RESERVOIR_MIN_HA touching a 3 km buffer of the
+    dam's crest line (dam_lines.geojson, written just before) or its point wins; level_m is the median Copernicus DEM height
+    along the outline, ignoring nodata, or null when fewer than half the samples are valid (the web map then samples Terrain-DEM).
+    """
+    elements = json.loads((RAW / "osm_water.json").read_text(encoding="utf-8"))["elements"]
+    rows = []
+    for element in elements:
+        tags = element.get("tags", {})
+        name = tags.get("name:en") or tags.get("name") or ""
+        if tank_kind(tags, name) is None:
+            continue
+        shape = osm_polygon(element)
+        if shape is None:
+            continue
+        for part in (shape.geoms if hasattr(shape, "geoms") else [shape]):
+            if isinstance(part, Polygon):
+                rows.append({"osm_id": f"{element['type'][0]}{element['id']}", "osm_name": name or None, "geometry": part})
+    water = gpd.GeoDataFrame(rows, geometry="geometry", crs=WGS84)
+    water["geometry"] = water.geometry.buffer(0)
+    projected = water.to_crs(TARGET_CRS)
+    projected["area_ha"] = projected.area / 10_000
+    projected = projected[projected["area_ha"] >= RESERVOIR_MIN_HA]
+    lines_file = WEB_DATA / "dam_lines.geojson"
+    crest = {}
+    if lines_file.exists():
+        for f in json.loads(lines_file.read_text(encoding="utf-8"))["features"]:
+            crest.setdefault(f["properties"]["i"], []).append(LineString(f["geometry"]["coordinates"]))
+    to_m = Transformer.from_crs(WGS84, TARGET_CRS, always_xy=True)
+    to_wgs = Transformer.from_crs(TARGET_CRS, WGS84, always_xy=True)
+    features, unmatched, used = [], [], set()
+    for i, dam in enumerate(dams):
+        anchor = unary_union([LineString([to_m.transform(x, y) for x, y in line.coords]) for line in crest[i]]) if i in crest \
+            else Point(to_m.transform(dam["lon"], dam["lat"]))
+        search = anchor.buffer(RESERVOIR_SEARCH_M)
+        hits = projected.iloc[list(projected.sindex.query(search, predicate="intersects"))]
+        if hits.empty:
+            unmatched.append(dam["name"])
+            continue
+        best = hits.sort_values("area_ha", ascending=False).iloc[0]
+        shape = best.geometry.simplify(RESERVOIR_SIMPLIFY_M)
+        ring = shape.exterior
+        count = max(RESERVOIR_LEVEL_MIN_SAMPLES, int(ring.length / RESERVOIR_LEVEL_STEP_M))
+        samples = []
+        for k in range(count):
+            x, y = ring.interpolate(k / count, normalized=True).coords[0]
+            lon, lat = to_wgs.transform(x, y)
+            value = sampler.median(lon, lat, 0)
+            if value is not None and value > 0:          # the DEM holds 0 outside its coverage
+                samples.append(value)
+        level = round(float(np.median(samples)), 1) if len(samples) * 2 >= count else None
+        geometry = mapping(gpd.GeoSeries([shape], crs=TARGET_CRS).to_crs(WGS84).iloc[0])
+        geometry["coordinates"] = [[[round(x, 5), round(y, 5)] for x, y in ring] for ring in geometry["coordinates"]]
+        features.append({"type": "Feature", "geometry": geometry, "properties": {
+            "i": i, "name": dam["name"], "status": dam["status"], "area_ha": round(float(best["area_ha"])), "level_m": level}})
+        used.add(i)
+    largest = sorted(((d["capacity_tmcft"] or 0, k) for k, d in enumerate(dams)), reverse=True)[:6]
+    print(f"reservoirs: {len(features)} surfaces for {len(dams)} dams ({sum(1 for f in features if f['properties']['level_m'] is None)} "
+          f"without a DEM level); unmatched: {', '.join(unmatched) or 'none'}")
+    print("  six largest by capacity: " + ", ".join(f"{dams[k]['name']} {'yes' if k in used else 'NO'}" for _, k in largest))
+    return {"type": "FeatureCollection", "features": features}
 
 
 # --- groundwater (India-WRIS monitoring wells) -------------------------------
@@ -1404,6 +1506,8 @@ def main() -> None:
         (WEB_DATA / "canals_summary.json").write_text(json.dumps(canal_summary, indent=1), encoding="utf-8")
     else:
         print("  warning: data/raw/osm_canals.json missing (fetch_data.py); canals.geojson not built")
+    if (RAW / "osm_canals.json").exists():
+        (WEB_DATA / "conduits.geojson").write_text(json.dumps(build_conduits(canals)), encoding="utf-8")
     if (RAW / "osm_water.json").exists():
         tank_polygons, tank_points, tank_summary = build_tanks(state, districts)
         (WEB_DATA / "tanks.geojson").write_text(json.dumps(tank_polygons), encoding="utf-8")
@@ -1413,6 +1517,8 @@ def main() -> None:
               f"tank_points.geojson {(WEB_DATA / 'tank_points.geojson').stat().st_size / 1e6:.1f} MB")
     else:
         print("  warning: data/raw/osm_water.json missing (fetch_data.py); tanks not built")
+    if (RAW / "osm_water.json").exists():
+        (WEB_DATA / "reservoirs.geojson").write_text(json.dumps(build_reservoirs(dams, sampler)), encoding="utf-8")
     if (RAW / "gw_levels.csv.gz").exists():
         gw_points, gw_summary = build_groundwater(districts)
         (WEB_DATA / "groundwater.geojson").write_text(json.dumps(gw_points), encoding="utf-8")
