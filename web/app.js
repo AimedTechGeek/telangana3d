@@ -2,6 +2,7 @@
 'use strict';
 
 const DEM_TILESET = 'mapbox://mapbox.mapbox-terrain-dem-v1';   // 3D surface, hillshade, relief tint and the cursor readout
+const RELIEF_TILES = 'https://api.mapbox.com/raster/v1/mapbox.mapbox-terrain-dem-v1/{z}/{x}/{y}.webp';   // no {ratio}: the DEM has no @2x tiles
 const BASEMAPS = { standard: 'mapbox://styles/mapbox/standard', satellite: 'mapbox://styles/mapbox/standard-satellite' };
 let scene = 'map';                 // map | satellite | night (setScene)
 let thematic = false;              // setThematic: relief muted to grey hillshade so an overlay reads
@@ -553,7 +554,9 @@ function buildStyle(theme) {
     sources: {
       'mapbox-dem': { type: 'raster-dem', url: DEM_TILESET, tileSize: 512, maxzoom: 14 },
       'hillshade-dem': { type: 'raster-dem', url: DEM_TILESET, tileSize: 512, maxzoom: 14 },   // its own source so the hillshade neither shares tiles nor loses them to the terrain's
-      'relief-dem': { type: 'raster', url: DEM_TILESET, tileSize: 512, maxzoom: 14 },   // the same tiles read as colours for the relief tint
+      // The same tiles read as colours for the relief tint. Explicit tiles, not the TileJSON url: its template ends in {ratio}, which GL JS fills with @2x on a
+      // devicePixelRatio > 1 screen, and Terrain-DEM has no @2x tiles (404, so no tint on phones and Retina laptops). GL JS still adds the token for api.mapbox.com.
+      'relief-dem': { type: 'raster', tiles: [RELIEF_TILES], tileSize: 512, maxzoom: 14 },
       mask: staticSource('mask', 'mask.geojson'),
       state: staticSource('state', 'state.geojson'),
       districts: staticSource('districts', 'districts.geojson', { promoteId: 'shapeName' }),   // a stable id for the hover state
@@ -945,7 +948,7 @@ const toggles = {
     if (!on) linkPopup.remove();
     if (window.Atlas3D) { Atlas3D.setVisible('pumps', on); Atlas3D.setVisible('conduits', on); }
   },
-  models3d: (on) => { if (window.Atlas3D) Atlas3D.setVisible('all', on); },
+  models3d: (on) => { if (window.Atlas3D) Atlas3D.setEnabled(on); },   // the master switch; the lens keeps choosing its groups beneath it
   pending: (on) => {                           // on = planned and under-construction works shown beside the operating ones
     setStatusMode(on ? 'all' : 'built');
     if (window.Atlas3D) Atlas3D.setStatus(on ? 'all' : 'built');

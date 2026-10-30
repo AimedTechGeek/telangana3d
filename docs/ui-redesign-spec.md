@@ -356,7 +356,7 @@ DOM (ids kept from today where they exist):
 | Place labels | `.chip[data-toggle="labels"]` | |
 | District lines | `.chip[data-toggle="districts"]` | |
 | Flow animation | `.chip[data-toggle="flow"]` | |
-| 3D models | `.chip[data-toggle="models3d"]` | `Atlas3D.setVisible('all', on)` |
+| 3D models | `.chip[data-toggle="models3d"]` | `Atlas3D.setEnabled(on)` (master switch; lens groups stay beneath it) |
 | About & sources (phone only) | `button.text-btn` opening `#about` | |
 | One hint line | "Exaggeration is the slider value at district level, more at state level, never less up close." | |
 

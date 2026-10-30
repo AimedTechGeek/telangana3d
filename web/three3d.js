@@ -39,6 +39,7 @@ let map = null, options = null, renderer = null, theme = 'light', slotAccepted =
 let yearFilter = null, statusMode = 'all', revision = 0, lastCalls = 0, lastZoomFloor = null, resampleTimer = null;
 const batches = new Map();
 const groups = Object.fromEntries(GROUPS.map((g) => [g, { visible: true, objects: 0 }]));
+let enabled = true;   // the Settings '3D models' master switch: a group is drawn only when this and its own flag are on
 const materials = new Map();
 const scene = new THREE.Scene();
 const camera = new THREE.Camera();
@@ -601,7 +602,7 @@ function exaggerationNow() {
 // ---------- the custom layer ----------
 
 function batchShown(batch, zoom, bounds) {
-  if (!groups[batch.group].visible) return 0;
+  if (!enabled || !groups[batch.group].visible) return 0;
   if (statusMode === 'built' && batch.status !== 'operational' && batch.group !== 'proposal') return 0;
   if (zoom < batch.band) return 0;
   const b = batch.bbox;
@@ -710,6 +711,7 @@ const api = {
     for (const g of group === 'all' ? GROUPS : [group]) if (groups[g]) groups[g].visible = Boolean(on);
     if (map) map.triggerRepaint();
   },
+  setEnabled(on) { enabled = Boolean(on); if (map) map.triggerRepaint(); },
   setYear(year) { yearFilter = year === null || year === undefined ? null : Number(year); if (map) map.triggerRepaint(); },
   setStatus(mode) { statusMode = mode === 'built' ? 'built' : 'all'; if (map) map.triggerRepaint(); },
   setData(name, payload) {
@@ -729,8 +731,8 @@ const api = {
   stats() {
     const styleLayer = map && map.getLayer(LAYER_ID);
     return { layer: Boolean(styleLayer), slot: styleLayer ? (styleLayer.slot ?? null) : null, slotAccepted, revision, theme,
-             groups: Object.fromEntries(GROUPS.map((g) => [g, { objects: groups[g].objects, visible: groups[g].visible, batches: groups[g].batches || 0 }])),
-             calls: lastCalls };
+             groups: Object.fromEntries(GROUPS.map((g) => [g, { objects: groups[g].objects, visible: enabled && groups[g].visible, batches: groups[g].batches || 0 }])),
+             enabled, calls: lastCalls };
   },
 };
 
