@@ -102,7 +102,7 @@ def main() -> int:
             page.click("#theme")
             page.wait_for_timeout(3000)
             check(page.evaluate("sketchDraw.getAll().features.length") == 1 and page.evaluate(DRAW_LAYERS) > 0, "A theme change keeps the sketch", problems)
-            page.click('[data-base="satellite"]')
+            page.click('[data-scene="satellite"]')   # the first copy: the top bar's scene segment
             page.wait_for_timeout(6000)
             check(page.evaluate("sketchDraw.getAll().features.length") == 1 and page.evaluate(DRAW_LAYERS) > 0, "A basemap switch keeps the sketch", problems)
 
