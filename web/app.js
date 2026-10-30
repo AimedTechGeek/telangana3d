@@ -930,11 +930,11 @@ const toggles = {
   },
   labels: (on) => setVisible(LABEL_LAYERS.labels, on),
   dams: (on) => {
-    setVisible(['dam-labels', 'dam-walls'], on);
+    setVisible(['dam-labels'], on);
     if (window.Atlas3D) { Atlas3D.setVisible('dams', on); Atlas3D.setVisible('reservoirs', on); }
   },
   links: (on) => {
-    setVisible(['links-highlight', 'links-casing', 'links-line', 'links-guide', 'links-pulse', 'links-arrows', 'links-hit', ...LABEL_LAYERS.links], on);
+    setVisible(['links-highlight', 'links-line', 'links-guide', 'links-pulse', 'links-arrows', 'links-hit', ...LABEL_LAYERS.links], on);
     if (!on) linkPopup.remove();
     if (window.Atlas3D) { Atlas3D.setVisible('pumps', on); Atlas3D.setVisible('conduits', on); }
   },
@@ -1243,12 +1243,10 @@ const LABEL_LAYERS = {
   labels: ['city-labels', 'town-labels', 'district-labels', 'peak-labels', 'prop-labels-far', 'prop-labels-near'],   // the Place labels chip
   links: ['pump-labels', 'wip-labels'],                                                                                // the Water links chip
 };
-let eraMode = 'all';
 function pointFeature(lon, lat, properties) { return { type: 'Feature', geometry: { type: 'Point', coordinates: [lon, lat] }, properties }; }
 function collection(features) { return { type: 'FeatureCollection', features }; }
 const muted = (t, scale) => ({ 'font-scale': scale, 'text-color': t.labelMuted });
-const eraFilter = () => (eraMode === 'all' ? ['literal', true] : ['all', ['has', 'year'], [eraMode === 'before' ? '<' : '>=', ['get', 'year'], ERA_YEAR]]);
-const damFilter = () => ['all', linkStatusFilter(), eraFilter(), yearFilter()];
+const damFilter = () => ['all', linkStatusFilter(), yearFilter()];
 const districtFilter = () => (tankMode === 'kakatiya' ? ['literal', true] : ['!', ['get', 'named_by_city']]);
 const districtText = (t) => (tankMode === 'kakatiya'
   ? ['format', ['upcase', ['get', 'name']], {}, '\n', {}, ['get', 'mk'], { 'font-scale': 1.05, 'text-color': t.label }]
@@ -1352,25 +1350,7 @@ async function addLabelSources() {
 let citiesData = [], damsData = [], pumphousesData = [];
 const notePopup = new mapboxgl.Popup({ closeButton: true, closeOnClick: true, offset: 12, className: 'flow-popup', maxWidth: '280px' });
 // ---------- dams: markers and the year filter (Telangana was formed in 2014) ----------
-const ERA_YEAR = 2014;
 function damYear(dam) { return dam.opened || dam.began || null; }
-function damInEra(dam, era) {
-  const year = damYear(dam);
-  return era === 'all' || (year !== null && (era === 'before' ? year < ERA_YEAR : year >= ERA_YEAR));
-}
-function setEra(era) {
-  eraMode = era;
-  for (const button of document.querySelectorAll('[data-era]')) button.setAttribute('aria-pressed', String(button.dataset.era === era));
-  for (const id of ['dam-labels', 'dam-walls']) if (map.getLayer(id)) map.setFilter(id, damFilter());
-}
-function renderEraCounts(dams) {
-  for (const button of document.querySelectorAll('[data-era]')) {
-    const count = dams.filter((dam) => damInEra(dam, button.dataset.era)).length;
-    const badge = button.querySelector('b') || button.appendChild(textEl('b', '', ''));
-    badge.textContent = String(count);
-  }
-}
-for (const button of document.querySelectorAll('[data-era]')) button.addEventListener('click', () => setEra(button.dataset.era));
 
 // ---------- years slider: dams, links and canals by the year they were done ----------
 const linkYear = (p) => p.done || p.water || p.began || p.planned || null;
@@ -1430,10 +1410,10 @@ $('year-play').addEventListener('click', toggleYearPlay);
 
 // ---------- status filter: operating vs still to build ----------
 function applyWorkFilters() {
-  for (const id of ['dam-labels', 'dam-walls']) if (map.getLayer(id)) map.setFilter(id, damFilter());
+  if (map.getLayer('dam-labels')) map.setFilter('dam-labels', damFilter());
   if (map.getLayer('pump-labels')) map.setFilter('pump-labels', withDeclutter(['all', linkStatusFilter(), yearFilter()]));
   if (map.getLayer('wip-labels')) map.setFilter('wip-labels', linkFilter());
-  for (const id of ['links-casing', 'links-line', 'links-guide', 'links-hit']) if (map.getLayer(id)) map.setFilter(id, linkFilter());
+  for (const id of ['links-line', 'links-guide', 'links-hit']) if (map.getLayer(id)) map.setFilter(id, linkFilter());
   if (map.getLayer('links-pulse')) map.setFilter('links-pulse', ['all', ['==', ['get', 'status'], 'operational'], linkFilter()]);
   if (map.getLayer('links-arrows')) map.setFilter('links-arrows', ['all', ['!=', ['get', 'status'], 'operational'], linkFilter()]);
   applyCanalFilters();
@@ -1445,16 +1425,6 @@ function setStatusMode(mode) {
   applyTankVisibility();
   applyGwMode();
   if (mode !== 'all') { damPopup.remove(); linkPopup.remove(); canalPopup.remove(); }
-}
-function renderStatusCounts(dams, links) {
-  const linkGroups = groupLinks(links);
-  for (const button of document.querySelectorAll('[data-status]')) {
-    const mode = button.dataset.status;
-    const shown = (status) => mode === 'all' || (mode === 'pending') === isPending(status);
-    const count = dams.filter((dam) => shown(dam.status)).length + [...linkGroups.values()].filter((group) => shown(group.status)).length;
-    const badge = button.querySelector('b') || button.appendChild(textEl('b', '', ''));
-    badge.textContent = String(count);
-  }
 }
 for (const button of document.querySelectorAll('[data-status]')) button.addEventListener('click', () => setStatusMode(button.dataset.status));
 
