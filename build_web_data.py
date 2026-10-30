@@ -1203,7 +1203,7 @@ def build_reservoirs(dams: list[dict], sampler: DemSampler) -> dict:
             crest.setdefault(f["properties"]["i"], []).append(LineString(f["geometry"]["coordinates"]))
     to_m = Transformer.from_crs(WGS84, TARGET_CRS, always_xy=True)
     to_wgs = Transformer.from_crs(TARGET_CRS, WGS84, always_xy=True)
-    features, unmatched, used = [], [], set()
+    candidates, unmatched = {}, []
     for i, dam in enumerate(dams):
         anchor = unary_union([LineString([to_m.transform(x, y) for x, y in line.coords]) for line in crest[i]]) if i in crest \
             else Point(to_m.transform(dam["lon"], dam["lat"]))
@@ -1213,6 +1213,19 @@ def build_reservoirs(dams: list[dict], sampler: DemSampler) -> dict:
             unmatched.append(dam["name"])
             continue
         best = hits.sort_values("area_ha", ascending=False).iloc[0]
+        # A polygon that is the largest near two dams (Icchampalli's proposed site on Sammakka Sagar's pool) goes to the built dam
+        # at a known position, then to the nearer one.
+        candidates[i] = (best, (dam["approx"] is not None, dam["status"] != "operational", anchor.distance(best.geometry)))
+    nearest = {}
+    for i, (best, rank) in candidates.items():
+        if best["osm_id"] not in nearest or rank < candidates[nearest[best["osm_id"]]][1]:
+            nearest[best["osm_id"]] = i
+    features, used = [], set()
+    for i, (best, _) in candidates.items():
+        dam = dams[i]
+        if nearest[best["osm_id"]] != i:
+            unmatched.append(f"{dam['name']} (polygon taken by {dams[nearest[best['osm_id']]]['name']})")
+            continue
         shape = best.geometry.simplify(RESERVOIR_SIMPLIFY_M)
         ring = shape.exterior
         count = max(RESERVOIR_LEVEL_MIN_SAMPLES, int(ring.length / RESERVOIR_LEVEL_STEP_M))
