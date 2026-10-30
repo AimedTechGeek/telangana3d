@@ -140,11 +140,12 @@
     if (!running || i < 0 || i >= stops.length) return;
     index = i;
     const dam = stops[i];
+    render();                                              // first, so the panel height is known: on a phone the panel covers the bottom of the map
     const camera = { center: [dam.lon, dam.lat], zoom: ZOOM, pitch: PITCH, bearing: bearingAt(i) };
+    if (matchMedia('(max-width: 900px)').matches && panel) camera.padding = { top: 48, bottom: panel.offsetHeight + 8, left: 0, right: 0 };
     map.stop();
     if (reduced) map.jumpTo(camera); else map.flyTo({ ...camera, duration: FLY_MS, essential: true });
     schedule();
-    render();
   }
   function pause() { if (!playing) return; playing = false; clearTimer(); if (panel) part('tour-play').textContent = 'Play'; }
   function togglePlay() {

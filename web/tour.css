@@ -36,9 +36,9 @@
 .tour-play { background: var(--ink); color: var(--panel-solid); border-color: var(--ink); }
 .tour-close { flex: 0 0 auto; }
 
-/* phones and tablets: full width above the collapsed bottom sheets (48 px handles) */
+/* phones and tablets: full width at the bottom, over the lens sheet (z-index 12) for as long as the tour runs */
 @media (max-width: 900px) {
-  .tour-panel { left: 0; right: 0; bottom: 56px; width: auto; transform: none; max-height: 52dvh; border-radius: 16px 16px 0 0; padding: 12px 14px 10px; }
+  .tour-panel { left: 0; right: 0; bottom: 0; z-index: 13; width: auto; transform: none; max-height: 52dvh; border-radius: 16px 16px 0 0; padding: 12px 14px 10px; }
   .tour-panel p, .tour-source a, .tour-step { font-size: 12px; }
   .tour-btn { min-height: 44px; }
 }

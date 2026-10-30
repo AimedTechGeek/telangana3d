@@ -1150,7 +1150,9 @@ function flyToWork(lon, lat) {
   workTarget = null;                        // the stop below fires a moveend that must not restore the limit
   map.stop();
   map.setMaxZoom(WORK_MAX_ZOOM);
-  map.flyTo({ center: [lon, lat], zoom: 15, pitch: 65, bearing: map.getBearing(), duration: 2600, essential: true });
+  const camera = { center: [lon, lat], zoom: 15, pitch: 65, bearing: map.getBearing(), duration: 2600, essential: true };
+  if (typeof lensPadding === 'function') camera.padding = lensPadding();   // ui.js: keep the work clear of the lens panel or the phone sheet
+  map.flyTo(camera);
   workTarget = [lon, lat];
 }
 map.on('moveend', () => {
