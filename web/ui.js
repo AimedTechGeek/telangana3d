@@ -46,7 +46,10 @@ function flyToLens(id) {
 function resetYear() { if (yearActive || yearValue !== YEAR_MAX) setYear(YEAR_MAX, false); }
 function syncTimeline() {
   const mode = LENSES[lensState.id].timeline;
-  $('timeline').hidden = mode === 'hidden' || (mode === 'ground' && lensState.groundValue === 'change');
+  const ground = mode === 'ground';
+  $('timeline').hidden = mode === 'hidden' || (ground && lensState.groundValue === 'change');
+  $('timeline').classList.toggle('windowed', ground);   // no Play: the slider only picks the before/after window here
+  if (ground) stopYearPlay();
 }
 
 /** The 3D groups of the current lens. The first setLens runs before three3d.js has loaded, so app.js's 'atlas3d:init' re-applies them. */
@@ -103,11 +106,18 @@ $('lenses').addEventListener('keydown', (event) => {
 });
 
 // ---------- ground lens: layer (wells or cropland), value (depth/cover or change), period from the timeline ----------
+const groundPeriod = () => (yearActive && yearValue < GROUND_SWITCH_YEAR ? 'before' : 'after');
+/** The timeline readout in this lens names the window shown: no dams or links are drawn here, so app.js's counts would mislead. */
+function groundWindowText() {
+  const period = groundPeriod();
+  if (lensState.groundLayer === 'gw') return gwData ? `May ${gwYears(gwData[period])} wells` : '';
+  return cropData ? `cropland ${cropData[period].epoch}` : '';
+}
 function applyGround() {
   const change = lensState.groundValue === 'change';
-  const period = yearActive && yearValue < GROUND_SWITCH_YEAR ? 'before' : 'after';
-  const mode = change ? 'change' : period;
+  const mode = change ? 'change' : groundPeriod();
   if (lensState.groundLayer === 'gw') { setCropMode('off'); setGwMode(mode); } else { setGwMode('off'); setCropMode(mode); }
+  $('year-readout').textContent = groundWindowText();   // after setYear has written its own readout (atlas:year fires last)
   for (const button of $$('[data-ground-layer] button')) button.setAttribute('aria-pressed', String(button.dataset.value === lensState.groundLayer));
   for (const button of $$('[data-ground-value] button')) {
     button.setAttribute('aria-pressed', String(button.dataset.value === lensState.groundValue));

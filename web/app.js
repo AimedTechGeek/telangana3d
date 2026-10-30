@@ -300,9 +300,11 @@ let tankMode = 'tanks';                    // off | tanks | kakatiya
 let tanksLoaded = false;
 let tankSummary = null;
 const TANK_POLYGON_ZOOM = 9;               // real outlines from here up, centroid dots below
-const TANK_DOT_ZOOM = 7;                   // centroid dots from here to the polygons
+const TANK_DOT_ZOOM = 7;                   // centroid dots from here to the polygons (Since 2014: the tanks are the story)
+const TANK_DOT_ZOOM_RIVERS = 8.5;          // in the Rivers & lifts lens 4,800 dots at the lens's z8.3 would drown the thin lifts, so they wait a step
 const districtCentres = new Map();         // district -> [lon, lat]
 const tankVisibility = () => (tankMode !== 'off' && statusMode !== 'pending' ? 'visible' : 'none');   // tanks all exist today
+const tankDotMinZoom = () => (tankMode === 'kakatiya' ? TANK_DOT_ZOOM : TANK_DOT_ZOOM_RIVERS);
 function tankLayers(t) {
   if (!tanksLoaded) return [];
   const vis = tankVisibility();
@@ -317,7 +319,7 @@ function tankLayers(t) {
       paint: { 'fill-color': t.tank, 'fill-opacity': 0.85 } },
     { id: 'tanks-outline', type: 'line', source: 'tanks', minzoom: TANK_POLYGON_ZOOM, layout: { visibility: vis, 'line-join': 'round' },
       paint: { 'line-color': t.tankEdge, 'line-width': 0.8, 'line-opacity': 0.8 } },
-    { id: 'tanks-dots', type: 'circle', source: 'tank-points', minzoom: TANK_DOT_ZOOM, maxzoom: TANK_POLYGON_ZOOM, layout: { visibility: vis },
+    { id: 'tanks-dots', type: 'circle', source: 'tank-points', minzoom: tankDotMinZoom(), maxzoom: TANK_POLYGON_ZOOM, layout: { visibility: vis },
       paint: { 'circle-radius': radius, 'circle-color': t.tank, 'circle-opacity': 0.85, 'circle-stroke-color': t.tankEdge, 'circle-stroke-width': 0.5 } },
   ];
 }
@@ -346,6 +348,7 @@ function mixColour(a, b, f) {
 function applyTankVisibility() {
   if (!tanksLoaded) return;
   for (const id of ['tanks-fill', 'tanks-outline', 'tanks-dots']) map.setLayoutProperty(id, 'visibility', tankVisibility());
+  map.setLayerZoomRange('tanks-dots', tankDotMinZoom(), TANK_POLYGON_ZOOM);
   map.setLayoutProperty('tanks-kakatiya', 'visibility', tankMode === 'kakatiya' ? 'visible' : 'none');
 }
 function setTankMode(mode) {
@@ -1378,6 +1381,7 @@ function setYear(value, active = true) {
   yearValue = Math.min(YEAR_MAX, Math.max(Number($('year').min), value));
   $('year').value = String(yearValue);
   $('year-out').textContent = yearActive ? String(yearValue) : 'Now';
+  $('year-out').hidden = !yearActive;        // the Now button already says it
   $('year-readout').textContent = yearReadout();
   if (!active) stopYearPlay();
   applyWorkFilters();
@@ -1404,8 +1408,9 @@ function setupYears(dams, links, canals) {
     const key = linkKey(f.properties), y = f.properties.year;
     if (y !== undefined && !(firstYear.get(key) <= y)) firstYear.set(key, y);
   }
+  // Hosted canal tiles are never read here, but every canal carries one of the two era years, so the readout can still say what the filter does.
   yearData = { dams: years(dams, damYear), links: [...firstYear.values()].sort((a, b) => a - b),
-               canals: canals ? years(canals.features, (f) => f.properties.year ?? null) : [] };
+               canals: canals ? years(canals.features, (f) => f.properties.year ?? null) : canalsLoaded ? [CANAL_YEAR.before, CANAL_YEAR.after] : [] };
   const all = [...yearData.dams, ...yearData.links, ...yearData.canals];
   $('year').min = String(Math.min(...all));
   $('year').max = String(YEAR_MAX);
@@ -1658,8 +1663,11 @@ function openTankPopup(p, lngLat) {
   content.appendChild(link);
   tankPopup.setLngLat(lngLat).setDOMContent(content).addTo(map);
 }
+// A dam or pump label over a reservoir takes the click alone (its own handler opens the popup): one popup per click.
+const LABELS_OVER_TANKS = ['dam-labels', 'pump-labels'];
+const labelUnderClick = (point) => { const layers = LABELS_OVER_TANKS.filter((id) => map.getLayer(id)); return layers.length > 0 && map.queryRenderedFeatures(point, { layers }).length > 0; };
 for (const id of ['tanks-fill', 'tanks-dots']) {
-  map.on('click', id, (event) => { if (sketching()) return; event.originalEvent.stopPropagation(); openTankPopup(event.features[0].properties, event.lngLat); });
+  map.on('click', id, (event) => { if (sketching() || labelUnderClick(event.point)) return; event.originalEvent.stopPropagation(); openTankPopup(event.features[0].properties, event.lngLat); });
   map.on('mouseenter', id, () => { map.getCanvas().style.cursor = 'pointer'; });
   map.on('mouseleave', id, () => { map.getCanvas().style.cursor = ''; });
 }

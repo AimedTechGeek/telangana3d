@@ -250,10 +250,11 @@ h1, h2, h3 { margin: 0; }
 .timeline {
   position: fixed; bottom: 16px; left: calc(376px + (100vw - 392px) / 2); transform: translateX(-50%);
   width: min(720px, 100vw - 344px - 96px); height: 56px; z-index: 9;
-  display: grid; grid-template-columns: auto 1fr auto auto; grid-template-rows: auto auto; align-items: center; column-gap: 10px; row-gap: 0;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 0 10px;   /* flex, not grid: a hidden Play or year output leaves no empty column behind */
   padding: 6px 12px; border-radius: 14px;
 }
-.tl-track { position: relative; height: 28px; display: flex; align-items: center; }
+.timeline.windowed .tl-play { display: none; }   /* ground lens: the slider only switches the before/after window, nothing to play through */
+.tl-track { position: relative; flex: 1; min-width: 0; height: 28px; display: flex; align-items: center; }
 .tl-track input { width: 100%; margin: 0; accent-color: var(--accent); }
 .tl-mark {
   position: absolute; top: 100%; transform: translateX(-50%); margin-top: -4px; padding: 0 4px 0 0; border: 0; background: transparent;
@@ -262,7 +263,7 @@ h1, h2, h3 { margin: 0; }
 .tl-mark::before { content: ""; position: absolute; left: 50%; top: -6px; width: 2px; height: 8px; margin-left: -1px; background: var(--accent); border-radius: 1px; }
 .tl-mark:hover { color: var(--accent); }
 .timeline output { font-family: var(--mono); font-size: 13px; font-weight: 600; min-width: 3.2ch; text-align: right; }
-.tl-readout { grid-column: 1 / -1; margin: 0; font-family: var(--mono); font-size: 10.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.2; }
+.tl-readout { flex-basis: 100%; margin: 0; font-family: var(--mono); font-size: 10.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.2; }
 .tl-play { min-width: 56px; justify-content: center; }
 
 /* ---------- map tools ---------- */
@@ -681,10 +682,11 @@ body:not(.sketch-off) .mapboxgl-popup { display: none; }   /* clicks place verti
 
   .timeline {
     left: 16px; right: 16px; transform: none; width: auto; bottom: calc(var(--sheet-h) + 8px); height: 76px;
-    grid-template-rows: auto; padding: 4px 12px 32px; transition: bottom .3s cubic-bezier(.2,.8,.2,1);
+    padding: 4px 12px 32px; transition: bottom .3s cubic-bezier(.2,.8,.2,1);
   }
   .tl-readout { display: none; }
   .tl-mark { height: 40px; margin-top: -6px; padding: 0 6px; font-size: 12px; display: inline-flex; align-items: flex-start; }   /* a 40 px touch target under the track */
+  .tl-mark .long { display: none; }          /* the short track: "2014" alone, so the mark never runs under the Now button */
   .timeline output { font-size: 13px; }
 
   .map-tools {
@@ -719,7 +721,13 @@ body:not(.sketch-off) .mapboxgl-popup { display: none; }   /* clicks place verti
   .dam-popup .kind, .dam-popup .fine, .dam-popup a, .mapboxgl-ctrl-attrib.mapboxgl-compact, .section-head h3 { font-size: 12px !important; }
 }
 @media (max-width: 480px) {
-  .hl { flex: 1 1 40%; }
+  /* Two numbers per row in every sheet state, long values (lakh crore, m³/s) wrapping instead of running off the screen;
+     the peek sheet grows to hold the second row (a 390 px phone has the room, a scrolling one-line row hid the third number). */
+  body { --sheet-h: 196px; }
+  .headline, [data-sheet="peek"] .headline { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 12px; overflow: visible; }
+  .hl, [data-sheet="peek"] .hl { min-width: 0; max-width: none; }
+  .hl dd { white-space: normal; }
+  [data-sheet="peek"] .hl dt { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }   /* one-line labels keep two rows inside the peek; half shows them whole */
   .lenses [role="tab"] { font-size: 13px; }
 }
 @media (prefers-reduced-motion: reduce) {

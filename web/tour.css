@@ -41,4 +41,9 @@
   .tour-panel { left: 0; right: 0; bottom: 0; z-index: 13; width: auto; transform: none; max-height: 52dvh; border-radius: 16px 16px 0 0; padding: 12px 14px 10px; }
   .tour-panel p, .tour-source a, .tour-step { font-size: 12px; }
   .tour-btn { min-height: 44px; }
+  /* While the tour runs the panel is the bottom sheet (tour.js writes --tour-h): the timeline goes and the map tools and the Mapbox controls sit on the panel. */
+  body.touring #timeline { display: none; }
+  body.touring .map-tools { bottom: calc(var(--tour-h, 52dvh) + 8px); }
+  body.touring .readout { bottom: calc(var(--tour-h, 52dvh) + 60px); }
+  body.touring .mapboxgl-ctrl-bottom-right, body.touring .mapboxgl-ctrl-bottom-left { margin-bottom: calc(var(--tour-h, 52dvh) + 8px); }
 }

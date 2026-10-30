@@ -142,7 +142,10 @@
     const dam = stops[i];
     render();                                              // first, so the panel height is known: on a phone the panel covers the bottom of the map
     const camera = { center: [dam.lon, dam.lat], zoom: ZOOM, pitch: PITCH, bearing: bearingAt(i) };
-    if (matchMedia('(max-width: 900px)').matches && panel) camera.padding = { top: 48, bottom: panel.offsetHeight + 8, left: 0, right: 0 };
+    if (matchMedia('(max-width: 900px)').matches && panel) {
+      camera.padding = { top: 48, bottom: panel.offsetHeight + 8, left: 0, right: 0 };
+      document.body.style.setProperty('--tour-h', `${panel.offsetHeight}px`);   // tour.css lifts the map tools and the Mapbox controls above the panel
+    }
     map.stop();
     if (reduced) map.jumpTo(camera); else map.flyTo({ ...camera, duration: FLY_MS, essential: true });
     schedule();
@@ -170,6 +173,7 @@
     running = true; playing = true;
     if (typeof setLens === 'function') setLens('rivers', { fly: false, fromTour: true });
     buildPanel();
+    document.body.classList.add('touring');
     const container = map.getCanvasContainer();
     // The user taking the camera ends autoplay (the panel stays, Play resumes).
     map.on('dragstart', pause);
@@ -187,6 +191,8 @@
       if (target === map) map.off(type, handler); else target.removeEventListener(type, handler, options);
     }
     if (panel) { panel.remove(); panel = null; }
+    document.body.classList.remove('touring');
+    document.body.style.removeProperty('--tour-h');
   }
 
   window.AtlasTour = { start, stop, isRunning: () => running };
