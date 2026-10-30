@@ -13,7 +13,7 @@ import sys
 import time
 from pathlib import Path
 
-from playwright.sync_api import sync_playwright
+from playwright.sync_api import TimeoutError as PlaywrightTimeoutError, sync_playwright
 
 ROOT = Path(__file__).parent
 OUT = ROOT / "out"
@@ -37,6 +37,15 @@ def main() -> int:
             page.goto(URL)
             page.wait_for_function("document.title.startsWith('READY')", timeout=120000)
             page.wait_for_timeout(1500)
+            # The 3D works module (three3d.js) is loaded by index.html once the packages merge; until then inject it here.
+            if not page.evaluate("Boolean(window.Atlas3D)"):
+                page.add_script_tag(url=f"http://127.0.0.1:{PORT}/three3d.js", type="module")
+            try:
+                page.wait_for_function(
+                    "(() => { try { return Boolean(JSON.parse(document.querySelector('#debug').textContent).notes.atlas3d); }"
+                    " catch (e) { return false; } })()", timeout=30000)
+            except PlaywrightTimeoutError:
+                errors.append("3D layer did not start")
             report = json.loads(page.locator("#debug").text_content())
             page.screenshot(path=str(OUT / "web_home.png"))
             browser.close()
@@ -50,6 +59,8 @@ def main() -> int:
     if not report["notes"]["terrain"]:
         errors.append("terrain is not enabled")
     print(json.dumps(report["notes"], indent=1))
+    if "atlas3d" in report["notes"]:
+        print("3D works: " + json.dumps(report["notes"]["atlas3d"]))
     if errors:
         print("FAILED:\n  " + "\n  ".join(errors))
         return 1
