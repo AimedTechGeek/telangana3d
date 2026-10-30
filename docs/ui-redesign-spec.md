@@ -494,15 +494,15 @@ On: `relief` visibility none; `hillshade-shadow-color` = `thematicShadow`, `hill
 
 ```js
 window.Atlas3D = {
-  init(map, { exaggeration, theme }) -> Promise<void>,  // exaggeration(): current scalar = slider × zoom factor × terrainRise
-  setTheme('light' | 'dark'),                          // also self-syncs from <html data-theme> + prefers-color-scheme
+  init(map, { exaggeration, theme }) -> Promise<void>,  // exaggeration(): current scalar = slider × zoom factor × terrainRise; theme: 'light' | 'dark' or a function returning it (app.js passes mapTheme, dark in the Night scene)
+  setTheme('light' | 'dark'),                          // app.js calls it from setScene and applyMapTheme; also self-syncs from <html data-theme> + prefers-color-scheme through options.theme()
   setVisible(group, on),                               // 'all' | 'dams' | 'reservoirs' | 'pumps' | 'conduits' | 'proposal'
   setYear(year | null),                                // null = all
   setStatus('all' | 'built'),                          // 'built' hides non-operational objects
   setData('proposal', { data, geo }),                  // proposal.json + proposal.geojson; three3d never fetches them
   setExaggeration(),                                   // invalidate: triggerRepaint (exaggeration is read every frame)
   probe([lon, lat]) -> { groundM, exaggeration, z },   // test hook: the z the layer uses for ground there
-  stats() -> { layer, revision, groups: { <group>: { objects, visible, batches } }, calls },
+  stats() -> { layer, revision, theme, groups: { <group>: { objects, visible, batches } }, calls },
 };
 ```
 
@@ -545,9 +545,9 @@ Approximate positions (`approx` set, or trunk stages `placed_by` other than `'ma
 
 ### 8.7.5 New derived files (C, `build_web_data.py`; `web/data` is git-ignored, so only the code is committed)
 
-- `reservoirs.geojson`: for each dam in `dams.json`, the largest OSM water polygon from the raw `data/raw/osm_water.json` elements (through `osm_polygon` and `tank_kind`, **not** the state-clipped `build_tanks` output, which drops border reservoirs such as Srisailam and Nagarjuna Sagar) that touches a 3 km buffer of the dam point or its crest line, area >= 50 ha, simplified to about 30 m; properties `{ i, name, status, area_ha, level_m }`, `level_m` = median Copernicus DEM (`DemSampler(PROFILE_DEM)`) along the outline, ignoring nodata samples (`level_m: null` when fewer than half the samples are valid; the runtime refinement then sets the level). Dams without a match are skipped and listed in the build log; the log also says which of the six largest reservoirs by `capacity_tmcft` got a surface.
-- `conduits.geojson`: the canals selection in 8.7.4 with `{ id, kind, scheme, construction, km, year }`.
-- `DAM_LINE_ALIASES`: inspect `data/raw/osm_dam_lines.json` for the dams that get no line today (Medigadda first); add an alias only when the OSM way lies within 2 km of the dam's position. Report the dams still without a line.
+- `reservoirs.geojson`: for each dam in `dams.json`, the OSM water polygon from the raw `data/raw/osm_water.json` elements plus `osm_water_relations.json` (the member geometry of the large multipolygon relations, which the water snapshot's `out tags geom` dropped; `fetch_data.fetch_osm_water_relations`), through `osm_polygon` and `tank_kind`, **not** the state-clipped `build_tanks` output, which drops border reservoirs such as Srisailam and Nagarjuna Sagar: the polygon named after the dam (`dam_key`, `DAM_LINE_ALIASES`) within 50 km of the dam point or its crest line (OSM's Srisailam reservoir starts 44 km above the dam; the gorge below is `water=river`), else the largest one touching a 3 km buffer, area >= 50 ha, simplified to about 30 m; properties `{ i, name, status, area_ha, level_m }`, `level_m` = median Copernicus DEM (`DemSampler(PROFILE_DEM)`) along the outline, ignoring nodata samples (`level_m: null` when fewer than half the samples are valid; the runtime refinement then sets the level). Dams without a match are skipped and listed in the build log; the log also says which of the six largest reservoirs by `capacity_tmcft` got a surface.
+- `conduits.geojson`: the canals selection in 8.7.4 with `{ id, kind, scheme, construction, km, year }`. Parallel `main` ways (a share >= 0.8 of one within 30 m of the other, union-find) are one bundle: only the long way nearest its middle is kept, with `bundle` = the number of ways it stands for (Lakshmi's 101 delivery mains and stubs would otherwise draw as a 300 m slab).
+- `DAM_LINE_ALIASES`: inspect `data/raw/osm_dam_lines.json` for the dams that get no line today (Medigadda first); add an alias only when the OSM way lies within 2 km of the dam's position. Report the dams still without a line. `DAM_LINE_HAND_PLACED`: stand-in crest lines for dams OSM has no way for; Medigadda's is 1.6 km through the `dams.json` point, perpendicular to the Godavari's HydroRIVERS course there.
 
 ### 8.7.6 Status and theme colours (three3d.js constants)
 
@@ -557,7 +557,7 @@ Approximate positions (`approx` set, or trunk stages `placed_by` other than `'ma
 | `damUnknown` | `#dfb39d` | `#9c6650` |
 | `barragePier` / `barrageDeck` / `gate` | `#8a8f94` / `#5f6b73` / `#0f7f78` | `#9aa3aa` / `#7b8790` / `#4fd1c5` |
 | `pumpWall` / `pumpRoof` | `#e7e1d6` / `#c2410c` | `#b8b2a7` / `#fb923c` |
-| `pipe` / `tunnel` / `lining` | `#9a3412` / `#c2410c` / `#cfc8bb` | `#fdba74` / `#fb923c` / `#8f8a82` |
+| `pipe` / `tunnel` / `lining` | `#d4895a` / `#c2410c` / `#cfc8bb` (pipe lighter than the roof, so a pump house stays the focal object) | `#fdba74` / `#fb923c` / `#8f8a82` |
 | `water` (opacity 0.82) | `#5aa6e0` | `#3f8fd0` |
 | `proposal` / `proposalWater` | `#14b8a6` / `#5eead4` | `#2dd4bf` / `#5eead4` |
 
@@ -619,7 +619,7 @@ Post-merge chore (for whoever merges, after A): delete the definitions no longer
 
 1. True clipping of contours to the state needs `tg-contours` re-published from clipped data (secret token). Until then contours sit under the mask.
 2. Barrage heights in `dams.json` look like water levels for at least Tummidihetti (148 m, note says FRL 148 m) and Sammakka Sagar (83 m at 77 m ground). The 3D rule (8.7.4) works around it; the popup still shows the listed value. Fix at the source (`build_dams`) or keep?
-3. 27 of 42 dams have no OSM crest line; after the alias pass some (possibly Medigadda) will still have none and get no 3D body.
+3. 27 of 42 dams have no OSM crest line; after the alias pass some will still have none and get no 3D body. Medigadda now has a hand-placed line (`DAM_LINE_HAND_PLACED`); the build log lists the rest.
 4. Schematic links get no 3D geometry (they are not alignments). If a rising-main stub at each pump house is wanted, it is a follow-up.
 5. Optional globe opening: not planned (the code notes a globe intro was tried and dropped).
 6. The tileset `tecgeor.tg-flow-particles` and its source `tg-flow-velocity` can be deleted from the Mapbox account by the owner (Studio → Tilesets); nothing in the app reads them after this work.

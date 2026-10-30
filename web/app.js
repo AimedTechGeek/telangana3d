@@ -253,7 +253,9 @@ function canalLayers(t) {
     isTunnel, ['case', isNew, base * s.tunnel, base * 0.6 * s.tunnel],
     isMain, ['case', isNew, base * s.main, base * 0.6 * s.main],
     ['case', isNew, base * s.canal, base * 0.6 * s.canal]];
-  const width = (s) => ['interpolate', ['linear'], ['zoom'], 6, kindWidth(1.2, s), 9, kindWidth(2, s), 12, kindWidth(4, s)];
+  // Pressure mains thin to hairlines between z12 and z13.5 (`close`): the 3D pipes carry them there, and the 30–100 parallel OSM ways
+  // at a Kaleshwaram pump house, 9–20 m apart, would otherwise fill a 300–400 m corridor with casing and dashes (a hatched slab at z14–15.5).
+  const width = (s, close = { ...s, main: s.main * 0.15 }) => ['interpolate', ['linear'], ['zoom'], 6, kindWidth(1.2, s), 9, kindWidth(2, s), 12, kindWidth(4, s), 13.5, kindWidth(4, close)];
   return [
     // Casing: canals get a thin contrast edge; tunnels a wide one so they read as a tube; mains in between.
     { id: 'canals-casing', type: 'line', source: 'canals', filter: canalFilter(), layout: { 'line-join': 'round', 'line-cap': 'round', visibility: vis },
@@ -268,7 +270,7 @@ function canalLayers(t) {
     ...Array.from({ length: FLOW_DASH_STEPS }, (_, k) => ({
       id: `canals-dash-${k}`, type: 'line', source: 'canals', filter: canalDashFilter(),
       layout: { 'line-join': 'round', 'line-cap': 'butt', visibility: vis },
-      paint: { 'line-color': t.canalDash, 'line-width': width({ canal: 0.45, tunnel: 0.35, main: 0.55 }),
+      paint: { 'line-color': t.canalDash, 'line-width': width({ canal: 0.45, tunnel: 0.35, main: 0.55 }, { canal: 0.45, tunnel: 0.35, main: 0 }),
                'line-dasharray': dashPatternAt(k), 'line-opacity': k === flowStep ? 0.9 : 0 } })),
     { id: 'canals-hit', type: 'line', source: 'canals', filter: canalFilter(), layout: { visibility: vis },
       paint: { 'line-color': '#000000', 'line-opacity': 0, 'line-width': 12 } },
@@ -780,6 +782,7 @@ function applyMapTheme() {
     for (const [key, value] of Object.entries(MAP_THEMES[theme].basemapColours)) map.setConfigProperty('basemap', key, value);
   }
   map.setFog(fogFor(theme));
+  if (window.Atlas3D) Atlas3D.setTheme(theme);
 }
 let builtBasemap = 'standard';                                      // the basemap import the current style was built with
 const sceneButtons = () => document.querySelectorAll('[data-scene]');   // the top bar and the phone settings each carry a copy
@@ -789,6 +792,7 @@ function setScene(id) {
   if (!['map', 'satellite', 'night'].includes(id)) return;
   scene = id;
   syncSceneButtons();
+  if (window.Atlas3D) Atlas3D.setTheme(mapTheme());                // the 3D works follow the scene, not only the UI theme
   if (!map.getLayer('relief') || !styleReady) { map.once('style.load', () => setScene(id)); return; }   // no style yet, or one is reloading: the state is kept and applied when it has loaded
   const reload = builtBasemap !== basemapKind();
   if (!reload) {                                                    // Standard to Standard: the same style, new tokens and light preset
@@ -2955,8 +2959,12 @@ document.body.classList.add('sketch-off');
 // ---------- 3D works (three3d.js) ----------
 function exaggerationNow() { return Math.max(0.01, Number($('exag').value) * exaggerationFactorAt(map.getZoom()) * terrainRise); }
 function whenAtlas3D(fn) { if (window.Atlas3D) fn(window.Atlas3D); else window.addEventListener('atlas3d:ready', () => fn(window.Atlas3D), { once: true }); }
-map.on('load', () => whenAtlas3D((atlas) => atlas.init(map, { exaggeration: exaggerationNow, theme: currentTheme() })
-  .then(() => { if (proposalGeo && proposalData) atlas.setData('proposal', { data: proposalData, geo: proposalGeo }); debug.notes.atlas3d = atlas.stats(); writeDebug(); })
+map.on('load', () => whenAtlas3D((atlas) => atlas.init(map, { exaggeration: exaggerationNow, theme: mapTheme })
+  .then(() => {
+    if (proposalGeo && proposalData) atlas.setData('proposal', { data: proposalData, geo: proposalGeo });
+    document.dispatchEvent(new CustomEvent('atlas3d:init'));   // ui.js: the lens's groups, set before the module existed
+    debug.notes.atlas3d = atlas.stats(); writeDebug();
+  })
   .catch((error) => { debug.errors.push(`3D: ${error.message}`); writeDebug(); })));
 
 async function loadJson(url) { const response = await fetch(url); if (!response.ok) throw new Error(`${url}: ${response.status}`); return response.json(); }

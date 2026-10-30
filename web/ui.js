@@ -49,6 +49,14 @@ function syncTimeline() {
   $('timeline').hidden = mode === 'hidden' || (mode === 'ground' && lensState.groundValue === 'change');
 }
 
+/** The 3D groups of the current lens. The first setLens runs before three3d.js has loaded, so app.js's 'atlas3d:init' re-applies them. */
+function applyLensModels() {
+  if (!window.Atlas3D) return;
+  const models = LENSES[lensState.id].models;
+  for (const group of MODEL_GROUPS) Atlas3D.setVisible(group, models.includes(group));
+}
+document.addEventListener('atlas3d:init', applyLensModels);
+
 function setLens(id, { fly = true, fromTour = false } = {}) {
   const lens = LENSES[id];
   if (!lens) return;
@@ -73,7 +81,7 @@ function setLens(id, { fly = true, fromTour = false } = {}) {
   if (id === 'ground') applyGround(); else { setGwMode('off'); setCropMode('off'); }
   setProposalMode(lens.proposal);
   if (typeof setThematic === 'function') setThematic(lens.thematic);
-  if (window.Atlas3D) for (const group of MODEL_GROUPS) Atlas3D.setVisible(group, lens.models.includes(group));
+  applyLensModels();
   if (lens.timeline === 'hidden' || lens.timeline === 'now') resetYear();
   else if (lens.timeline === '2014' && entering) setYear(2014);
   syncTimeline();

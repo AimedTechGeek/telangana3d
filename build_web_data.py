@@ -884,10 +884,24 @@ DAM_LINE_ALIASES = {"priyadarshinijurala": "jurala", "nagarjunsagar": "nagarjuna
                     # have only unnamed waterway=dam ways near them (Lower Manair, Kaddam, Komaram Bheem, Sarala Sagar within 0.1 km),
                     # which a name alias cannot reach; Medigadda's nearest OSM dam way is 22 km away.
                     "baswapuram": "baswapur"}
+# Stand-in crest lines (dam_key -> [lon, lat] pairs) for dams OSM has no way for (spec 8.7.5, open question 3). Medigadda: the first stop
+# of the tour, 1.6 km through the dams.json point perpendicular to the Godavari's HydroRIVERS course within 4 km (bearing 119°),
+# about the barrage's listed length; the 3D body is a generic stand-in anyway.
+DAM_LINE_HAND_PLACED = {"medigadda": [[80.0928, 18.71016], [80.08554, 18.6975]]}
+
+
+def dam_line_feature(i: int, dam: dict, coords: list[list[float]], height: int | None) -> dict:
+    properties = {"i": i, "name": dam["name"], "status": dam["status"], "height": height if height is not None else DAM_WALL_DEFAULT_M,
+                  "height_known": height is not None}
+    year = dam["opened"] or dam["began"]
+    if year is not None:
+        properties["year"] = year
+    return {"type": "Feature", "geometry": {"type": "LineString", "coordinates": coords}, "properties": properties}
 
 
 def build_dam_lines(dams: list[dict]) -> dict:
-    """OSM waterway=dam ways (data/raw/osm_dam_lines.json) joined by name to the dams on the map; dams without a line are skipped."""
+    """OSM waterway=dam ways (data/raw/osm_dam_lines.json) joined by name to the dams on the map, plus the hand-placed lines;
+    dams without a line are skipped."""
     elements = json.loads((RAW / "osm_dam_lines.json").read_text(encoding="utf-8"))["elements"]
     by_key = {}
     for i, dam in enumerate(dams):
@@ -902,14 +916,19 @@ def build_dam_lines(dams: list[dict]) -> dict:
         dam = dams[i]
         height = dam["height"] if dam["height"] is not None else parse_height_m(tags.get("height"))
         coords = [[round(p["lon"], 5), round(p["lat"], 5)] for p in e["geometry"]]
-        properties = {"i": i, "name": dam["name"], "status": dam["status"], "height": height if height is not None else DAM_WALL_DEFAULT_M,
-                      "height_known": height is not None}
-        year = dam["opened"] or dam["began"]
-        if year is not None:
-            properties["year"] = year
-        features.append({"type": "Feature", "geometry": {"type": "LineString", "coordinates": coords}, "properties": properties})
+        features.append(dam_line_feature(i, dam, coords, height))
         used.add(i)
     print(f"dam lines: {len(features)} OSM dam ways joined to {len(used)} of {len(dams)} dams")
+    hand_placed = []
+    for key, coords in DAM_LINE_HAND_PLACED.items():
+        i = by_key.get(key)
+        if i is None or i in used:
+            continue
+        features.append(dam_line_feature(i, dams[i], coords, dams[i]["height"]))
+        used.add(i)
+        hand_placed.append(dams[i]["name"])
+    print(f"  hand-placed: {', '.join(hand_placed) or 'none'}; still without a line: "
+          f"{', '.join(d['name'] for k, d in enumerate(dams) if k not in used) or 'none'}")
     return {"type": "FeatureCollection", "features": features}
 
 
@@ -1025,10 +1044,59 @@ def build_canals(links: dict) -> tuple[dict, dict]:
 
 
 CONDUIT_SCHEME_PREFIX = "Sitarama"      # the scheme's open canals get 3D troughs; elsewhere only pressure mains and tunnels are drawn
+MAIN_BUNDLE_M = 30.0                    # parallel pressure mains closer than this are one bundle (Lakshmi's 34 delivery mains sit 9 m apart)
+MAIN_BUNDLE_SHARE = 0.8                 # a way joins a bundle when this share of it, or of the other way, runs within MAIN_BUNDLE_M of the other
+
+
+def bundle_mains(features: list[dict]) -> list[dict]:
+    """One `main` way per bundle of parallel mains, standing for `bundle` ways: drawn as every main was, the 101 ways leaving
+    Lakshmi pump house made a hatched slab 300 m wide. Consecutive ways of one main touch only at their ends, so they stay
+    separate; the short stubs at a pump house fold into the mains they touch. The representative is the long way (at least half
+    the bundle's longest) nearest the middle of the bundle."""
+    mains = [k for k, f in enumerate(features) if f["properties"]["kind"] == "main"]
+    if len(mains) < 2:
+        return features
+    lines = gpd.GeoSeries([LineString(features[k]["geometry"]["coordinates"]) for k in mains], crs=WGS84).to_crs(TARGET_CRS)
+    buffers = lines.buffer(MAIN_BUNDLE_M)
+    parent = list(range(len(mains)))
+
+    def root(a: int) -> int:
+        while parent[a] != a:
+            parent[a] = parent[parent[a]]
+            a = parent[a]
+        return a
+
+    for a in range(len(mains)):
+        for b in lines.sindex.query(buffers.iloc[a], predicate="intersects"):
+            if b <= a:
+                continue
+            share = max(lines.iloc[a].intersection(buffers.iloc[b]).length / lines.iloc[a].length,
+                        lines.iloc[b].intersection(buffers.iloc[a]).length / lines.iloc[b].length)
+            if share >= MAIN_BUNDLE_SHARE:
+                parent[root(a)] = root(b)
+    members: dict[int, list[int]] = {}
+    for a in range(len(mains)):
+        members.setdefault(root(a), []).append(a)
+    keep = {}
+    for group in members.values():
+        longest = max(lines.iloc[a].length for a in group)
+        core = [a for a in group if lines.iloc[a].length >= longest / 2]
+        middles = {a: lines.iloc[a].interpolate(0.5, normalized=True) for a in core}
+        centre = Point(np.mean([m.x for m in middles.values()]), np.mean([m.y for m in middles.values()]))
+        keep[mains[min(core, key=lambda a: middles[a].distance(centre))]] = len(group)
+    bundled = []
+    for k, f in enumerate(features):
+        if f["properties"]["kind"] != "main":
+            bundled.append(f)
+        elif k in keep:
+            f["properties"]["bundle"] = keep[k]
+            bundled.append(f)
+    return bundled
 
 
 def build_conduits(canals: dict) -> dict:
-    """The canal ways that get a 3D body (three3d.js): post-2014 pressure mains and tunnels, plus every Sitarama way.
+    """The canal ways that get a 3D body (three3d.js): post-2014 pressure mains (bundled, see bundle_mains) and tunnels, plus every
+    Sitarama way.
 
     The year follows the web map's canal rule (dug after 2014 counts as 2015, older as 1970) so the timeline can filter the bodies.
     """
@@ -1041,11 +1109,14 @@ def build_conduits(canals: dict) -> dict:
         features.append({"type": "Feature", "geometry": feature["geometry"], "properties": {
             "id": p["id"], "kind": p["kind"], "scheme": p["scheme"], "construction": p["construction"], "km": p["km"],
             "year": 2015 if p["era"] == "after" else 1970}})
+    mains_before = sum(1 for f in features if f["properties"]["kind"] == "main")
+    features = bundle_mains(features)
     by_kind = {}
     for f in features:
         kind = f["properties"]["kind"]
         by_kind[kind] = (by_kind.get(kind, (0, 0.0))[0] + 1, by_kind.get(kind, (0, 0.0))[1] + f["properties"]["km"])
-    print(f"conduits: {len(features)} ways for 3D; " + ", ".join(f"{k} {n} ways {km:.0f} km" for k, (n, km) in sorted(by_kind.items())))
+    print(f"conduits: {len(features)} ways for 3D; " + ", ".join(f"{k} {n} ways {km:.0f} km" for k, (n, km) in sorted(by_kind.items()))
+          + f"; {mains_before} main ways bundled into {by_kind.get('main', (0,))[0]}")
     return {"type": "FeatureCollection", "features": features}
 
 
@@ -1169,6 +1240,8 @@ def build_tanks(state: gpd.GeoDataFrame, districts: gpd.GeoDataFrame) -> tuple[d
 
 
 RESERVOIR_SEARCH_M = 3000.0                       # a dam's reservoir touches this buffer of its point or crest line
+RESERVOIR_NAMED_SEARCH_M = 50_000.0               # a polygon named after the dam may sit well upstream: OSM's Srisailam reservoir
+                                                  # begins 44 km above the dam, the gorge below it is tagged water=river
 RESERVOIR_MIN_HA = 50.0
 RESERVOIR_SIMPLIFY_M = 30.0
 RESERVOIR_LEVEL_MIN_SAMPLES = 16                  # outline points sampled for the water level (interpolated when the ring has fewer)
@@ -1179,11 +1252,18 @@ def build_reservoirs(dams: list[dict], sampler: DemSampler) -> dict:
     """One OSM water polygon per dam for the 3D reservoir surfaces (three3d.js).
 
     Works on the raw OSM elements (through osm_polygon and tank_kind), not build_tanks' state-clipped output, which drops the
-    border reservoirs (Srisailam, Nagarjuna Sagar). The largest polygon part >= RESERVOIR_MIN_HA touching a 3 km buffer of the
-    dam's crest line (dam_lines.geojson, written just before) or its point wins; level_m is the median Copernicus DEM height
-    along the outline, ignoring nodata, or null when fewer than half the samples are valid (the web map then samples Terrain-DEM).
+    border reservoirs (Srisailam, Nagarjuna Sagar). osm_water.json's relations have no member geometry (fetch_data.py says why);
+    osm_water_relations.json carries it for the large ones. The polygon named after the dam (dam_key, DAM_LINE_ALIASES) within
+    RESERVOIR_NAMED_SEARCH_M of the dam's crest line (dam_lines.geojson, written just before) or its point wins, else the largest
+    polygon part >= RESERVOIR_MIN_HA touching a 3 km buffer; level_m is the median Copernicus DEM height along the outline,
+    ignoring nodata, or null when fewer than half the samples are valid (the web map then samples Terrain-DEM).
     """
     elements = json.loads((RAW / "osm_water.json").read_text(encoding="utf-8"))["elements"]
+    relations_file = RAW / "osm_water_relations.json"
+    if relations_file.exists():
+        elements += json.loads(relations_file.read_text(encoding="utf-8"))["elements"]
+    else:
+        print("  warning: data/raw/osm_water_relations.json missing (fetch_data.py); multipolygon reservoirs get no surface")
     rows = []
     for element in elements:
         tags = element.get("tags", {})
@@ -1201,6 +1281,7 @@ def build_reservoirs(dams: list[dict], sampler: DemSampler) -> dict:
     projected = water.to_crs(TARGET_CRS)
     projected["area_ha"] = projected.area / 10_000
     projected = projected[projected["area_ha"] >= RESERVOIR_MIN_HA]
+    projected["key"] = [DAM_LINE_ALIASES.get(k, k) for k in projected["osm_name"].fillna("").map(dam_key)]
     lines_file = WEB_DATA / "dam_lines.geojson"
     crest = {}
     if lines_file.exists():
@@ -1212,8 +1293,10 @@ def build_reservoirs(dams: list[dict], sampler: DemSampler) -> dict:
     for i, dam in enumerate(dams):
         anchor = unary_union([LineString([to_m.transform(x, y) for x, y in line.coords]) for line in crest[i]]) if i in crest \
             else Point(to_m.transform(dam["lon"], dam["lat"]))
-        search = anchor.buffer(RESERVOIR_SEARCH_M)
-        hits = projected.iloc[list(projected.sindex.query(search, predicate="intersects"))]
+        named = projected.iloc[list(projected.sindex.query(anchor.buffer(RESERVOIR_NAMED_SEARCH_M), predicate="intersects"))]
+        hits = named[named["key"] == dam_key(dam["name"])]
+        if hits.empty:
+            hits = projected.iloc[list(projected.sindex.query(anchor.buffer(RESERVOIR_SEARCH_M), predicate="intersects"))]
         if hits.empty:
             unmatched.append(dam["name"])
             continue

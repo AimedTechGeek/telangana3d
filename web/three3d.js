@@ -25,7 +25,7 @@ const GROUPS = ['dams', 'reservoirs', 'pumps', 'conduits', 'proposal'];
 // Spec 8.7.6.
 const COLOURS = {
   light: { dam: '#b8805a', damUnknown: '#dfb39d', barragePier: '#8a8f94', barrageDeck: '#5f6b73', gate: '#0f7f78', pumpWall: '#e7e1d6',
-           pumpRoof: '#c2410c', pipe: '#9a3412', tunnel: '#c2410c', lining: '#cfc8bb', water: '#5aa6e0', proposal: '#14b8a6', proposalWater: '#5eead4' },
+           pumpRoof: '#c2410c', pipe: '#d4895a', tunnel: '#c2410c', lining: '#cfc8bb', water: '#5aa6e0', proposal: '#14b8a6', proposalWater: '#5eead4' },
   dark: { dam: '#c9946e', damUnknown: '#9c6650', barragePier: '#9aa3aa', barrageDeck: '#7b8790', gate: '#4fd1c5', pumpWall: '#b8b2a7',
           pumpRoof: '#fb923c', pipe: '#fdba74', tunnel: '#fb923c', lining: '#8f8a82', water: '#3f8fd0', proposal: '#2dd4bf', proposalWater: '#5eead4' },
 };
@@ -671,11 +671,17 @@ function themeFromDocument() {
   return stamped || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
 }
 
+/** options.theme is the map's theme (app.js mapTheme: dark in the Night scene whatever the UI theme) when it is a function. */
+function currentTheme() {
+  const t = options && options.theme;
+  return typeof t === 'function' ? t() : t || themeFromDocument();
+}
+
 // ---------- public API (spec 8.7.2) ----------
 
 const api = {
   async init(m, opts) {
-    map = m; options = opts; theme = opts.theme === 'dark' ? 'dark' : 'light';
+    map = m; options = opts; theme = currentTheme() === 'dark' ? 'dark' : 'light';
     const [dams, pumps, links, damLines, reservoirs, conduits] = await Promise.all(Object.values(FILES).map(optionalJson));
     buildDams(dams, damLines);
     buildReservoirs(dams, reservoirs);
@@ -690,8 +696,8 @@ const api = {
     map.on('idle', scheduleResample);
     map.on('moveend', scheduleResample);
     map.on('sourcedata', (event) => { if (event.sourceId === 'mapbox-dem' && event.tile) scheduleResample(); });
-    new MutationObserver(() => api.setTheme(themeFromDocument())).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
-    matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => api.setTheme(themeFromDocument()));
+    new MutationObserver(() => api.setTheme(currentTheme())).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+    matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => api.setTheme(currentTheme()));
     revision++;
     map.triggerRepaint();
   },
@@ -722,7 +728,7 @@ const api = {
   },
   stats() {
     const styleLayer = map && map.getLayer(LAYER_ID);
-    return { layer: Boolean(styleLayer), slot: styleLayer ? (styleLayer.slot ?? null) : null, slotAccepted, revision,
+    return { layer: Boolean(styleLayer), slot: styleLayer ? (styleLayer.slot ?? null) : null, slotAccepted, revision, theme,
              groups: Object.fromEntries(GROUPS.map((g) => [g, { objects: groups[g].objects, visible: groups[g].visible, batches: groups[g].batches || 0 }])),
              calls: lastCalls };
   },

@@ -21,6 +21,7 @@ from __future__ import annotations
 import csv
 import gzip
 import json
+import math
 import re
 import time
 from pathlib import Path
@@ -187,6 +188,45 @@ def fetch_osm_water() -> None:
         print(f"  tile {tile}: {len(elements)} water bodies so far")
     target.write_text(json.dumps({"version": 0.6, "generator": "Overpass API, four bbox tiles", "elements": elements}), encoding="utf-8")
     print(f"fetched {target.name} ({target.stat().st_size / 1e6:.1f} MB)")
+
+
+# osm_water.json was fetched with `out tags geom`, whose `tags` modifier drops relation members, so its multipolygon relations
+# (Nagarjuna Sagar, Srisailam and Sriram Sagar among them) carry bounds but no geometry. The relations large enough to be a
+# reservoir surface (build_web_data.build_reservoirs) are fetched again by id with their member geometry; rivers and canals
+# are not surfaces. A bbox query for the same relations is refused by the public servers at busy times (502), ids in chunks pass.
+WATER_RELATION_MIN_HA = 50.0
+WATER_RELATION_CHUNK = 100
+
+
+def bounds_ha(bounds: dict) -> float:
+    lat = math.radians((bounds["minlat"] + bounds["maxlat"]) / 2)
+    width = (bounds["maxlon"] - bounds["minlon"]) * 111_000 * math.cos(lat)
+    return width * (bounds["maxlat"] - bounds["minlat"]) * 111_000 / 10_000
+
+
+def fetch_osm_water_relations() -> None:
+    target = RAW / "osm_water_relations.json"
+    if target.exists():
+        print(f"cached  {target.name}")
+        return
+    elements = json.loads((RAW / "osm_water.json").read_text(encoding="utf-8"))["elements"]
+    ids = sorted(e["id"] for e in elements if e["type"] == "relation" and bounds_ha(e["bounds"]) >= WATER_RELATION_MIN_HA
+                 and (e.get("tags", {}).get("water") or "") not in ("river", "stream", "canal"))
+    fetched = []
+    for start in range(0, len(ids), WATER_RELATION_CHUNK):
+        chunk = ids[start:start + WATER_RELATION_CHUNK]
+        query = f'[out:json][timeout:180];relation(id:{",".join(str(i) for i in chunk)});out geom;'
+        for attempt in range(5):
+            response = requests.post(OVERPASS_URL, data={"data": query}, headers=OVERPASS_HEADERS, timeout=300)
+            if response.ok:
+                break
+            print(f"  overpass {response.status_code} for relations {start}-{start + len(chunk)}, retrying")
+            time.sleep(30 * (attempt + 1))
+        response.raise_for_status()
+        fetched += response.json()["elements"]
+        print(f"  relations {start + len(chunk)} of {len(ids)}")
+    target.write_text(json.dumps({"version": 0.6, "generator": "Overpass API, water relations by id", "elements": fetched}), encoding="utf-8")
+    print(f"fetched {target.name} ({len(fetched)} relations, {target.stat().st_size / 1e6:.1f} MB)")
 
 
 # India-WRIS groundwater levels (metres below ground level) of the manual monitoring network. The WRIS
@@ -356,6 +396,7 @@ if __name__ == "__main__":
     fetch_wikidata_dams()
     fetch_osm_reservoirs()
     fetch_osm_water()
+    fetch_osm_water_relations()
     fetch_groundwater_levels()
     fetch_worldcover()
     fetch_proposal_places()
