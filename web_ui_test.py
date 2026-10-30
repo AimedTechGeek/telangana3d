@@ -163,7 +163,7 @@ def phone(browser, problems: list[str], errors: list[str]) -> None:
     page = open_page(browser, {"width": 390, "height": 844}, errors, is_mobile=True, has_touch=True, device_scale_factor=2)
     check(page.evaluate("document.documentElement.scrollWidth") <= 390, "Phone: no horizontal page scroll", problems)
     height = page.locator("#lens-panel").bounding_box()["height"]
-    check(abs(height - 132) <= 8, f"Phone: sheet peeks at 132 px ({height})", problems)
+    check(abs(height - 196) <= 8, f"Phone: sheet peeks at 196 px (two headline rows) ({height})", problems)
     page.screenshot(path=str(OUT / "ui_phone_peek.png"))
     page.click("#sheet-handle")
     page.wait_for_timeout(500)
