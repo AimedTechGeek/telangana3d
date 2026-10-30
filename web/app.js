@@ -458,13 +458,38 @@ function setProposalMode(mode) {
   proposalMode = mode;
   for (const button of document.querySelectorAll('[data-proposal]')) button.setAttribute('aria-pressed', String(button.dataset.proposal === mode));
   document.body.classList.toggle('proposal-off', mode === 'off');
+  if (mode === 'on') ensureProposal().catch((error) => { debug.errors.push(String(error)); $('toast').textContent = `Proposal failed to load: ${error.message}`; });
   if (proposalLoaded) {
     const ids = [...proposalLayers(MAP_THEMES[currentTheme()]).map((layer) => layer.id), 'prop-labels-far', 'prop-labels-near'];
     for (const id of ids) if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', propVisibility());
   }
+  window.Atlas3D && Atlas3D.setVisible('proposal', mode === 'on');
   if (mode === 'off') proposalPopup.remove();
 }
 for (const button of document.querySelectorAll('[data-proposal]')) button.addEventListener('click', () => setProposalMode(button.dataset.proposal));
+// proposal.geojson is 4.2 MB, so it loads the first time the proposal is shown (proposal.json is small and loads at boot).
+let proposalPromise = null;
+function ensureProposal() {
+  if (!proposalData) return Promise.resolve(null);       // no proposal.json: nothing to show
+  if (!proposalPromise) {
+    proposalPromise = (async () => {
+      proposalGeo = await loadJson('data/proposal.geojson');
+      map.addSource('proposal', { type: 'geojson', data: proposalGeo, lineMetrics: true });
+      proposalLoaded = true;                              // from here the style builder and the layer lists include the proposal
+      addLayers(proposalLayers(MAP_THEMES[currentTheme()]), 'districts');
+      addProposalMarkers(proposalData, proposalGeo);
+      map.addSource('prop-labels', { type: 'geojson', data: labelData['prop-labels'], generateId: true });
+      await ensureIcons(currentTheme());
+      addLayers(labelLayers(currentTheme()).filter((l) => l.source === 'prop-labels'));
+      for (const id of ['prop-labels-far', 'prop-labels-near']) interactive(id, (p) => labelActions['prop-labels'][p.i]());
+      const ids = [...proposalLayers(MAP_THEMES[currentTheme()]).map((layer) => layer.id), 'prop-labels-far', 'prop-labels-near'];
+      for (const id of ids) if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', propVisibility());
+      window.Atlas3D && Atlas3D.setData('proposal', { data: proposalData, geo: proposalGeo });
+      return { data: proposalData, geo: proposalGeo };
+    })().catch((error) => { proposalPromise = null; throw error; });
+  }
+  return proposalPromise;
+}
 document.body.classList.add('proposal-off');
 
 function chipOn(name) {
@@ -933,7 +958,7 @@ function animateFlow(now) {
 
 // ---------- bubbles: particles riding the bigger rivers ----------
 // [min m³/s, spacing km, radius px, speed px/s]: more water = denser, bigger, faster.
-const BUBBLE_CLASSES = [[2000, 1.5, 3.2, 60], [1000, 2.2, 2.7, 48], [300, 3.2, 2.2, 38], [100, 5.0, 1.7, 30]];
+const BUBBLE_CLASSES = [[2000, 1.5, 3.2, 60], [1000, 2.2, 2.7, 48], [300, 3.2, 2.2, 38]];
 const BUBBLE_FADE_M = 1000;                          // fade in/out over the ends of each reach
 const EARTH_M_PER_DEG = 111320;
 const bubbleCanvas = document.createElement('canvas');
@@ -1099,6 +1124,26 @@ function renderFlowLegend() {
 }
 function textEl(tag, className, text) { const node = document.createElement(tag); node.className = className; node.textContent = text; return node; }
 function flyToPoint(lon, lat, zoom) { stopStructureOrbit(); map.flyTo({ center: [lon, lat], zoom, pitch: 60, bearing: -20, duration: 2200, essential: true }); }
+// Close to a work the camera needs more room than MAX_ZOOM gives; the limit is raised for the flight and restored once the view moves away.
+const WORK_MAX_ZOOM = 16, WORK_KEEP_KM = 3, WORK_KEEP_ZOOM = 12;
+let workTarget = null;                      // [lon, lat] while the raised zoom limit is in force
+function flyToWork(lon, lat) {
+  stopStructureOrbit();
+  workTarget = null;                        // the stop below fires a moveend that must not restore the limit
+  map.stop();
+  map.setMaxZoom(WORK_MAX_ZOOM);
+  map.flyTo({ center: [lon, lat], zoom: 15, pitch: 65, bearing: map.getBearing(), duration: 2600, essential: true });
+  workTarget = [lon, lat];
+}
+map.on('moveend', () => {
+  if (!workTarget) return;
+  const near = map.getCenter().distanceTo(new mapboxgl.LngLat(workTarget[0], workTarget[1])) <= WORK_KEEP_KM * 1000;
+  if (near && map.getZoom() >= WORK_KEEP_ZOOM) return;
+  workTarget = null;
+  if (map.getZoom() <= MAX_ZOOM) { map.setMaxZoom(MAX_ZOOM); return; }
+  map.easeTo({ zoom: MAX_ZOOM, duration: 600, essential: true });   // under the old limit first, as stopStructureOrbit does
+  map.once('moveend', () => { if (!workTarget && !structureOrbit) map.setMaxZoom(MAX_ZOOM); });
+});
 function renderPeaks(summary) {
   const box = $('peaks');
   box.textContent = '';
@@ -1319,13 +1364,12 @@ async function addLabelSources() {
   addLayers(labelLayers(currentTheme()));
   interactive('city-labels', (p) => flyToCity(citiesData[p.i]));
   interactive('town-labels', (p) => flyToCity(citiesData[p.i]));
-  interactive('dam-labels', (p) => { const dam = damsData[p.i]; openDamPopup(dam); flyToPoint(dam.lon, dam.lat, 11.5); });
-  interactive('pump-labels', (p, lngLat) => notePopup.setLngLat(lngLat).setText(p.title).addTo(map));
+  interactive('dam-labels', (p) => { const dam = damsData[p.i]; openDamPopup(dam); flyToWork(dam.lon, dam.lat); });
+  interactive('pump-labels', (p, lngLat) => { notePopup.setLngLat(lngLat).setText(p.title).addTo(map); flyToWork(lngLat.lng, lngLat.lat); });
   interactive('wip-labels', (p, lngLat) => notePopup.setLngLat(lngLat).setText(p.title).addTo(map));
   interactive('peak-labels', (p) => flyToPoint(p.lon, p.lat, 10));
-  for (const id of ['prop-labels-far', 'prop-labels-near']) interactive(id, (p) => labelActions['prop-labels'][p.i]());
 }
-let citiesData = [], damsData = [];
+let citiesData = [], damsData = [], pumphousesData = [];
 const notePopup = new mapboxgl.Popup({ closeButton: true, closeOnClick: true, offset: 12, className: 'flow-popup', maxWidth: '280px' });
 // ---------- dams: markers and the year filter (Telangana was formed in 2014) ----------
 const ERA_YEAR = 2014;
@@ -1980,6 +2024,11 @@ function renderProposal(data) {
   const t = data.totals;
   const n = data.norms;
   $('prop-count').textContent = `${t.reservoirs + t.deliveries} works · ${indian(t.annual_tmc)} TMC`;
+  // Headline numbers of the proposal lens (ids exist once the new shell is merged).
+  const headline = (id, text) => { const el = document.getElementById(id); if (el) el.textContent = text; };
+  headline('hl-proposal-1', `₹${(t.capex_cr / 1e5).toFixed(2)} lakh crore`);
+  headline('hl-proposal-2', `+ ₹${(t.systems_capex_new_cr / 1e5).toFixed(2)} lakh crore`);
+  headline('hl-proposal-3', `${Math.round(t.annual_tmc)} TMC`);
   const summary = $('prop-summary');
   summary.textContent = '';
   summary.append(`Land cover says ${s.cultivable_pct} % of Telangana is cultivable (the rest is forest, towns, water and steep ground) and `, bold(`${s.cropland_pct} %`),
@@ -2203,7 +2252,7 @@ function renderPendingList(dams, links, notes) {
     add(dam.scheme || 'Other projects', {
       kind: damKindLabel(dam).toLowerCase(), label: dam.name, status: dam.status, years: pendingYears(dam),
       extra: [dam.capacity_tmcft ? formatTmcft(dam.capacity_tmcft) : null, dam.approx ? 'position approximate' : null].filter(Boolean).join(' · '),
-      onClick: (button) => { for (const other of document.querySelectorAll('.link-list .row')) other.classList.toggle('active', other === button); openDamPopup(dam); flyToPoint(dam.lon, dam.lat, 11); },
+      onClick: (button) => { for (const other of document.querySelectorAll('.link-list .row')) other.classList.toggle('active', other === button); openDamPopup(dam); flyToWork(dam.lon, dam.lat); },
     });
   }
   for (const group of groupLinks(links).values()) {
@@ -2958,6 +3007,8 @@ map.on('load', () => whenAtlas3D((atlas) => atlas.init(map, { exaggeration: exag
 
 async function loadJson(url) { const response = await fetch(url); if (!response.ok) throw new Error(`${url}: ${response.status}`); return response.json(); }
 
+// The bubbles need only the big reaches (flow_bubbles.geojson); the full flow.geojson is the fallback for data built before that file existed.
+const loadBubbleReaches = () => loadJson('data/flow_bubbles.geojson').catch(() => loadJson('data/flow.geojson'));
 map.on('load', async () => {
   debug.phase = 'style-loaded'; writeDebug();
   const fonts = await fontsInfo;           // before any label layer is added (addLabelSources runs after the data)
@@ -2969,7 +3020,7 @@ map.on('load', async () => {
   try {
     const [cities, profiles, districtPoints, flowSummary, flowReaches, dams, links, pumphouses, cropland, pendingNotes] = await Promise.all([
       loadJson('data/cities.json'), loadJson('data/rivers.json'), loadJson('data/district_points.geojson'),
-      loadJson('data/flow_summary.json'), loadJson('data/flow.geojson'), loadJson('data/dams.json'),
+      loadJson('data/flow_summary.json'), loadBubbleReaches(), loadJson('data/dams.json'),
       loadJson('data/links.geojson'), loadJson('data/pumphouses.json'), loadJson('data/cropland.json'),
       loadJson('data/pending.json').catch(() => [])]);
     for (const feature of links.features) setYearProperty(feature.properties, linkYear(feature.properties));
@@ -2990,17 +3041,16 @@ map.on('load', async () => {
       debug.notes.canals = canals ? canals.features.length : canalSummary.osm_ways;
       if (canalSummary) renderCanalNetwork(canalSummary);
     } else {
-      document.querySelector('[data-canal]').closest('.fgroup').hidden = true;
+      document.querySelectorAll('[data-group="canal"]').forEach((el) => { el.hidden = true; });
     }
     debug.notes.cropDistricts = cropland.districts.length;
     prepareBubbles(flowReaches);
     buildDamLabels(dams);
-    renderEraCounts(dams);
     setupYears(dams, links, canals);
+    pumphousesData = pumphouses;
     buildPumpLabels(pumphouses);
     renderLinkList(links);
     buildWorkInProgressLabels(links);
-    renderStatusCounts(dams, links);
     debug.notes.pending = renderPendingList(dams, links, pendingNotes);
     debug.notes.dams = dams.length;
     debug.notes.links = links.features.length;
@@ -3019,7 +3069,7 @@ map.on('load', async () => {
       renderTanks(tanks);
       debug.notes.tanks = tanks.osm_tanks;
     } else {
-      document.querySelector('[data-tank]').closest('.fgroup').hidden = true;
+      document.querySelectorAll('[data-group="tank"]').forEach((el) => { el.hidden = true; });
       $('tank-card').hidden = true;
     }
     const groundwater = await loadJson('data/groundwater_summary.json').catch(() => null);   // absent until fetch_data.py gets the WRIS export
@@ -3031,7 +3081,7 @@ map.on('load', async () => {
       renderGroundwater(groundwater);
       debug.notes.groundwater = groundwater.state.wells;
     } else {
-      document.querySelector('[data-gw]').closest('.fgroup').hidden = true;
+      document.querySelectorAll('[data-group="gw"]').forEach((el) => { el.hidden = true; });
       $('gw-card').hidden = true;
     }
     const damLines = await loadJson('data/dam_lines.geojson').catch(() => null);   // absent until build_web_data.py has written it
@@ -3040,15 +3090,10 @@ map.on('load', async () => {
     }
     const proposal = await loadJson('data/proposal.json').catch(() => null);   // absent until propose_water.py has run
     if (proposal) {
-      proposalLoaded = true;
-      proposalGeo = await loadJson('data/proposal.geojson');
-      map.addSource('proposal', { type: 'geojson', data: proposalGeo, lineMetrics: true });
-      addLayers(proposalLayers(MAP_THEMES[currentTheme()]), 'districts');
-      renderProposal(proposal);
-      addProposalMarkers(proposal, proposalGeo);
+      renderProposal(proposal);                       // proposal.geojson waits for ensureProposal()
       debug.notes.proposal = proposal.works.length;
     } else {
-      document.querySelector('[data-proposal]').closest('.fgroup').hidden = true;
+      document.querySelectorAll('[data-group="proposal"]').forEach((el) => { el.hidden = true; });
       $('proposal-card').hidden = true;
     }
     renderCities(cities, profiles);

@@ -329,6 +329,9 @@ def flow_class(discharge: float) -> int:
     return 1 if discharge < FLOW_CLASS_CMS[0] else 2 if discharge < FLOW_CLASS_CMS[1] else 3
 
 
+BUBBLE_MIN_Q = 300   # m3/s; keep in step with the smallest BUBBLE_CLASSES entry in web/app.js
+
+
 def write_flow(reaches: gpd.GeoDataFrame) -> None:
     out = gpd.GeoDataFrame({
         "q": reaches["DIS_AV_CMS"].round(1), "up": reaches["UPLAND_SKM"].round().astype(int),
@@ -336,6 +339,8 @@ def write_flow(reaches: gpd.GeoDataFrame) -> None:
         "geometry": reaches.geometry.simplify(0.0004),
     }, crs=reaches.crs)
     out.to_file(WEB_DATA / "flow.geojson", driver="GeoJSON")
+    # The bubbles ride only the big rivers (q >= 300 m3/s), so they load this small file instead of flow.geojson.
+    out[out["q"] >= BUBBLE_MIN_Q].to_file(WEB_DATA / "flow_bubbles.geojson", driver="GeoJSON")
 
 
 def attach_flow_to_profiles(profiles: dict, reaches: gpd.GeoDataFrame) -> None:
