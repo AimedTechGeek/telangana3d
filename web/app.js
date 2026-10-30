@@ -647,7 +647,7 @@ const playIntro = !location.hash && !reducedMotion && !DEBUG;
 if (playIntro) terrainRise = 0.05;
 const map = new mapboxgl.Map({
   container: 'map', accessToken: window.MAPBOX_TOKEN,
-  style: buildStyle(mapTheme()),
+  style: buildStyle(currentTheme()),
   center: HOME.center, ...(playIntro ? INTRO : { zoom: HOME.zoom, pitch: HOME.pitch, bearing: HOME.bearing }),
   minZoom: playIntro ? 4 : MIN_ZOOM, maxZoom: MAX_ZOOM, maxPitch: 80,
   maxBounds: [[72.5, 11.5], [86.5, 23.5]],   // generous: Mapbox keeps the whole tilted view inside the bounds by zooming in, so a tight box would push the state view past zoom 7
@@ -761,7 +761,7 @@ function setScene(id) {
   if (!['map', 'satellite', 'night'].includes(id)) return;
   scene = id;
   syncSceneButtons();
-  if (!map.getLayer('relief')) { map.once('load', () => setScene(id)); return; }   // the style is not built yet: the state is kept and applied at load
+  if (!map.getLayer('relief') || !styleReady) { map.once('style.load', () => setScene(id)); return; }   // no style yet, or one is reloading: the state is kept and applied when it has loaded
   const reload = builtBasemap !== basemapKind();
   if (!reload) {                                                    // Standard to Standard: the same style, new tokens and light preset
     map.setConfigProperty('basemap', 'lightPreset', scenePreset(mapTheme()));
@@ -786,7 +786,7 @@ function applyThematic() {
 }
 function setThematic(on) {
   thematic = Boolean(on);
-  if (map.getLayer('relief')) applyThematic(); else map.once('load', applyThematic);
+  if (map.getLayer('relief') && styleReady) applyThematic(); else map.once('style.load', applyThematic);   // a style still loading is built from the old state
 }
 
 // ---------- elevation under the cursor (the terrain the map is drawing, so the number always matches the surface) ----------
