@@ -13,7 +13,8 @@ const BOUNDS_PAD = 0.2;
 const BANDS = { reservoirs: 8, dams: 9, pumps: 10, conduits: 10.5, pool: 8, proposal: 9 };
 const DAM_UNKNOWN_M = 15, DAM_CREST_W = 8, DAM_BELOW_M = 5;
 const BARRAGE_MIN_M = 12, DECK_W = 10, DECK_T = 2, PIER_ALONG = 3, PIER_ACROSS = 12, PIER_STEP = 20, GATE_FRACTION = 0.7;
-const PIPE_R = 1.6, PIPE_PX = 1.5, PIPE_GAP = 2.4, TUNNEL_R = 5, WIDTH_CAP = 8;
+const PIPE_R = 1.6, PIPE_PX = 1.5, PIPE_GAP = 2.4, TUNNEL_R = 5, CANAL_W = 12, WIDTH_CAP = 8;
+const MIN_PX = 20, BOOST_CAP = 4;         // close up, a work is drawn at least MIN_PX tall (footprint scaled with it), at most BOOST_CAP× its size
 const PORTAL_W = 12, PORTAL_H = 10, PORTAL_D = 4;
 const PUMP_WALL_M = 18, PUMP_ROOF_M = 4;
 const WATER_LIFT = 0.3;
@@ -48,20 +49,24 @@ const lights = { ambient: new THREE.AmbientLight(0xffffff, 0.6), sun: new THREE.
 // Azimuth 315°, altitude 45° (the hillshade's light): x east, y north, z up in the local frame.
 lights.sun.position.set(-0.5, 0.5, Math.SQRT1_2);
 scene.add(lights.ambient, lights.sun, lights.sun.target);
-const uniforms = { uExag: { value: 1 }, uWidthScale: { value: 1 }, uPipeScale: { value: 1 }, uYear: { value: 0 }, uFade: { value: 1 } };
+const uniforms = { uExag: { value: 1 }, uWidthScale: { value: 1 }, uPipeScale: { value: 1 }, uMinSize: { value: 0 }, uYear: { value: 0 }, uFade: { value: 1 } };
 
 // ---------- materials and the shared terrain-placement shader ----------
 
-/** Vertex placement shared by every material: z_world = (ground + height) × exaggeration, cross-sections widened when zoomed out.
- *  aGround is the unexaggerated ground (or water level) per vertex or instance; aAcross the vertex's offset from its centre line
- *  so the body can be widened without moving it; aYear -1 = never filtered, 0 = undated, else the year. */
+/** Vertex placement shared by every material: z_world = (ground + height × boost) × exaggeration, cross-sections widened when zoomed
+ *  out and the whole work enlarged close up when it would be smaller than MIN_PX on screen.
+ *  aGround is the unexaggerated ground (or water level) per vertex or instance; aLevel = (base − ground, H) for a vertex at a crest
+ *  level, the level being H above the work's lowest ground and never below the vertex's own ground, (0, 0) otherwise; aAcross the
+ *  vertex's offset from its centre line so the body can be widened without moving it; aSize the work's nominal height the minimum
+ *  applies to (0 = never enlarged); aYear -1 = never filtered, 0 = undated, else the year. */
 function placeOnTerrain(material, pipe) {
   material.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, uniforms, { uWidthScale: pipe ? uniforms.uPipeScale : uniforms.uWidthScale });
     shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', '#include <common>\nattribute float aGround;\nattribute vec2 aAcross;\nattribute float aYear;\n'
-        + 'uniform float uExag;\nuniform float uWidthScale;\nuniform float uYear;')
-      .replace('#include <begin_vertex>', 'vec3 transformed = vec3(position.xy + aAcross * (uWidthScale - 1.0), (aGround + position.z) * uExag);\n'
+      .replace('#include <common>', '#include <common>\nattribute float aGround;\nattribute vec2 aLevel;\nattribute vec2 aAcross;\nattribute float aSize;\n'
+        + 'attribute float aYear;\nuniform float uExag;\nuniform float uWidthScale;\nuniform float uMinSize;\nuniform float uYear;')
+      .replace('#include <begin_vertex>', `float boost = aSize > 0.0 ? clamp(uMinSize / (aSize * uExag), 1.0, ${BOOST_CAP.toFixed(1)}) : 1.0;\n`
+        + 'vec3 transformed = vec3(position.xy + aAcross * (max(uWidthScale, boost) - 1.0), (aGround + max(aLevel.x + aLevel.y * boost, 0.0) + position.z * boost) * uExag);\n'
         + '#ifdef USE_INSTANCING\ntransformed = vec3((instanceMatrix * vec4(transformed.xy, 0.0, 1.0)).xy, transformed.z);\n#endif\n'
         + 'if (uYear > 0.5 && aYear > -0.5 && (aYear < 0.5 || aYear > uYear + 0.5)) transformed = vec3(0.0);')
       // The instance matrix only rotates and scales the footprint (applied above); the default chunk would also scale the height.
@@ -175,11 +180,13 @@ const median = (values) => { const s = [...values].sort((a, b) => a - b); return
 const minGround = (pts, g) => Math.min(...pts.map((p) => g[p.sample]));
 
 // ---------- geometry parts ----------
-// A part is one token's share of an object: vertices in local metres with the mode that sets their aGround on every (re)sample:
-// 0 = the ground at the vertex's sample point, 1 = the part's level clamped to that ground, 2 = the part's level.
+// A part is one token's share of an object: vertices in local metres with the mode that sets their aGround and aLevel on every (re)sample:
+// 0 = the ground at the vertex's sample point, 1 = that ground plus the part's level (clamped to it), 2 = the part's level.
+// `size` is the object's nominal height for the minimum on-screen size (0 = drawn true size, as pipes and surfaces are); a mode-1
+// level is `size` above the part's base, so enlarging keeps a crest flat.
 
-function newPart(batch, token, year, levelOf = null, pipe = false) {
-  const part = { token, pipe, year, levelOf, positions: [], across: [], samples: [], modes: [], indices: [], start: 0, geometry: null };
+function newPart(batch, token, year, levelOf = null, pipe = false, size = 0) {
+  const part = { token, pipe, year, levelOf, size, positions: [], across: [], samples: [], modes: [], indices: [], start: 0, geometry: null };
   batch.parts.push(part);
   return part;
 }
@@ -291,15 +298,15 @@ const PROTOTYPES = {
   portal: prototype(archPortal()),
 };
 
-function instance(batch, proto, token, x, y, rotation, sx, sy, sample, year) {
-  batch.instances.push({ proto, token, x, y, rotation, sx, sy, sample, year });
+function instance(batch, proto, token, x, y, rotation, sx, sy, sample, year, size) {
+  batch.instances.push({ proto, token, x, y, rotation, sx, sy, sample, year, size });
 }
 
 // ---------- object builders (shared by the data files and the proposal) ----------
 
 function addDam(batch, pts, height, tokens, token, year) {
   const base = Math.max(12, 0.7 * height);
-  const part = newPart(batch, tokens[token], year, (g) => minGround(pts, g) + height);
+  const part = newPart(batch, tokens[token], year, (g) => minGround(pts, g) + height, false, height);
   sweep(part, pts, [{ a: -base / 2, z: -DAM_BELOW_M, mode: 0 }, { a: -DAM_CREST_W / 2, z: 0, mode: 1 }, { a: DAM_CREST_W / 2, z: 0, mode: 1 },
                     { a: base / 2, z: -DAM_BELOW_M, mode: 0 }], false, true);
 }
@@ -320,9 +327,9 @@ function along(pts, s) {
 
 function addBarrage(batch, pts, height, tokens, year) {
   const crest = (g) => minGround(pts, g) + height;
-  const deck = newPart(batch, tokens.deck, year, crest);
+  const deck = newPart(batch, tokens.deck, year, crest, false, height);
   sweep(deck, pts, [{ a: -DECK_W / 2, z: -DECK_T, mode: 1 }, { a: DECK_W / 2, z: -DECK_T, mode: 1 }, { a: DECK_W / 2, z: 0, mode: 1 }, { a: -DECK_W / 2, z: 0, mode: 1 }], true, true);
-  const piers = newPart(batch, tokens.pier, year, crest), gates = newPart(batch, tokens.gate, year, crest);
+  const piers = newPart(batch, tokens.pier, year, crest, false, height), gates = newPart(batch, tokens.gate, year, crest, false, height);
   let length = 0;
   for (let j = 0; j < pts.length - 1; j++) length += Math.hypot(pts[j + 1].x - pts[j].x, pts[j + 1].y - pts[j].y);
   for (let s = PIER_STEP / 2; s < length; s += PIER_STEP) {
@@ -340,24 +347,25 @@ function addPipes(batch, pts, tokens, year, pipe) {
 }
 
 function addTunnel(batch, pts, tokens, year) {
-  sweep(newPart(batch, tokens.tunnel, year), pts, circleProfile(TUNNEL_R, 0, 8, 0), true, true);
+  sweep(newPart(batch, tokens.tunnel, year, null, false, 2 * TUNNEL_R), pts, circleProfile(TUNNEL_R, 0, 8, 0), true, true);
   for (const [a, b] of [[pts[0], pts[1]], [pts[pts.length - 1], pts[pts.length - 2]]]) {
     if (!b) continue;
-    instance(batch, 'portal', tokens.portal, a.x, a.y, Math.atan2(b.y - a.y, b.x - a.x) - Math.PI / 2, 1, 1, a.sample, year);
+    instance(batch, 'portal', tokens.portal, a.x, a.y, Math.atan2(b.y - a.y, b.x - a.x) - Math.PI / 2, 1, 1, a.sample, year, PORTAL_H);
   }
 }
 
+/** A canal is flat, so its width stands in for the height the minimum on-screen size is measured against. */
 function addCanal(batch, pts, tokens, year) {
-  sweep(newPart(batch, tokens.lining, year), pts, [{ a: -6, z: 0, mode: 0 }, { a: -5, z: 3, mode: 0 }, { a: -4, z: 0.5, mode: 0 }, { a: 4, z: 0.5, mode: 0 },
-                                                   { a: 5, z: 3, mode: 0 }, { a: 6, z: 0, mode: 0 }], false, false);
-  sweep(newPart(batch, tokens.water, year), pts, [{ a: -4.5, z: 2, mode: 0 }, { a: 4.5, z: 2, mode: 0 }], false, false);
+  sweep(newPart(batch, tokens.lining, year, null, false, CANAL_W), pts, [{ a: -6, z: 0, mode: 0 }, { a: -5, z: 3, mode: 0 }, { a: -4, z: 0.5, mode: 0 }, { a: 4, z: 0.5, mode: 0 },
+                                                                        { a: 5, z: 3, mode: 0 }, { a: 6, z: 0, mode: 0 }], false, false);
+  sweep(newPart(batch, tokens.water, year, null, false, CANAL_W), pts, [{ a: -4.5, z: 2, mode: 0 }, { a: 4.5, z: 2, mode: 0 }], false, false);
 }
 
 function addPumpHouse(batch, lon, lat, mw, rotation, tokens, fallback, year) {
   const p = sampleAt(batch, lon, lat, fallback);
-  const length = Math.min(140, Math.max(30, 30 + 0.12 * mw)), width = 0.45 * length;
-  instance(batch, 'wall', tokens.wall, p.x, p.y, rotation, length, width, p.sample, year);
-  instance(batch, 'roof', tokens.roof, p.x, p.y, rotation, length * 1.06, width * 1.08, p.sample, year);
+  const length = Math.min(140, Math.max(30, 30 + 0.12 * mw)), width = 0.45 * length, height = PUMP_WALL_M + PUMP_ROOF_M;
+  instance(batch, 'wall', tokens.wall, p.x, p.y, rotation, length, width, p.sample, year, height);
+  instance(batch, 'roof', tokens.roof, p.x, p.y, rotation, length * 1.06, width * 1.08, p.sample, year, height);
 }
 
 function addSurface(batch, polygon, level, token, year, fallback, refine) {
@@ -428,7 +436,7 @@ function buildPumps(pumps, links) {
     if (p.approx || !(p.kind === 'pump' || p.kind === 'tunnel')) continue;
     const batch = batchFor('pumps', statusClass(p.status), BANDS.pumps, p.lon, p.lat), year = parseInt(p.since, 10) || 0;
     if (p.kind === 'pump') addPumpHouse(batch, p.lon, p.lat, parseFloat(p.power) || 0, pumpRotation(p, links, batch.frame), TOKENS, p.elev_m ?? 0, year);
-    else { const s = sampleAt(batch, p.lon, p.lat, p.elev_m ?? 0); instance(batch, 'portal', TOKENS.portal, s.x, s.y, 0, 1, 1, s.sample, year); }
+    else { const s = sampleAt(batch, p.lon, p.lat, p.elev_m ?? 0); instance(batch, 'portal', TOKENS.portal, s.x, s.y, 0, 1, 1, s.sample, year, PORTAL_H); }
     batch.objects++;
   }
 }
@@ -492,12 +500,12 @@ function finalizeBatch(batch) {
   for (const part of batch.parts) {
     const material = materialFor(part.token, batch.status, part.pipe);
     let acc = merged.get(material);
-    if (!acc) merged.set(material, acc = { positions: [], across: [], years: [], indices: [], parts: [], count: 0 });
+    if (!acc) merged.set(material, acc = { positions: [], across: [], years: [], sizes: [], indices: [], parts: [], count: 0 });
     part.start = acc.count;
     for (const v of part.positions) acc.positions.push(v);
     for (const v of part.across) acc.across.push(v);
     for (const v of part.indices) acc.indices.push(part.start + v);
-    for (let k = 0; k < part.samples.length; k++) acc.years.push(part.year);
+    for (let k = 0; k < part.samples.length; k++) { acc.years.push(part.year); acc.sizes.push(part.size); }
     acc.parts.push(part);
     acc.count += part.samples.length;
   }
@@ -506,7 +514,9 @@ function finalizeBatch(batch) {
     geometry.setAttribute('position', new THREE.Float32BufferAttribute(acc.positions, 3));
     geometry.setAttribute('aAcross', new THREE.Float32BufferAttribute(acc.across, 2));
     geometry.setAttribute('aYear', new THREE.Float32BufferAttribute(acc.years, 1));
+    geometry.setAttribute('aSize', new THREE.Float32BufferAttribute(acc.sizes, 1));
     geometry.setAttribute('aGround', new THREE.BufferAttribute(new Float32Array(acc.count), 1));
+    geometry.setAttribute('aLevel', new THREE.BufferAttribute(new Float32Array(acc.count * 2), 2));
     geometry.setIndex(acc.indices);
     geometry.computeVertexNormals();
     for (const part of acc.parts) part.geometry = geometry;
@@ -524,7 +534,9 @@ function finalizeBatch(batch) {
   for (const items of instanced.values()) {
     const geometry = PROTOTYPES[items[0].proto].clone();
     geometry.setAttribute('aGround', new THREE.InstancedBufferAttribute(new Float32Array(items.length), 1));
+    geometry.setAttribute('aLevel', new THREE.InstancedBufferAttribute(new Float32Array(items.length * 2), 2));   // prototypes stand on the ground
     geometry.setAttribute('aYear', new THREE.InstancedBufferAttribute(new Float32Array(items.map((it) => it.year)), 1));
+    geometry.setAttribute('aSize', new THREE.InstancedBufferAttribute(new Float32Array(items.map((it) => it.size)), 1));
     const mesh = new THREE.InstancedMesh(geometry, materialFor(items[0].token, batch.status), items.length);
     mesh.frustumCulled = false;
     items.forEach((it, i) => {
@@ -538,16 +550,17 @@ function finalizeBatch(batch) {
   applyGround(batch);
 }
 
-/** Writes aGround for every vertex and instance of a batch from its current samples (ground or fallback). */
+/** Writes aGround and aLevel for every vertex and instance of a batch from its current samples (ground or fallback). */
 function applyGround(batch) {
   const g = batch.samples.map((s) => s.ground ?? s.fallback);
   for (const part of batch.parts) {
-    const attr = part.geometry.attributes.aGround, level = part.levelOf ? part.levelOf(g, batch.samples) : 0;
+    const { aGround, aLevel } = part.geometry.attributes, level = part.levelOf ? part.levelOf(g, batch.samples) : 0;
     for (let k = 0; k < part.samples.length; k++) {
       const ground = g[part.samples[k]], mode = part.modes[k];
-      attr.setX(part.start + k, mode === 0 ? ground : mode === 1 ? Math.max(level, ground) : level);
+      aGround.setX(part.start + k, mode === 2 ? level : ground);
+      if (mode === 1) aLevel.setXY(part.start + k, level - part.size - ground, part.size); else aLevel.setXY(part.start + k, 0, 0);
     }
-    attr.needsUpdate = true;
+    aGround.needsUpdate = aLevel.needsUpdate = true;
   }
   for (const { mesh, items } of batch.instanced) {
     const attr = mesh.geometry.attributes.aGround;
@@ -635,6 +648,7 @@ const layer = {
     uniforms.uWidthScale.value = Math.min(WIDTH_CAP, Math.max(1, 2 ** (11 - zoom)));
     const metresPerPixel = 78271.517 * Math.cos(map.getCenter().lat * Math.PI / 180) / 2 ** zoom;
     uniforms.uPipeScale.value = Math.max(uniforms.uWidthScale.value, PIPE_PX * metresPerPixel / PIPE_R);   // pipes stay 1.5 px wide, uncapped
+    uniforms.uMinSize.value = MIN_PX * metresPerPixel;   // the drawn height a work is enlarged to when its own is smaller (shader `boost`)
     uniforms.uYear.value = yearFilter || 0;
     const mapMatrix = new THREE.Matrix4().fromArray(matrix), bounds = paddedBounds();
     for (const batch of batches.values()) {
